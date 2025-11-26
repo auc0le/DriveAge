@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:forums.unraid.net)",
+      "WebFetch(domain:wiki.unraid.net)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
