@@ -11,7 +11,7 @@ require_once 'config.php';
 // Cache directory and file for SMART data (secure location)
 define('SMART_CACHE_DIR', '/var/lib/driveage');
 define('SMART_CACHE_FILE', SMART_CACHE_DIR . '/cache.json');
-define('SMART_CACHE_TTL', 60); // Cache TTL in seconds
+define('SMART_CACHE_TTL', 300); // Cache TTL in seconds (5 minutes)
 
 /**
  * Get all drives with their SMART data
