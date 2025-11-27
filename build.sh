@@ -10,12 +10,28 @@ set -e  # Exit on error
 PLUGIN="driveage"
 VERSION=$(date +"%Y.%m.%d")
 ARCH="x86_64"
-BUILD="1"
 
 # Directories
 SOURCE_DIR="source/$PLUGIN"
 ARCHIVE_DIR="archive"
 PLUGIN_DIR="plugins"
+
+# Auto-increment build number for same-day builds
+# Find the highest existing build number for today's version
+mkdir -p "$ARCHIVE_DIR"
+HIGHEST_BUILD=0
+for file in "$ARCHIVE_DIR/${PLUGIN}-${VERSION}-${ARCH}"-*.txz; do
+    if [ -f "$file" ]; then
+        # Extract build number from filename (e.g., driveage-2025.11.27-x86_64-2.txz -> 2)
+        filename=$(basename "$file" .txz)
+        # Remove everything up to and including the last hyphen to get just the build number
+        BUILD_NUM="${filename##*-}"
+        if [ "$BUILD_NUM" -gt "$HIGHEST_BUILD" ] 2>/dev/null; then
+            HIGHEST_BUILD=$BUILD_NUM
+        fi
+    fi
+done
+BUILD=$((HIGHEST_BUILD + 1))
 
 # Colors for output
 RED='\033[0;31m'
@@ -33,9 +49,6 @@ if [ ! -d "$SOURCE_DIR" ]; then
     echo -e "${RED}Error: Source directory not found: $SOURCE_DIR${NC}"
     exit 1
 fi
-
-# Create archive directory if it doesn't exist
-mkdir -p "$ARCHIVE_DIR"
 
 # Package filename
 PACKAGE_NAME="${PLUGIN}-${VERSION}-${ARCH}-${BUILD}.txz"
