@@ -23,14 +23,6 @@ $timestamp = date('Y-m-d H:i:s');
             <button id="refresh-btn" title="Refresh drive data">
                 <span>↻</span> Refresh
             </button>
-            <div class="view-toggle">
-                <button id="view-table-btn" class="active" title="Table view">
-                    ☰ Table
-                </button>
-                <button id="view-card-btn" title="Card view">
-                    ▦ Cards
-                </button>
-            </div>
             <button onclick="window.location.href='/Settings/DriveAgeSettings'" title="Plugin settings">
                 ⚙ Settings
             </button>

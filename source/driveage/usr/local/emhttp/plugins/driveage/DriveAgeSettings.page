@@ -237,15 +237,6 @@ function hoursToYears($hours) {
                     <h3>Display Options</h3>
 
                     <div class="form-group">
-                        <label>Default View Mode</label>
-                        <select name="VIEW_MODE">
-                            <option value="table" <?echo selected($config['VIEW_MODE'], 'table'); ?>>Table View</option>
-                            <option value="card" <?echo selected($config['VIEW_MODE'], 'card'); ?>>Card View</option>
-                        </select>
-                        <div class="help-text">Choose the default view when loading the dashboard</div>
-                    </div>
-
-                    <div class="form-group">
                         <label>Default Sorting</label>
                         <select name="DEFAULT_SORT">
                             <option value="power_on_hours" <?echo selected($config['DEFAULT_SORT'], 'power_on_hours'); ?>>Power On Hours</option>
@@ -358,7 +349,6 @@ function hoursToYears($hours) {
                 document.querySelector('[name="THRESHOLD_AGED"]').value = '43800';
                 document.querySelector('[name="THRESHOLD_OLD"]').value = '52560';
 
-                document.querySelector('[name="VIEW_MODE"]').value = 'table';
                 document.querySelector('[name="DEFAULT_SORT"]').value = 'power_on_hours';
                 document.querySelector('[name="DEFAULT_SORT_DIR"]').value = 'desc';
 

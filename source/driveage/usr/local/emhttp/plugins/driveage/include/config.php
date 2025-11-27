@@ -50,7 +50,6 @@ function loadConfig() {
 function getDefaultConfig() {
     return [
         // Display Configuration
-        'VIEW_MODE' => 'table',
         'DEFAULT_SORT' => 'power_on_hours',
         'DEFAULT_SORT_DIR' => 'desc',
 
@@ -100,7 +99,6 @@ function saveConfig($config) {
     $content .= "# Generated: " . date('Y-m-d H:i:s') . "\n\n";
 
     $content .= "# Display Configuration\n";
-    $content .= "VIEW_MODE=\"{$config['VIEW_MODE']}\"\n";
     $content .= "DEFAULT_SORT=\"{$config['DEFAULT_SORT']}\"\n";
     $content .= "DEFAULT_SORT_DIR=\"{$config['DEFAULT_SORT_DIR']}\"\n\n";
 
@@ -143,12 +141,6 @@ function saveConfig($config) {
 function validateConfig($config) {
     $defaults = getDefaultConfig();
     $validated = [];
-
-    // View mode - strict whitelist
-    $validViewModes = ['table', 'card'];
-    $validated['VIEW_MODE'] = in_array($config['VIEW_MODE'] ?? '', $validViewModes, true)
-        ? $config['VIEW_MODE']
-        : $defaults['VIEW_MODE'];
 
     // Sorting - strict whitelist
     $validSortColumns = ['device_name', 'size_bytes', 'power_on_hours', 'temperature', 'smart_status'];

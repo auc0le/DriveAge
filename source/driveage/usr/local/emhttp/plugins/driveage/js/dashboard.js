@@ -3,7 +3,6 @@
  */
 
 let driveData = null;
-let currentView = 'table';
 let sortColumn = 'power_on_hours';
 let sortDirection = 'desc';
 
@@ -56,22 +55,6 @@ function setupEventListeners() {
             loadDriveData(true);
         });
     }
-
-    // View toggle buttons
-    const tableViewBtn = document.getElementById('view-table-btn');
-    const cardViewBtn = document.getElementById('view-card-btn');
-
-    if (tableViewBtn) {
-        tableViewBtn.addEventListener('click', function() {
-            switchView('table');
-        });
-    }
-
-    if (cardViewBtn) {
-        cardViewBtn.addEventListener('click', function() {
-            switchView('card');
-        });
-    }
 }
 
 /**
@@ -111,7 +94,7 @@ function loadDriveData(forceRefresh = false) {
 }
 
 /**
- * Render the dashboard based on current view mode
+ * Render the dashboard in table view
  */
 function renderDashboard() {
     if (!driveData) {
@@ -119,13 +102,7 @@ function renderDashboard() {
     }
 
     hideLoading();
-
-    if (currentView === 'table') {
-        renderTableView();
-    } else {
-        renderCardView();
-    }
-
+    renderTableView();
     updateDriveCount(driveData.drive_count);
 }
 
@@ -220,98 +197,6 @@ function renderTableView() {
 
     // Update sort indicators
     updateSortIndicators();
-}
-
-/**
- * Render card view
- */
-function renderCardView() {
-    const container = document.getElementById('drive-container');
-    if (!container) return;
-
-    // Sort drives
-    const sortedDrives = sortDrives([...driveData.drives], sortColumn, sortDirection);
-
-    let html = '<div class="driveage-cards">';
-
-    sortedDrives.forEach(drive => {
-        const cardClass = escapeHtml(drive.color_class) + (drive.is_oldest ? ' oldest-drive' : '');
-
-        html += `<div class="drive-card ${cardClass}">`;
-        html += `<div class="drive-card-header">${escapeHtml(drive.device_name)}</div>`;
-        html += `<div class="drive-card-body">`;
-
-        html += `<div class="drive-card-row">`;
-        html += `<span class="drive-card-label">Model:</span>`;
-        html += `<span class="drive-card-value" title="${escapeHtml(drive.identification)}">${escapeHtml(truncate(drive.model, 30))}</span>`;
-        html += `</div>`;
-
-        html += `<div class="drive-card-row">`;
-        html += `<span class="drive-card-label">Size:</span>`;
-        html += `<span class="drive-card-value">${escapeHtml(drive.size_human)}</span>`;
-        html += `</div>`;
-
-        html += `<div class="drive-card-row">`;
-        html += `<span class="drive-card-label">Power On Hours:</span>`;
-        html += `<span class="drive-card-value">${escapeHtml(drive.power_on_hours.toLocaleString())}</span>`;
-        html += `</div>`;
-
-        html += `<div class="drive-card-row">`;
-        html += `<span class="drive-card-label">Age:</span>`;
-        html += `<span class="drive-card-value">${escapeHtml(drive.power_on_human)}</span>`;
-        html += `</div>`;
-
-        if (driveData.config.show_temperature) {
-            html += `<div class="drive-card-row">`;
-            html += `<span class="drive-card-label">Temperature:</span>`;
-            html += `<span class="drive-card-value ${escapeHtml(getTemperatureClass(drive.temperature))}">${escapeHtml(drive.temperature_formatted)}</span>`;
-            html += `</div>`;
-        }
-
-        if (driveData.config.show_smart_status) {
-            html += `<div class="drive-card-row">`;
-            html += `<span class="drive-card-label">SMART Status:</span>`;
-            html += `<span class="drive-card-value">${drive.smart_status_formatted}</span>`;
-            html += `</div>`;
-        }
-
-        if (driveData.config.show_spin_status) {
-            html += `<div class="drive-card-row">`;
-            html += `<span class="drive-card-label">Spin Status:</span>`;
-            html += `<span class="drive-card-value">${drive.spin_status_formatted}</span>`;
-            html += `</div>`;
-        }
-
-        html += `<div class="drive-card-row">`;
-        html += `<span class="drive-card-label">Category:</span>`;
-        html += `<span class="drive-card-value">${escapeHtml(drive.age_label)}</span>`;
-        html += `</div>`;
-
-        html += `<div class="drive-card-row">`;
-        html += `<span class="drive-card-label">Location:</span>`;
-        html += `<span class="drive-card-value">${escapeHtml(drive.array_name)}</span>`;
-        html += `</div>`;
-
-        html += `</div></div>`;
-    });
-
-    html += '</div>';
-
-    container.innerHTML = html;
-}
-
-/**
- * Switch between table and card view
- */
-function switchView(view) {
-    currentView = view;
-
-    // Update button states
-    document.getElementById('view-table-btn')?.classList.toggle('active', view === 'table');
-    document.getElementById('view-card-btn')?.classList.toggle('active', view === 'card');
-
-    // Re-render
-    renderDashboard();
 }
 
 /**
