@@ -71,6 +71,10 @@ $timestamp = date('Y-m-d H:i:s');
         </div>
     </div>
 
+    <div class="driveage-info">
+        <strong>Note:</strong> Elderly drives (≥ <?= e(number_format($config['THRESHOLD_OLD'])); ?>h) are displayed in <strong>bold text</strong> to highlight drives requiring closest monitoring.
+    </div>
+
     <!-- Drive data container (will be populated by JavaScript) -->
     <div id="drive-container"></div>
 </div>
