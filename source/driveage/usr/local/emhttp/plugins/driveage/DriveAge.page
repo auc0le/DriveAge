@@ -42,5 +42,26 @@ $timestamp = date('Y-m-d H:i:s');
         <h3>Step 3: JavaScript Test</h3>
         <p>If you see drive data above (or an error message), JavaScript is working.</p>
         <p>The dashboard.js file should load drive data via AJAX.</p>
+        <p id="js-test">JavaScript NOT running</p>
     </div>
 </div>
+
+<script>
+// Inline test to verify JavaScript execution
+console.log('DriveAge: Inline script running');
+document.getElementById('js-test').textContent = 'JavaScript IS running!';
+document.getElementById('js-test').style.color = 'green';
+document.getElementById('js-test').style.fontWeight = 'bold';
+
+// Try to manually initialize if DOMContentLoaded already fired
+console.log('DriveAge: Attempting to load drive data...');
+setTimeout(function() {
+    if (typeof initializeDashboard === 'function') {
+        console.log('DriveAge: initializeDashboard found, calling it');
+        initializeDashboard();
+    } else {
+        console.error('DriveAge: initializeDashboard function not found');
+        document.getElementById('last-updated').textContent = 'Error: dashboard.js not loaded';
+    }
+}, 100);
+</script>
