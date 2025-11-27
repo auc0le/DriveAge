@@ -157,8 +157,8 @@ function getDriveInfo($devicePath, $diskAssignments, $config) {
     // Get Unraid assignment info
     $assignment = getUnraidAssignment($deviceName, $diskAssignments);
 
-    // Get drive size
-    $size = getDriveSize($devicePath);
+    // Get drive size (preferably from Unraid's disks.ini for accuracy)
+    $size = getDriveSize($devicePath, $deviceName, $diskAssignments);
 
     // Determine age category
     $ageCategory = getAgeCategory($smartData['power_on_hours'], $config);
@@ -331,9 +331,25 @@ function getSpinStatus($devicePath) {
  * Get drive size in bytes
  *
  * @param string $devicePath Device path
+ * @param string $deviceName Device name (e.g., sda)
+ * @param array $diskAssignments Parsed disks.ini data
  * @return int Size in bytes
  */
-function getDriveSize($devicePath) {
+function getDriveSize($devicePath, $deviceName, $diskAssignments) {
+    // First, try to get size from Unraid's disks.ini (this is the raw hardware size)
+    if (!empty($diskAssignments)) {
+        foreach ($diskAssignments as $diskInfo) {
+            if (isset($diskInfo['device']) && $diskInfo['device'] === $deviceName) {
+                if (isset($diskInfo['size'])) {
+                    // Size in disks.ini is in 512-byte blocks, convert to bytes
+                    return intval($diskInfo['size']) * 512;
+                }
+                break;
+            }
+        }
+    }
+
+    // Fallback to blockdev if not found in disks.ini
     $output = shell_exec("blockdev --getsize64 " . escapeshellarg($devicePath) . " 2>/dev/null");
     return $output ? intval(trim($output)) : 0;
 }
