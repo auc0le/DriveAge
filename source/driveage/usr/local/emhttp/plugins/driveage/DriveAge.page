@@ -1,6 +1,6 @@
 Menu="Utilities"
 Title="DriveAge"
-Icon="icon-hdd"
+Icon="icon.png"
 ---
 <?php
 require_once '/usr/local/emhttp/plugins/driveage/include/config.php';

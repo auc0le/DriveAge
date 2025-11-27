@@ -10,7 +10,7 @@
   <!ENTITY pkg       "/boot/config/plugins/&name;/packages">
   <!ENTITY plgpath   "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
-  <!ENTITY md5       "7e3091825992bf1bc02a01bc3536d4d2">
+  <!ENTITY md5       "db15cde7629be12103dc75019021a5d0">
 ]>
 
 <PLUGIN
@@ -47,6 +47,11 @@
   * Input validation and sanitization
   * OWASP Top 10 compliant
 </CHANGES>
+
+<!-- Download Plugin File -->
+<FILE Name="&plgpath;/&name;.plg">
+  <URL>&pluginURL;</URL>
+</FILE>
 
 <!-- Download Package File -->
 <FILE Name="&plgpath;/&name;-&version;-x86_64-1.txz" Run="upgradepkg --install-new">
@@ -158,9 +163,10 @@ rm -rf &emhttp;
 # Uncomment the line below if you want to remove settings on uninstall
 # rm -rf &plgpath;
 
-# Remove downloaded packages
+# Remove downloaded packages and plugin file
 rm -f &plgpath;/*.txz
 rm -f &plgpath;/*.md5
+rm -f &plgpath;/&name;.plg
 
 echo ""
 echo "-----------------------------------------------------------"

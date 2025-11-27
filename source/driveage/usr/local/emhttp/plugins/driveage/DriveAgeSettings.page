@@ -1,6 +1,4 @@
-Menu="Utilities:2"
 Title="DriveAge Settings"
-Icon="icon-gear"
 ---
 <?php
 require_once '/usr/local/emhttp/plugins/driveage/include/config.php';

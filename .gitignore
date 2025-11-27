@@ -25,11 +25,6 @@ test-output/
 # Logs
 *.log
 
-# Icon conversion files (keep SVG source only)
-# PNG icons will be generated during build
-*.png
-!docs/screenshots/*.png
-
 # Development/testing files
 view-icons.html
 test-*.php

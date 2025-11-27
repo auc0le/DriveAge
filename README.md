@@ -63,7 +63,7 @@ DriveAge is an Unraid plugin that provides a unified dashboard to monitor drive 
 ## Usage
 
 ### Accessing the Dashboard
-1. Navigate to **Settings** → **DriveAge**
+1. Navigate to **Settings** → **User Utilities** → **DriveAge**
 2. View all drives with color-coded age indicators
 3. Click column headers to sort
 4. Toggle between table and card views
@@ -81,7 +81,7 @@ DriveAge is an Unraid plugin that provides a unified dashboard to monitor drive 
 | 🔴 Bright Red | Elderly | 6+ years (52,560+h) | Priority replacement candidate |
 
 ### Configuring Thresholds
-1. Navigate to **Settings** → **DriveAge Settings**
+1. Navigate to **Settings** → **User Utilities** → **DriveAge Settings**
 2. Adjust the hour thresholds for each age category
 3. See real-time preview of color scheme
 4. Click **Apply Settings** to save
