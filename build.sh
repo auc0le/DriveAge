@@ -115,6 +115,9 @@ if [ -f "$PLG_FILE" ]; then
     # Update version entity
     sed -i "s/<!ENTITY version.*>/<!ENTITY version   \"$VERSION\">/" "$PLG_FILE"
 
+    # Update build entity
+    sed -i "s/<!ENTITY build.*>/<!ENTITY build     \"$BUILD\">/" "$PLG_FILE"
+
     echo -e "${GREEN}✓ Plugin manifest updated${NC}"
 else
     echo -e "${YELLOW}Warning: Plugin manifest not found: $PLG_FILE${NC}"

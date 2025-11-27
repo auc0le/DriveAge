@@ -3,6 +3,7 @@
   <!ENTITY name      "driveage">
   <!ENTITY author    "Tony Coleman">
   <!ENTITY version   "2025.11.27">
+  <!ENTITY build     "6">
   <!ENTITY launch    "Settings/DriveAge">
   <!ENTITY gitURL    "https://raw.githubusercontent.com/auc0le/DriveAge/main">
   <!ENTITY pluginURL "&gitURL;/plugins/&name;.plg">
@@ -54,8 +55,8 @@
 </FILE>
 
 <!-- Download Package File -->
-<FILE Name="&plgpath;/&name;-&version;-x86_64-1.txz" Run="upgradepkg --install-new">
-  <URL>&pkgURL;/&name;-&version;-x86_64-1.txz</URL>
+<FILE Name="&plgpath;/&name;-&version;-x86_64-&build;.txz" Run="upgradepkg --install-new">
+  <URL>&pkgURL;/&name;-&version;-x86_64-&build;.txz</URL>
   <MD5>&md5;</MD5>
 </FILE>
 
