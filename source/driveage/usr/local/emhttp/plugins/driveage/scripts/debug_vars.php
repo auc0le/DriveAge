@@ -17,20 +17,11 @@ if (!file_exists($varFile)) {
 
 $vars = parse_ini_file($varFile) ?: [];
 
-// Show all drive-related variables
-$driveVars = [];
-foreach ($vars as $key => $value) {
-    if (stripos($key, 'rdev') !== false ||
-        stripos($key, 'disk') !== false ||
-        stripos($key, 'cache') !== false ||
-        stripos($key, 'parity') !== false ||
-        stripos($key, 'pool') !== false) {
-        $driveVars[$key] = $value;
-    }
-}
+// Sort for easier reading
+ksort($vars);
 
 echo json_encode([
     'var_file' => $varFile,
-    'drive_related_vars' => $driveVars,
-    'all_vars_count' => count($vars)
+    'all_vars' => $vars,
+    'count' => count($vars)
 ], JSON_PRETTY_PRINT);
