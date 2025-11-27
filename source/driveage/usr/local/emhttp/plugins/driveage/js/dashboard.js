@@ -72,28 +72,34 @@ function setupEventListeners() {
  * Load drive data from server
  */
 function loadDriveData(forceRefresh = false) {
+    console.log('DriveAge: loadDriveData called, forceRefresh:', forceRefresh);
     showLoading();
 
     const url = '/plugins/driveage/scripts/get_drive_data.php' + (forceRefresh ? '?refresh=true' : '');
+    console.log('DriveAge: Fetching from:', url);
 
     fetch(url)
         .then(response => {
+            console.log('DriveAge: Fetch response received, status:', response.status, 'ok:', response.ok);
             if (!response.ok) {
-                throw new Error('Failed to fetch drive data');
+                throw new Error('Failed to fetch drive data (status: ' + response.status + ')');
             }
             return response.json();
         })
         .then(data => {
+            console.log('DriveAge: Data parsed, success:', data.success, 'drive_count:', data.drive_count);
             if (data.success) {
                 driveData = data;
+                console.log('DriveAge: Calling renderDashboard()');
                 renderDashboard();
                 updateLastUpdated(data.timestamp);
             } else {
+                console.log('DriveAge: Data success=false, message:', data.message);
                 showError(data.message || 'Failed to load drive data');
             }
         })
         .catch(error => {
-            console.error('Error loading drive data:', error);
+            console.error('DriveAge: Error loading drive data:', error);
             showError('Failed to load drive data: ' + error.message);
         });
 }
