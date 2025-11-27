@@ -11,27 +11,36 @@ $config = loadConfig();
 $timestamp = date('Y-m-d H:i:s');
 ?>
 <link rel="stylesheet" href="/plugins/driveage/styles/driveage.css">
+<script src="/plugins/driveage/js/dashboard.js"></script>
 
 <div class="driveage-container">
     <div class="driveage-header">
         <div>
             <h2>DriveAge - Dashboard</h2>
-            <span class="last-updated">Last updated: <?=$timestamp?></span>
+            <span id="last-updated" class="last-updated">Loading...</span>
         </div>
         <div class="driveage-controls">
-            <button title="Refresh drive data">↻ Refresh</button>
+            <button id="refresh-btn" title="Refresh drive data">
+                <span>↻</span> Refresh
+            </button>
             <button onclick="window.location.href='/Settings/DriveAgeSettings'" title="Plugin settings">⚙ Settings</button>
         </div>
     </div>
 
+    <!-- Loading indicator -->
+    <div id="loading-indicator" class="loading">
+        <div>Loading drive data...</div>
+    </div>
+
+    <!-- Error message container -->
+    <div id="error-message" class="error-message" style="display:none;"></div>
+
+    <!-- Drive data container (will be populated by JavaScript) -->
+    <div id="drive-container"></div>
+
     <div style="background: #e8f5e9; padding: 20px; margin: 20px 0; border-radius: 5px;">
-        <h3>Step 2: Config Loading Test</h3>
-        <p>If you see config values below, config.php loaded successfully:</p>
-        <ul>
-            <li>View Mode: <?=$config['VIEW_MODE']?></li>
-            <li>Brand New Threshold: <?=number_format($config['THRESHOLD_BRAND_NEW'])?> hours</li>
-            <li>API Enabled: <?=$config['API_ENABLED']?></li>
-        </ul>
-        <p>Timestamp: <?=$timestamp?></p>
+        <h3>Step 3: JavaScript Test</h3>
+        <p>If you see drive data above (or an error message), JavaScript is working.</p>
+        <p>The dashboard.js file should load drive data via AJAX.</p>
     </div>
 </div>
