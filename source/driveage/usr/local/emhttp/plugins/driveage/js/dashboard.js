@@ -32,11 +32,17 @@ document.addEventListener('DOMContentLoaded', function() {
  * Initialize the dashboard
  */
 function initializeDashboard() {
+    console.log('DriveAge: initializeDashboard() started');
+
     // Load drive data
+    console.log('DriveAge: About to call loadDriveData()');
     loadDriveData(false);
+    console.log('DriveAge: loadDriveData() called');
 
     // Set up event listeners
+    console.log('DriveAge: About to setup event listeners');
     setupEventListeners();
+    console.log('DriveAge: Event listeners setup complete');
 }
 
 /**
