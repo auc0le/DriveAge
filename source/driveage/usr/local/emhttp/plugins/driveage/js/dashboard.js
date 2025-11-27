@@ -193,11 +193,11 @@ function renderTableView() {
                 }
 
                 if (driveData.config.show_smart_status) {
-                    html += `<td>${escapeHtml(drive.smart_status_formatted)}</td>`;
+                    html += `<td>${drive.smart_status_formatted}</td>`;
                 }
 
                 if (driveData.config.show_spin_status) {
-                    html += `<td>${escapeHtml(drive.spin_status_formatted)}</td>`;
+                    html += `<td>${drive.spin_status_formatted}</td>`;
                 }
 
                 html += `<td>${escapeHtml(drive.age_label)}</td>`;
@@ -271,14 +271,14 @@ function renderCardView() {
         if (driveData.config.show_smart_status) {
             html += `<div class="drive-card-row">`;
             html += `<span class="drive-card-label">SMART Status:</span>`;
-            html += `<span class="drive-card-value">${escapeHtml(drive.smart_status_formatted)}</span>`;
+            html += `<span class="drive-card-value">${drive.smart_status_formatted}</span>`;
             html += `</div>`;
         }
 
         if (driveData.config.show_spin_status) {
             html += `<div class="drive-card-row">`;
             html += `<span class="drive-card-label">Spin Status:</span>`;
-            html += `<span class="drive-card-value">${escapeHtml(drive.spin_status_formatted)}</span>`;
+            html += `<span class="drive-card-value">${drive.spin_status_formatted}</span>`;
             html += `</div>`;
         }
 

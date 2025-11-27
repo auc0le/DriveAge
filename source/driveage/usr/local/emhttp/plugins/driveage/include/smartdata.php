@@ -49,12 +49,9 @@ function getAllDrives($config, $useCache = true) {
         return $b['power_on_hours'] - $a['power_on_hours'];
     });
 
-    // Mark oldest drive(s) for bold formatting
-    if (count($drives) > 0) {
-        $maxHours = $drives[0]['power_on_hours'];
-        foreach ($drives as &$drive) {
-            $drive['is_oldest'] = ($drive['power_on_hours'] === $maxHours);
-        }
+    // Mark elderly drives for bold formatting
+    foreach ($drives as &$drive) {
+        $drive['is_oldest'] = ($drive['age_category'] === 'elderly');
     }
 
     // Save to cache
