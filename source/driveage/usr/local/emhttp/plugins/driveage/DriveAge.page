@@ -8,8 +8,8 @@ Icon="icon.png"
  */
 ?>
 <?
-require_once '/usr/local/emhttp/plugins/driveage/include/config.<?';
-require_once '/usr/local/emhttp/plugins/driveage/include/helpers.<?';
+require_once '/usr/local/emhttp/plugins/driveage/include/config.php';
+require_once '/usr/local/emhttp/plugins/driveage/include/helpers.php';
 
 // Load configuration
 $config = loadConfig();
