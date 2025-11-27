@@ -31,14 +31,18 @@ function getAllDrives($config, $useCache = true) {
 
     $drives = [];
 
-    // Get Unraid drive configuration
-    $unraidVars = getUnraidVars();
+    // Parse disks.ini once for all drives (performance optimization)
+    $disksIni = '/var/local/emhttp/disks.ini';
+    $diskAssignments = [];
+    if (file_exists($disksIni)) {
+        $diskAssignments = parse_ini_file($disksIni, true) ?: [];
+    }
 
     // Discover all block devices
     $devices = discoverBlockDevices();
 
     foreach ($devices as $devicePath) {
-        $driveInfo = getDriveInfo($devicePath, $unraidVars, $config);
+        $driveInfo = getDriveInfo($devicePath, $diskAssignments, $config);
         if ($driveInfo) {
             $drives[] = $driveInfo;
         }
@@ -136,11 +140,11 @@ function getUnraidVars() {
  * Get detailed information about a specific drive
  *
  * @param string $devicePath Device path (e.g., /dev/sda)
- * @param array $unraidVars Unraid variables
+ * @param array $diskAssignments Parsed disks.ini data
  * @param array $config Plugin configuration
  * @return array|null Drive information array or null if failed
  */
-function getDriveInfo($devicePath, $unraidVars, $config) {
+function getDriveInfo($devicePath, $diskAssignments, $config) {
     // Get device name (e.g., sda from /dev/sda)
     $deviceName = basename($devicePath);
 
@@ -151,7 +155,7 @@ function getDriveInfo($devicePath, $unraidVars, $config) {
     }
 
     // Get Unraid assignment info
-    $assignment = getUnraidAssignment($deviceName, $unraidVars);
+    $assignment = getUnraidAssignment($deviceName, $diskAssignments);
 
     // Get drive size
     $size = getDriveSize($devicePath);
@@ -338,29 +342,23 @@ function getDriveSize($devicePath) {
  * Get Unraid assignment information for a drive
  *
  * @param string $deviceName Device name (e.g., sda)
- * @param array $unraidVars Unraid variables (not used, kept for compatibility)
+ * @param array $diskAssignments Parsed disks.ini data
  * @return array Assignment info
  */
-function getUnraidAssignment($deviceName, $unraidVars) {
+function getUnraidAssignment($deviceName, $diskAssignments) {
     $assignment = [
         'display_name' => $deviceName,
         'array_name' => 'Unassigned',
         'drive_type' => 'unassigned'
     ];
 
-    // Read disks.ini which contains the actual disk assignments
-    $disksIni = '/var/local/emhttp/disks.ini';
-    if (!file_exists($disksIni)) {
-        return $assignment;
-    }
-
-    $disks = parse_ini_file($disksIni, true);
-    if (!$disks) {
+    // Check if we have disk assignments data
+    if (empty($diskAssignments)) {
         return $assignment;
     }
 
     // Search for matching device
-    foreach ($disks as $diskName => $diskInfo) {
+    foreach ($diskAssignments as $diskName => $diskInfo) {
         if (!isset($diskInfo['device'])) {
             continue;
         }
