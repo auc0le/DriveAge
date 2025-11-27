@@ -1,7 +1,3 @@
-# Build artifacts
-archive/*.txz
-archive/*.md5
-
 # Temporary files
 *.tmp
 *.bak
