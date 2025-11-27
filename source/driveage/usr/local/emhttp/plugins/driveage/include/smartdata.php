@@ -190,13 +190,98 @@ function getDriveInfo($devicePath, $diskAssignments, $config) {
 }
 
 /**
+ * Get SMART data from Unraid's cached files (updated by emhttpd)
+ *
+ * @param string $deviceName Device name (e.g., sda, nvme0n1)
+ * @return array|null SMART data or null if cache not available
+ */
+function getSmartDataFromUnraidCache($deviceName) {
+    // Unraid caches SMART data in /var/local/emhttp/smart/
+    $cacheFile = "/var/local/emhttp/smart/$deviceName";
+
+    if (!file_exists($cacheFile)) {
+        return null;
+    }
+
+    $output = file_get_contents($cacheFile);
+    if (!$output) {
+        return null;
+    }
+
+    // Parse the cached smartctl output (same format as smartctl -A)
+    return parseSmartctlOutput($output);
+}
+
+/**
+ * Parse smartctl text output to extract SMART attributes
+ *
+ * @param string $output Raw smartctl output
+ * @return array|null SMART data array or null if failed
+ */
+function parseSmartctlOutput($output) {
+    $smartData = [
+        'model' => 'Unknown',
+        'serial' => 'Unknown',
+        'smart_status' => 'UNKNOWN',
+        'temperature' => null,
+        'power_on_hours' => null,
+        'spin_status' => 'unknown'
+    ];
+
+    $lines = explode("\n", $output);
+
+    foreach ($lines as $line) {
+        // Model
+        if (preg_match('/Device Model:\s+(.+)/', $line, $matches)) {
+            $smartData['model'] = trim($matches[1]);
+        } elseif (preg_match('/Model Number:\s+(.+)/', $line, $matches)) {
+            $smartData['model'] = trim($matches[1]);
+        }
+
+        // Serial
+        if (preg_match('/Serial Number:\s+(.+)/', $line, $matches)) {
+            $smartData['serial'] = trim($matches[1]);
+        }
+
+        // SMART status
+        if (preg_match('/SMART overall-health.*:\s+(.+)/', $line, $matches)) {
+            $smartData['smart_status'] = (stripos($matches[1], 'PASSED') !== false) ? 'PASSED' : 'FAILED';
+        }
+
+        // Parse SMART attribute table (ID 9 = Power_On_Hours, ID 194 = Temperature)
+        // Format: ID# ATTRIBUTE_NAME FLAG VALUE WORST THRESH TYPE UPDATED WHEN_FAILED RAW_VALUE
+        if (preg_match('/^\s*(\d+)\s+\S+.*\s+(\d+)\s*$/', $line, $matches)) {
+            $attrId = intval($matches[1]);
+            $rawValue = intval($matches[2]);
+
+            if ($attrId === 9) { // Power_On_Hours
+                $smartData['power_on_hours'] = $rawValue;
+            } elseif ($attrId === 194 && $smartData['temperature'] === null) { // Temperature_Celsius
+                $smartData['temperature'] = $rawValue;
+            }
+        }
+    }
+
+    // Return null if we couldn't get critical data
+    return $smartData['power_on_hours'] !== null ? $smartData : null;
+}
+
+/**
  * Query SMART data from a drive
  *
  * @param string $devicePath Device path
  * @return array|null SMART data or null if failed
  */
 function getSmartData($devicePath) {
-    // Run smartctl to get all SMART data
+    $deviceName = basename($devicePath);
+
+    // First, try to read from Unraid's cached SMART data for performance
+    $cachedData = getSmartDataFromUnraidCache($deviceName);
+    if ($cachedData !== null) {
+        return $cachedData;
+    }
+
+    // Fallback: Run smartctl directly if cache not available
     $output = shell_exec("smartctl -a -j " . escapeshellarg($devicePath) . " 2>/dev/null");
 
     if (!$output) {

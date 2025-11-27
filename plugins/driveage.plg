@@ -3,7 +3,7 @@
   <!ENTITY name      "driveage">
   <!ENTITY author    "Tony Coleman">
   <!ENTITY version   "2025.11.27">
-  <!ENTITY build     "35">
+  <!ENTITY build     "36">
   <!ENTITY launch    "Settings/DriveAge">
   <!ENTITY gitURL    "https://raw.githubusercontent.com/auc0le/DriveAge/main">
   <!ENTITY pluginURL "&gitURL;/plugins/&name;.plg">
@@ -11,7 +11,7 @@
   <!ENTITY pkg       "/boot/config/plugins/&name;/packages">
   <!ENTITY plgpath   "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
-  <!ENTITY md5       "81dd24fd6c23861a7ec17550cee6b3c4">
+  <!ENTITY md5       "cf0550c91e6ff6c7cdab8d382f114134">
 ]>
 
 <PLUGIN
