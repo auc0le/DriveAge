@@ -133,7 +133,7 @@ function renderDashboard() {
  * Render table view
  */
 function renderTableView() {
-    const container = document.getElementById('drive-display');
+    const container = document.getElementById('drive-container');
     if (!container) return;
 
     // Sort drives
@@ -226,7 +226,7 @@ function renderTableView() {
  * Render card view
  */
 function renderCardView() {
-    const container = document.getElementById('drive-display');
+    const container = document.getElementById('drive-container');
     if (!container) return;
 
     // Sort drives
@@ -459,7 +459,7 @@ function updateDriveCount(count) {
  * Show loading indicator
  */
 function showLoading() {
-    const container = document.getElementById('drive-display');
+    const container = document.getElementById('drive-container');
     if (container) {
         container.innerHTML = '<div class="driveage-loading"><div class="spinner"></div> Loading drive data...</div>';
     }
@@ -476,7 +476,7 @@ function hideLoading() {
  * Show error message
  */
 function showError(message) {
-    const container = document.getElementById('drive-display');
+    const container = document.getElementById('drive-container');
     if (container) {
         container.innerHTML = `<div class="driveage-error">Error: ${message}</div>`;
     }
