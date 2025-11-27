@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "driveage">
   <!ENTITY author    "Tony Coleman">
-  <!ENTITY version   "2025.11.26">
+  <!ENTITY version   "2025.11.27">
   <!ENTITY launch    "Settings/DriveAge">
   <!ENTITY gitURL    "https://raw.githubusercontent.com/auc0le/DriveAge/main">
   <!ENTITY pluginURL "&gitURL;/plugins/&name;.plg">
@@ -21,8 +21,7 @@
   pluginURL="&pluginURL;"
   icon="https://raw.githubusercontent.com/auc0le/DriveAge/main/docs/icon.png"
   support="https://github.com/auc0le/DriveAge/issues"
-  min="6.12.0"
-  max="">
+  min="6.12.0">
 
 <CHANGES>
 ##&name;
