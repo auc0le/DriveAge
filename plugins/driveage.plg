@@ -1,0 +1,176 @@
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN [
+  <!ENTITY name      "driveage">
+  <!ENTITY author    "Tony Coleman">
+  <!ENTITY version   "2025.11.26">
+  <!ENTITY launch    "Settings/DriveAge">
+  <!ENTITY gitURL    "https://raw.githubusercontent.com/auc0le/DriveAge/main">
+  <!ENTITY pluginURL "&gitURL;/plugins/&name;.plg">
+  <!ENTITY pkgURL    "&gitURL;/archive">
+  <!ENTITY pkg       "/boot/config/plugins/&name;/packages">
+  <!ENTITY plgpath   "/boot/config/plugins/&name;">
+  <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
+  <!ENTITY md5       "7e3091825992bf1bc02a01bc3536d4d2">
+]>
+
+<PLUGIN
+  name="&name;"
+  author="&author;"
+  version="&version;"
+  launch="&launch;"
+  pluginURL="&pluginURL;"
+  icon="https://raw.githubusercontent.com/auc0le/DriveAge/main/docs/icon.png"
+  support="https://github.com/auc0le/DriveAge/issues"
+  min="6.12.0"
+  max="">
+
+<CHANGES>
+##&name;
+
+###2025.11.26
+- Initial release
+- Drive age monitoring based on SMART power-on hours
+- Six-tier color coding system (brand new to elderly)
+- Human-readable time format (years, months, days, hours)
+- Bold text emphasis for oldest drives
+- Configurable age thresholds
+- Support for multi-array configurations (Unraid 6.12+)
+- Table and card view modes with sortable columns
+- Comprehensive settings page with live preview
+- Temperature, SMART status, and spin status display
+- Optional JSON API for external monitoring integration
+- Security features:
+  * XSS prevention (output encoding in PHP and JavaScript)
+  * CSRF protection with session-based tokens
+  * Command injection prevention (secure device discovery)
+  * IP-based rate limiting (configurable)
+  * Security event logging
+  * Input validation and sanitization
+  * OWASP Top 10 compliant
+</CHANGES>
+
+<!-- Download Package File -->
+<FILE Name="&plgpath;/&name;-&version;-x86_64-1.txz" Run="upgradepkg --install-new">
+  <URL>&pkgURL;/&name;-&version;-x86_64-1.txz</URL>
+  <MD5>&md5;</MD5>
+</FILE>
+
+<!-- Installation Script -->
+<FILE Run="/bin/bash" Method="install">
+<INLINE>
+<![CDATA[
+#!/bin/bash
+
+echo ""
+echo "-----------------------------------------------------------"
+echo " Installing DriveAge Plugin..."
+echo "-----------------------------------------------------------"
+echo ""
+
+# Create configuration directory if it doesn't exist
+mkdir -p &plgpath;
+
+# Create cache and log directories
+mkdir -p /var/lib/driveage/ratelimit
+mkdir -p /var/log
+chmod 700 /var/lib/driveage
+
+# Create default configuration if it doesn't exist
+if [ ! -f "&plgpath;/driveage.cfg" ]; then
+  echo "Creating default configuration..."
+  cat > &plgpath;/driveage.cfg <<'EOF'
+# Display Configuration
+VIEW_MODE="table"
+DEFAULT_SORT="power_on_hours"
+DEFAULT_SORT_DIR="desc"
+
+# Refresh Configuration
+AUTO_REFRESH="false"
+REFRESH_INTERVAL="300"
+
+# Age Thresholds (in hours)
+THRESHOLD_BRAND_NEW="17520"
+THRESHOLD_NEWISH="26280"
+THRESHOLD_NORMAL="35040"
+THRESHOLD_AGED="43800"
+THRESHOLD_OLD="52560"
+
+# Display Filters
+SHOW_PARITY="true"
+SHOW_ARRAY="true"
+SHOW_CACHE="true"
+SHOW_POOL="true"
+SHOW_UNASSIGNED="true"
+
+# Column Visibility
+SHOW_TEMPERATURE="true"
+SHOW_SMART_STATUS="true"
+SHOW_SPIN_STATUS="true"
+
+# JSON API Configuration
+API_ENABLED="false"
+API_RATE_LIMIT="100"
+EOF
+fi
+
+# Install package
+if [ -f "&plgpath;/&name;-&version;-x86_64-1.txz" ]; then
+  echo "Installing package..."
+  upgradepkg --install-new &plgpath;/&name;-&version;-x86_64-1.txz
+
+  # Set permissions
+  chmod -R 755 &emhttp;
+  chmod 644 &plgpath;/driveage.cfg
+
+  echo ""
+  echo "-----------------------------------------------------------"
+  echo " DriveAge has been installed successfully!"
+  echo " Version: &version;"
+  echo " Access it at: Settings -> DriveAge"
+  echo "-----------------------------------------------------------"
+  echo ""
+else
+  echo "ERROR: Package file not found!"
+  exit 1
+fi
+]]>
+</INLINE>
+</FILE>
+
+<!-- Removal Script -->
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+<![CDATA[
+#!/bin/bash
+
+echo ""
+echo "-----------------------------------------------------------"
+echo " Removing DriveAge Plugin..."
+echo "-----------------------------------------------------------"
+echo ""
+
+# Remove package
+removepkg &name;
+
+# Remove emhttp files
+rm -rf &emhttp;
+
+# Optional: Remove configuration (commented out to preserve settings)
+# Uncomment the line below if you want to remove settings on uninstall
+# rm -rf &plgpath;
+
+# Remove downloaded packages
+rm -f &plgpath;/*.txz
+rm -f &plgpath;/*.md5
+
+echo ""
+echo "-----------------------------------------------------------"
+echo " DriveAge has been removed."
+echo " Configuration files preserved in: &plgpath;"
+echo "-----------------------------------------------------------"
+echo ""
+]]>
+</INLINE>
+</FILE>
+
+</PLUGIN>

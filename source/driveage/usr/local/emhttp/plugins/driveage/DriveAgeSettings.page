@@ -1,0 +1,386 @@
+Menu="Utilities:2"
+Title="DriveAge Settings"
+Icon="icon-gear"
+---
+<?php
+require_once '/usr/local/emhttp/plugins/driveage/include/config.php';
+require_once '/usr/local/emhttp/plugins/driveage/include/helpers.php';
+require_once '/usr/local/emhttp/plugins/driveage/include/security.php';
+
+// Load configuration
+$config = loadConfig();
+
+// Generate CSRF token
+$csrfToken = generateCsrfToken();
+
+// Convert hours to years for display
+function hoursToYears($hours) {
+    return round($hours / 8766, 2);
+}
+?>
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/plugins/driveage/styles/driveage.css">
+    <style>
+        .settings-form {
+            max-width: 900px;
+            margin: 20px 0;
+        }
+
+        .settings-section {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+        }
+
+        .settings-section h3 {
+            margin-top: 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #4CAF50;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        .form-group input[type="number"],
+        .form-group input[type="text"],
+        .form-group select {
+            width: 100%;
+            max-width: 300px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .form-group input[type="checkbox"] {
+            margin-right: 8px;
+        }
+
+        .form-group .help-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 3px;
+        }
+
+        .threshold-input {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            max-width: 600px;
+        }
+
+        .threshold-item {
+            padding: 10px;
+            border-radius: 4px;
+            border: 2px solid #ddd;
+        }
+
+        .threshold-item label {
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .threshold-item input {
+            width: 100%;
+            margin-top: 5px;
+        }
+
+        .color-preview {
+            margin-top: 10px;
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 5px;
+        }
+
+        .color-block {
+            padding: 10px;
+            text-align: center;
+            font-size: 11px;
+            border-radius: 3px;
+        }
+
+        .buttons {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .buttons button,
+        .buttons input[type="submit"] {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .btn-primary {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #45a049;
+        }
+
+        .btn-secondary {
+            background: #666;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #555;
+        }
+
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #da190b;
+        }
+
+        .warning-box {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <div class="driveage-container">
+        <h2>DriveAge Settings</h2>
+
+        <form method="POST" action="/update.php" target="progressFrame">
+            <input type="hidden" name="#file" value="/boot/config/plugins/driveage/driveage.cfg">
+            <input type="hidden" name="csrf_token" value="<?php e($csrfToken); ?>">
+
+            <div class="settings-form">
+                <!-- Age Thresholds Section -->
+                <div class="settings-section">
+                    <h3>Age Thresholds</h3>
+                    <p>Configure the power-on hour thresholds for each age category. Thresholds must be in ascending order.</p>
+
+                    <div class="threshold-input">
+                        <div class="threshold-item age-brand_new">
+                            <label>Brand New (< years)</label>
+                            <input type="number" name="THRESHOLD_BRAND_NEW" value="<?php e($config['THRESHOLD_BRAND_NEW']); ?>" min="0" step="100">
+                            <div class="help-text"><?php e(hoursToYears($config['THRESHOLD_BRAND_NEW'])); ?> years</div>
+                        </div>
+
+                        <div class="threshold-item age-newish">
+                            <label>Newish (years)</label>
+                            <input type="number" name="THRESHOLD_NEWISH" value="<?php e($config['THRESHOLD_NEWISH']); ?>" min="0" step="100">
+                            <div class="help-text"><?php e(hoursToYears($config['THRESHOLD_NEWISH'])); ?> years</div>
+                        </div>
+
+                        <div class="threshold-item age-normal">
+                            <label>Normal (years)</label>
+                            <input type="number" name="THRESHOLD_NORMAL" value="<?php e($config['THRESHOLD_NORMAL']); ?>" min="0" step="100">
+                            <div class="help-text"><?php e(hoursToYears($config['THRESHOLD_NORMAL'])); ?> years</div>
+                        </div>
+
+                        <div class="threshold-item age-aged">
+                            <label>Aged (years)</label>
+                            <input type="number" name="THRESHOLD_AGED" value="<?php e($config['THRESHOLD_AGED']); ?>" min="0" step="100">
+                            <div class="help-text"><?php e(hoursToYears($config['THRESHOLD_AGED'])); ?> years</div>
+                        </div>
+
+                        <div class="threshold-item age-old">
+                            <label>Old (years)</label>
+                            <input type="number" name="THRESHOLD_OLD" value="<?php e($config['THRESHOLD_OLD']); ?>" min="0" step="100">
+                            <div class="help-text"><?php e(hoursToYears($config['THRESHOLD_OLD'])); ?> years</div>
+                        </div>
+
+                        <div class="threshold-item age-elderly">
+                            <label>Elderly (≥ years)</label>
+                            <input type="text" value="Above threshold" disabled>
+                            <div class="help-text">> <?php e(hoursToYears($config['THRESHOLD_OLD'])); ?> years</div>
+                        </div>
+                    </div>
+
+                    <div class="color-preview">
+                        <div class="color-block age-brand_new">Brand New</div>
+                        <div class="color-block age-newish">Newish</div>
+                        <div class="color-block age-normal">Normal</div>
+                        <div class="color-block age-aged">Aged</div>
+                        <div class="color-block age-old">Old</div>
+                        <div class="color-block age-elderly">Elderly</div>
+                    </div>
+                </div>
+
+                <!-- Display Options Section -->
+                <div class="settings-section">
+                    <h3>Display Options</h3>
+
+                    <div class="form-group">
+                        <label>Default View Mode</label>
+                        <select name="VIEW_MODE">
+                            <option value="table" <?php echo selected($config['VIEW_MODE'], 'table'); ?>>Table View</option>
+                            <option value="card" <?php echo selected($config['VIEW_MODE'], 'card'); ?>>Card View</option>
+                        </select>
+                        <div class="help-text">Choose the default view when loading the dashboard</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Default Sorting</label>
+                        <select name="DEFAULT_SORT">
+                            <option value="power_on_hours" <?php echo selected($config['DEFAULT_SORT'], 'power_on_hours'); ?>>Power On Hours</option>
+                            <option value="device_name" <?php echo selected($config['DEFAULT_SORT'], 'device_name'); ?>>Device Name</option>
+                            <option value="size_bytes" <?php echo selected($config['DEFAULT_SORT'], 'size_bytes'); ?>>Size</option>
+                            <option value="temperature" <?php echo selected($config['DEFAULT_SORT'], 'temperature'); ?>>Temperature</option>
+                        </select>
+                        <select name="DEFAULT_SORT_DIR">
+                            <option value="desc" <?php echo selected($config['DEFAULT_SORT_DIR'], 'desc'); ?>>Descending</option>
+                            <option value="asc" <?php echo selected($config['DEFAULT_SORT_DIR'], 'asc'); ?>>Ascending</option>
+                        </select>
+                        <div class="help-text">Default column and sort direction</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Show Drive Types</label>
+                        <div>
+                            <input type="hidden" name="SHOW_PARITY" value="false">
+                            <label><input type="checkbox" name="SHOW_PARITY" value="true" <?php echo checked($config['SHOW_PARITY']); ?>> Parity Disks</label><br>
+                            <input type="hidden" name="SHOW_ARRAY" value="false">
+                            <label><input type="checkbox" name="SHOW_ARRAY" value="true" <?php echo checked($config['SHOW_ARRAY']); ?>> Array Disks</label><br>
+                            <input type="hidden" name="SHOW_CACHE" value="false">
+                            <label><input type="checkbox" name="SHOW_CACHE" value="true" <?php echo checked($config['SHOW_CACHE']); ?>> Cache Disks</label><br>
+                            <input type="hidden" name="SHOW_POOL" value="false">
+                            <label><input type="checkbox" name="SHOW_POOL" value="true" <?php echo checked($config['SHOW_POOL']); ?>> Pool Disks</label><br>
+                            <input type="hidden" name="SHOW_UNASSIGNED" value="false">
+                            <label><input type="checkbox" name="SHOW_UNASSIGNED" value="true" <?php echo checked($config['SHOW_UNASSIGNED']); ?>> Unassigned Devices</label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Show Columns</label>
+                        <div>
+                            <input type="hidden" name="SHOW_TEMPERATURE" value="false">
+                            <label><input type="checkbox" name="SHOW_TEMPERATURE" value="true" <?php echo checked($config['SHOW_TEMPERATURE']); ?>> Temperature</label><br>
+                            <input type="hidden" name="SHOW_SMART_STATUS" value="false">
+                            <label><input type="checkbox" name="SHOW_SMART_STATUS" value="true" <?php echo checked($config['SHOW_SMART_STATUS']); ?>> SMART Status</label><br>
+                            <input type="hidden" name="SHOW_SPIN_STATUS" value="false">
+                            <label><input type="checkbox" name="SHOW_SPIN_STATUS" value="true" <?php echo checked($config['SHOW_SPIN_STATUS']); ?>> Spin Status</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Refresh Options Section -->
+                <div class="settings-section">
+                    <h3>Refresh Options</h3>
+
+                    <div class="form-group">
+                        <input type="hidden" name="AUTO_REFRESH" value="false">
+                        <label><input type="checkbox" name="AUTO_REFRESH" value="true" <?php echo checked($config['AUTO_REFRESH']); ?>> Enable Auto-Refresh</label>
+                        <div class="help-text">Automatically refresh drive data at specified interval</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Refresh Interval (seconds)</label>
+                        <input type="number" name="REFRESH_INTERVAL" value="<?php e($config['REFRESH_INTERVAL']); ?>" min="30" max="3600" step="30">
+                        <div class="help-text">How often to refresh data (30-3600 seconds)</div>
+                    </div>
+                </div>
+
+                <!-- JSON API Settings Section -->
+                <div class="settings-section">
+                    <h3>JSON API Settings</h3>
+                    <div class="warning-box">
+                        <strong>Security Warning:</strong> The JSON API exposes drive information via HTTP endpoint.
+                        Only enable if you need to integrate with external monitoring tools.
+                        Rate limiting is enforced to prevent abuse.
+                    </div>
+
+                    <div class="form-group">
+                        <input type="hidden" name="API_ENABLED" value="false">
+                        <label><input type="checkbox" name="API_ENABLED" value="true" <?php echo checked($config['API_ENABLED']); ?>> Enable JSON API</label>
+                        <div class="help-text">Enable external access to drive data via JSON endpoint</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Rate Limit (requests per minute)</label>
+                        <input type="number" name="API_RATE_LIMIT" value="<?php e($config['API_RATE_LIMIT']); ?>" min="10" max="1000" step="10">
+                        <div class="help-text">Maximum API calls allowed per minute (10-1000)</div>
+                    </div>
+
+                    <?php if ($config['API_ENABLED'] === 'true'): ?>
+                    <div class="form-group">
+                        <label>API Endpoint</label>
+                        <input type="text" value="/plugins/driveage/scripts/get_drive_data.php" readonly onclick="this.select()">
+                        <div class="help-text">Click to select and copy the endpoint URL</div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="buttons">
+                    <input type="submit" value="Apply Settings" class="btn-primary">
+                    <button type="button" onclick="resetToDefaults()" class="btn-danger">Reset to Defaults</button>
+                    <button type="button" onclick="window.location.href='/Settings/DriveAge'" class="btn-secondary">Back to Dashboard</button>
+                </div>
+            </div>
+        </form>
+
+        <iframe name="progressFrame" style="display:none;"></iframe>
+    </div>
+
+    <script>
+        function resetToDefaults() {
+            if (confirm('Are you sure you want to reset all settings to defaults? This cannot be undone.')) {
+                // Set all values to defaults
+                document.querySelector('[name="THRESHOLD_BRAND_NEW"]').value = '17520';
+                document.querySelector('[name="THRESHOLD_NEWISH"]').value = '26280';
+                document.querySelector('[name="THRESHOLD_NORMAL"]').value = '35040';
+                document.querySelector('[name="THRESHOLD_AGED"]').value = '43800';
+                document.querySelector('[name="THRESHOLD_OLD"]').value = '52560';
+
+                document.querySelector('[name="VIEW_MODE"]').value = 'table';
+                document.querySelector('[name="DEFAULT_SORT"]').value = 'power_on_hours';
+                document.querySelector('[name="DEFAULT_SORT_DIR"]').value = 'desc';
+
+                document.querySelector('[name="AUTO_REFRESH"]').checked = false;
+                document.querySelector('[name="REFRESH_INTERVAL"]').value = '300';
+
+                document.querySelectorAll('input[type="checkbox"][name^="SHOW_"]').forEach(cb => {
+                    cb.checked = true;
+                });
+
+                document.querySelector('[name="API_ENABLED"]').checked = false;
+                document.querySelector('[name="API_RATE_LIMIT"]').value = '100';
+
+                alert('Settings reset to defaults. Click "Apply Settings" to save.');
+            }
+        }
+
+        // Update year display when threshold values change
+        document.querySelectorAll('.threshold-item input[type="number"]').forEach(input => {
+            input.addEventListener('input', function() {
+                const helpText = this.nextElementSibling;
+                const years = (parseFloat(this.value) / 8766).toFixed(2);
+                helpText.textContent = years + ' years';
+            });
+        });
+    </script>
+</body>
+</html>

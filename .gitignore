@@ -1,0 +1,52 @@
+# Build artifacts
+archive/*.txz
+archive/*.md5
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+
+# Cache files
+.cache/
+tmp/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Test files
+test-output/
+
+# Logs
+*.log
+
+# Icon conversion files (keep SVG source only)
+# PNG icons will be generated during build
+*.png
+!docs/screenshots/*.png
+
+# Development/testing files
+view-icons.html
+test-*.php
+test-*.js
+
+# Security logs (don't commit local logs)
+driveage_security.log
+/var/log/driveage_security.log
+
+# Cache directory
+/var/lib/driveage/
+
+# Node.js artifacts (from development tools)
+node_modules/
+package-lock.json
+package.json

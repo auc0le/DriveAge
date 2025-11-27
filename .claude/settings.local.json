@@ -3,7 +3,21 @@
     "allow": [
       "WebSearch",
       "WebFetch(domain:forums.unraid.net)",
-      "WebFetch(domain:wiki.unraid.net)"
+      "WebFetch(domain:wiki.unraid.net)",
+      "Bash(tree:*)",
+      "Bash(chmod:*)",
+      "WebFetch(domain:iconduck.com)",
+      "WebFetch(domain:icon-sets.iconify.design)",
+      "WebFetch(domain:uxwing.com)",
+      "Bash(curl:*)",
+      "Bash(python3:*)",
+      "Bash(wc:*)",
+      "Bash(pip3 install:*)",
+      "Bash(sudo apt-get update:*)",
+      "Bash(sudo apt-get install:*)",
+      "Bash(cat:*)",
+      "Bash(npm install:*)",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []
