@@ -1,6 +1,11 @@
 Title="DriveAge Settings"
 ---
-<?php
+<?PHP
+/* DriveAge Plugin
+ * Settings Page
+ */
+?>
+<?
 require_once '/usr/local/emhttp/plugins/driveage/include/config.php';
 require_once '/usr/local/emhttp/plugins/driveage/include/helpers.php';
 require_once '/usr/local/emhttp/plugins/driveage/include/security.php';
@@ -171,7 +176,7 @@ function hoursToYears($hours) {
 
         <form method="POST" action="/update.php" target="progressFrame">
             <input type="hidden" name="#file" value="/boot/config/plugins/driveage/driveage.cfg">
-            <input type="hidden" name="csrf_token" value="<?php e($csrfToken); ?>">
+            <input type="hidden" name="csrf_token" value="<?e($csrfToken); ?>">
 
             <div class="settings-form">
                 <!-- Age Thresholds Section -->
@@ -182,38 +187,38 @@ function hoursToYears($hours) {
                     <div class="threshold-input">
                         <div class="threshold-item age-brand_new">
                             <label>Brand New (< years)</label>
-                            <input type="number" name="THRESHOLD_BRAND_NEW" value="<?php e($config['THRESHOLD_BRAND_NEW']); ?>" min="0" step="100">
-                            <div class="help-text"><?php e(hoursToYears($config['THRESHOLD_BRAND_NEW'])); ?> years</div>
+                            <input type="number" name="THRESHOLD_BRAND_NEW" value="<?e($config['THRESHOLD_BRAND_NEW']); ?>" min="0" step="100">
+                            <div class="help-text"><?e(hoursToYears($config['THRESHOLD_BRAND_NEW'])); ?> years</div>
                         </div>
 
                         <div class="threshold-item age-newish">
                             <label>Newish (years)</label>
-                            <input type="number" name="THRESHOLD_NEWISH" value="<?php e($config['THRESHOLD_NEWISH']); ?>" min="0" step="100">
-                            <div class="help-text"><?php e(hoursToYears($config['THRESHOLD_NEWISH'])); ?> years</div>
+                            <input type="number" name="THRESHOLD_NEWISH" value="<?e($config['THRESHOLD_NEWISH']); ?>" min="0" step="100">
+                            <div class="help-text"><?e(hoursToYears($config['THRESHOLD_NEWISH'])); ?> years</div>
                         </div>
 
                         <div class="threshold-item age-normal">
                             <label>Normal (years)</label>
-                            <input type="number" name="THRESHOLD_NORMAL" value="<?php e($config['THRESHOLD_NORMAL']); ?>" min="0" step="100">
-                            <div class="help-text"><?php e(hoursToYears($config['THRESHOLD_NORMAL'])); ?> years</div>
+                            <input type="number" name="THRESHOLD_NORMAL" value="<?e($config['THRESHOLD_NORMAL']); ?>" min="0" step="100">
+                            <div class="help-text"><?e(hoursToYears($config['THRESHOLD_NORMAL'])); ?> years</div>
                         </div>
 
                         <div class="threshold-item age-aged">
                             <label>Aged (years)</label>
-                            <input type="number" name="THRESHOLD_AGED" value="<?php e($config['THRESHOLD_AGED']); ?>" min="0" step="100">
-                            <div class="help-text"><?php e(hoursToYears($config['THRESHOLD_AGED'])); ?> years</div>
+                            <input type="number" name="THRESHOLD_AGED" value="<?e($config['THRESHOLD_AGED']); ?>" min="0" step="100">
+                            <div class="help-text"><?e(hoursToYears($config['THRESHOLD_AGED'])); ?> years</div>
                         </div>
 
                         <div class="threshold-item age-old">
                             <label>Old (years)</label>
-                            <input type="number" name="THRESHOLD_OLD" value="<?php e($config['THRESHOLD_OLD']); ?>" min="0" step="100">
-                            <div class="help-text"><?php e(hoursToYears($config['THRESHOLD_OLD'])); ?> years</div>
+                            <input type="number" name="THRESHOLD_OLD" value="<?e($config['THRESHOLD_OLD']); ?>" min="0" step="100">
+                            <div class="help-text"><?e(hoursToYears($config['THRESHOLD_OLD'])); ?> years</div>
                         </div>
 
                         <div class="threshold-item age-elderly">
                             <label>Elderly (≥ years)</label>
                             <input type="text" value="Above threshold" disabled>
-                            <div class="help-text">> <?php e(hoursToYears($config['THRESHOLD_OLD'])); ?> years</div>
+                            <div class="help-text">> <?e(hoursToYears($config['THRESHOLD_OLD'])); ?> years</div>
                         </div>
                     </div>
 
@@ -234,8 +239,8 @@ function hoursToYears($hours) {
                     <div class="form-group">
                         <label>Default View Mode</label>
                         <select name="VIEW_MODE">
-                            <option value="table" <?php echo selected($config['VIEW_MODE'], 'table'); ?>>Table View</option>
-                            <option value="card" <?php echo selected($config['VIEW_MODE'], 'card'); ?>>Card View</option>
+                            <option value="table" <?echo selected($config['VIEW_MODE'], 'table'); ?>>Table View</option>
+                            <option value="card" <?echo selected($config['VIEW_MODE'], 'card'); ?>>Card View</option>
                         </select>
                         <div class="help-text">Choose the default view when loading the dashboard</div>
                     </div>
@@ -243,14 +248,14 @@ function hoursToYears($hours) {
                     <div class="form-group">
                         <label>Default Sorting</label>
                         <select name="DEFAULT_SORT">
-                            <option value="power_on_hours" <?php echo selected($config['DEFAULT_SORT'], 'power_on_hours'); ?>>Power On Hours</option>
-                            <option value="device_name" <?php echo selected($config['DEFAULT_SORT'], 'device_name'); ?>>Device Name</option>
-                            <option value="size_bytes" <?php echo selected($config['DEFAULT_SORT'], 'size_bytes'); ?>>Size</option>
-                            <option value="temperature" <?php echo selected($config['DEFAULT_SORT'], 'temperature'); ?>>Temperature</option>
+                            <option value="power_on_hours" <?echo selected($config['DEFAULT_SORT'], 'power_on_hours'); ?>>Power On Hours</option>
+                            <option value="device_name" <?echo selected($config['DEFAULT_SORT'], 'device_name'); ?>>Device Name</option>
+                            <option value="size_bytes" <?echo selected($config['DEFAULT_SORT'], 'size_bytes'); ?>>Size</option>
+                            <option value="temperature" <?echo selected($config['DEFAULT_SORT'], 'temperature'); ?>>Temperature</option>
                         </select>
                         <select name="DEFAULT_SORT_DIR">
-                            <option value="desc" <?php echo selected($config['DEFAULT_SORT_DIR'], 'desc'); ?>>Descending</option>
-                            <option value="asc" <?php echo selected($config['DEFAULT_SORT_DIR'], 'asc'); ?>>Ascending</option>
+                            <option value="desc" <?echo selected($config['DEFAULT_SORT_DIR'], 'desc'); ?>>Descending</option>
+                            <option value="asc" <?echo selected($config['DEFAULT_SORT_DIR'], 'asc'); ?>>Ascending</option>
                         </select>
                         <div class="help-text">Default column and sort direction</div>
                     </div>
@@ -259,15 +264,15 @@ function hoursToYears($hours) {
                         <label>Show Drive Types</label>
                         <div>
                             <input type="hidden" name="SHOW_PARITY" value="false">
-                            <label><input type="checkbox" name="SHOW_PARITY" value="true" <?php echo checked($config['SHOW_PARITY']); ?>> Parity Disks</label><br>
+                            <label><input type="checkbox" name="SHOW_PARITY" value="true" <?echo checked($config['SHOW_PARITY']); ?>> Parity Disks</label><br>
                             <input type="hidden" name="SHOW_ARRAY" value="false">
-                            <label><input type="checkbox" name="SHOW_ARRAY" value="true" <?php echo checked($config['SHOW_ARRAY']); ?>> Array Disks</label><br>
+                            <label><input type="checkbox" name="SHOW_ARRAY" value="true" <?echo checked($config['SHOW_ARRAY']); ?>> Array Disks</label><br>
                             <input type="hidden" name="SHOW_CACHE" value="false">
-                            <label><input type="checkbox" name="SHOW_CACHE" value="true" <?php echo checked($config['SHOW_CACHE']); ?>> Cache Disks</label><br>
+                            <label><input type="checkbox" name="SHOW_CACHE" value="true" <?echo checked($config['SHOW_CACHE']); ?>> Cache Disks</label><br>
                             <input type="hidden" name="SHOW_POOL" value="false">
-                            <label><input type="checkbox" name="SHOW_POOL" value="true" <?php echo checked($config['SHOW_POOL']); ?>> Pool Disks</label><br>
+                            <label><input type="checkbox" name="SHOW_POOL" value="true" <?echo checked($config['SHOW_POOL']); ?>> Pool Disks</label><br>
                             <input type="hidden" name="SHOW_UNASSIGNED" value="false">
-                            <label><input type="checkbox" name="SHOW_UNASSIGNED" value="true" <?php echo checked($config['SHOW_UNASSIGNED']); ?>> Unassigned Devices</label>
+                            <label><input type="checkbox" name="SHOW_UNASSIGNED" value="true" <?echo checked($config['SHOW_UNASSIGNED']); ?>> Unassigned Devices</label>
                         </div>
                     </div>
 
@@ -275,11 +280,11 @@ function hoursToYears($hours) {
                         <label>Show Columns</label>
                         <div>
                             <input type="hidden" name="SHOW_TEMPERATURE" value="false">
-                            <label><input type="checkbox" name="SHOW_TEMPERATURE" value="true" <?php echo checked($config['SHOW_TEMPERATURE']); ?>> Temperature</label><br>
+                            <label><input type="checkbox" name="SHOW_TEMPERATURE" value="true" <?echo checked($config['SHOW_TEMPERATURE']); ?>> Temperature</label><br>
                             <input type="hidden" name="SHOW_SMART_STATUS" value="false">
-                            <label><input type="checkbox" name="SHOW_SMART_STATUS" value="true" <?php echo checked($config['SHOW_SMART_STATUS']); ?>> SMART Status</label><br>
+                            <label><input type="checkbox" name="SHOW_SMART_STATUS" value="true" <?echo checked($config['SHOW_SMART_STATUS']); ?>> SMART Status</label><br>
                             <input type="hidden" name="SHOW_SPIN_STATUS" value="false">
-                            <label><input type="checkbox" name="SHOW_SPIN_STATUS" value="true" <?php echo checked($config['SHOW_SPIN_STATUS']); ?>> Spin Status</label>
+                            <label><input type="checkbox" name="SHOW_SPIN_STATUS" value="true" <?echo checked($config['SHOW_SPIN_STATUS']); ?>> Spin Status</label>
                         </div>
                     </div>
                 </div>
@@ -290,13 +295,13 @@ function hoursToYears($hours) {
 
                     <div class="form-group">
                         <input type="hidden" name="AUTO_REFRESH" value="false">
-                        <label><input type="checkbox" name="AUTO_REFRESH" value="true" <?php echo checked($config['AUTO_REFRESH']); ?>> Enable Auto-Refresh</label>
+                        <label><input type="checkbox" name="AUTO_REFRESH" value="true" <?echo checked($config['AUTO_REFRESH']); ?>> Enable Auto-Refresh</label>
                         <div class="help-text">Automatically refresh drive data at specified interval</div>
                     </div>
 
                     <div class="form-group">
                         <label>Refresh Interval (seconds)</label>
-                        <input type="number" name="REFRESH_INTERVAL" value="<?php e($config['REFRESH_INTERVAL']); ?>" min="30" max="3600" step="30">
+                        <input type="number" name="REFRESH_INTERVAL" value="<?e($config['REFRESH_INTERVAL']); ?>" min="30" max="3600" step="30">
                         <div class="help-text">How often to refresh data (30-3600 seconds)</div>
                     </div>
                 </div>
@@ -312,23 +317,23 @@ function hoursToYears($hours) {
 
                     <div class="form-group">
                         <input type="hidden" name="API_ENABLED" value="false">
-                        <label><input type="checkbox" name="API_ENABLED" value="true" <?php echo checked($config['API_ENABLED']); ?>> Enable JSON API</label>
+                        <label><input type="checkbox" name="API_ENABLED" value="true" <?echo checked($config['API_ENABLED']); ?>> Enable JSON API</label>
                         <div class="help-text">Enable external access to drive data via JSON endpoint</div>
                     </div>
 
                     <div class="form-group">
                         <label>Rate Limit (requests per minute)</label>
-                        <input type="number" name="API_RATE_LIMIT" value="<?php e($config['API_RATE_LIMIT']); ?>" min="10" max="1000" step="10">
+                        <input type="number" name="API_RATE_LIMIT" value="<?e($config['API_RATE_LIMIT']); ?>" min="10" max="1000" step="10">
                         <div class="help-text">Maximum API calls allowed per minute (10-1000)</div>
                     </div>
 
-                    <?php if ($config['API_ENABLED'] === 'true'): ?>
+                    <?if ($config['API_ENABLED'] === 'true'): ?>
                     <div class="form-group">
                         <label>API Endpoint</label>
                         <input type="text" value="/plugins/driveage/scripts/get_drive_data.php" readonly onclick="this.select()">
                         <div class="help-text">Click to select and copy the endpoint URL</div>
                     </div>
-                    <?php endif; ?>
+                    <?endif; ?>
                 </div>
 
                 <!-- Action Buttons -->
