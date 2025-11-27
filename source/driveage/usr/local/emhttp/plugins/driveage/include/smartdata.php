@@ -338,7 +338,7 @@ function getDriveSize($devicePath) {
  * Get Unraid assignment information for a drive
  *
  * @param string $deviceName Device name (e.g., sda)
- * @param array $unraidVars Unraid variables
+ * @param array $unraidVars Unraid variables (not used, kept for compatibility)
  * @return array Assignment info
  */
 function getUnraidAssignment($deviceName, $unraidVars) {
@@ -348,46 +348,59 @@ function getUnraidAssignment($deviceName, $unraidVars) {
         'drive_type' => 'unassigned'
     ];
 
-    // Check parity drives
-    if (isset($unraidVars['rdevName']) && strpos($unraidVars['rdevName'], $deviceName) !== false) {
-        $assignment['display_name'] = 'Parity';
-        $assignment['array_name'] = 'Array 1';
-        $assignment['drive_type'] = 'parity';
+    // Read disks.ini which contains the actual disk assignments
+    $disksIni = '/var/local/emhttp/disks.ini';
+    if (!file_exists($disksIni)) {
         return $assignment;
     }
 
-    if (isset($unraidVars['rdev2Name']) && strpos($unraidVars['rdev2Name'], $deviceName) !== false) {
-        $assignment['display_name'] = 'Parity 2';
-        $assignment['array_name'] = 'Array 1';
-        $assignment['drive_type'] = 'parity';
+    $disks = parse_ini_file($disksIni, true);
+    if (!$disks) {
         return $assignment;
     }
 
-    // Check array disks
-    for ($i = 1; $i <= 30; $i++) {
-        $key = 'rdevName.' . $i;
-        if (isset($unraidVars[$key]) && strpos($unraidVars[$key], $deviceName) !== false) {
-            $assignment['display_name'] = 'Disk ' . $i;
-            $assignment['array_name'] = 'Array 1';
-            $assignment['drive_type'] = 'array';
-            return $assignment;
+    // Search for matching device
+    foreach ($disks as $diskName => $diskInfo) {
+        if (!isset($diskInfo['device'])) {
+            continue;
         }
-    }
 
-    // Check cache drives
-    if (isset($unraidVars['rdevCacheName']) && strpos($unraidVars['rdevCacheName'], $deviceName) !== false) {
-        $assignment['display_name'] = 'Cache';
-        $assignment['array_name'] = 'Array 1';
-        $assignment['drive_type'] = 'cache';
-        return $assignment;
-    }
+        // Match device name (handle both full device like "nvme0n1" and base like "sda")
+        if ($diskInfo['device'] === $deviceName) {
+            $type = $diskInfo['type'] ?? 'Unknown';
 
-    // Check for additional cache/pool devices
-    foreach ($unraidVars as $key => $value) {
-        if (strpos($key, 'rdevCache') === 0 && strpos($value, $deviceName) !== false) {
-            $assignment['display_name'] = 'Cache';
-            $assignment['array_name'] = 'Array 1';
-            $assignment['drive_type'] = 'cache';
+            // Map Unraid type to our drive type
+            switch ($type) {
+                case 'Parity':
+                    $assignment['display_name'] = ucfirst($diskName);
+                    $assignment['array_name'] = 'Main Array';
+                    $assignment['drive_type'] = 'parity';
+                    break;
+
+                case 'Data':
+                    $assignment['display_name'] = ucfirst($diskName);
+                    $assignment['array_name'] = 'Main Array';
+                    $assignment['drive_type'] = 'array';
+                    break;
+
+                case 'Cache':
+                    // Use the actual cache name (e.g., "cache", "media_cache")
+                    $assignment['display_name'] = ucfirst(str_replace('_', ' ', $diskName));
+                    $assignment['array_name'] = ucfirst(str_replace('_', ' ', $diskName));
+                    $assignment['drive_type'] = 'cache';
+                    break;
+
+                case 'Flash':
+                    // Skip flash drive
+                    return $assignment;
+
+                default:
+                    $assignment['display_name'] = ucfirst($diskName);
+                    $assignment['array_name'] = 'Unknown';
+                    $assignment['drive_type'] = 'unassigned';
+                    break;
+            }
+
             return $assignment;
         }
     }
