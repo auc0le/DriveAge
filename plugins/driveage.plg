@@ -27,6 +27,24 @@
 <CHANGES>
 ##&name;
 
+###2025.11.27 (Build 37)
+- Removed card view functionality (table-only view)
+- Simplified codebase by removing VIEW_MODE configuration
+- Improved maintainability and reduced complexity
+
+###2025.11.27 (Build 36)
+- Dramatic performance improvement: 26-52 seconds → ~100ms load time
+- Now uses Unraid's cached SMART data from /var/local/emhttp/smart/
+- Fallback to direct smartctl if cache unavailable
+- Increased cache TTL from 60 to 300 seconds
+- Pre-populate cache on plugin installation for faster first load
+
+###2025.11.27 (Build 31-35)
+- Added legend section showing age categories with threshold ranges
+- Added info note explaining elderly drive bold text emphasis
+- Added footer with drive count, version, and settings link
+- Enhanced visual hierarchy and user experience
+
 ###2025.11.26
 - Initial release
 - Drive age monitoring based on SMART power-on hours
@@ -35,7 +53,7 @@
 - Bold text emphasis for oldest drives
 - Configurable age thresholds
 - Support for multi-array configurations (Unraid 6.12+)
-- Table and card view modes with sortable columns
+- Table view with sortable columns
 - Comprehensive settings page with live preview
 - Temperature, SMART status, and spin status display
 - Optional JSON API for external monitoring integration
