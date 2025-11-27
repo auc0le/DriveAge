@@ -1,27 +1,50 @@
 <?php
 /**
- * Debug endpoint to show Unraid vars
+ * Debug endpoint to show Unraid disk mappings
  */
 
 header('Content-Type: application/json');
 
-$varFile = '/var/local/emhttp/var.ini';
+$disksDir = '/var/local/emhttp/disks';
+$diskMappings = [];
 
-if (!file_exists($varFile)) {
-    echo json_encode([
-        'error' => 'var.ini not found',
-        'path' => $varFile
-    ], JSON_PRETTY_PRINT);
-    exit;
+if (is_dir($disksDir)) {
+    $diskNames = scandir($disksDir);
+
+    foreach ($diskNames as $diskName) {
+        if ($diskName === '.' || $diskName === '..') {
+            continue;
+        }
+
+        $diskPath = $disksDir . '/' . $diskName;
+
+        if (is_dir($diskPath)) {
+            $info = [];
+
+            // Read common files
+            $files = ['device', 'name', 'status', 'color', 'size', 'id', 'type'];
+            foreach ($files as $file) {
+                $filePath = $diskPath . '/' . $file;
+                if (file_exists($filePath)) {
+                    $info[$file] = trim(file_get_contents($filePath));
+                }
+            }
+
+            $diskMappings[$diskName] = $info;
+        }
+    }
 }
 
-$vars = parse_ini_file($varFile) ?: [];
-
-// Sort for easier reading
-ksort($vars);
+// Also check if there's a disks.ini
+$disksIni = '/var/local/emhttp/disks.ini';
+$disksIniData = null;
+if (file_exists($disksIni)) {
+    $disksIniData = parse_ini_file($disksIni, true) ?: [];
+}
 
 echo json_encode([
-    'var_file' => $varFile,
-    'all_vars' => $vars,
-    'count' => count($vars)
+    'disks_dir' => $disksDir,
+    'disk_mappings' => $diskMappings,
+    'disks_ini_exists' => file_exists($disksIni),
+    'disks_ini' => $disksIniData
 ], JSON_PRETTY_PRINT);
