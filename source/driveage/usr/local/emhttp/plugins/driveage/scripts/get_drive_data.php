@@ -71,7 +71,6 @@ try {
             'old' => intval($config['THRESHOLD_OLD'])
         ],
         'config' => [
-            'view_mode' => $config['VIEW_MODE'],
             'show_temperature' => $config['SHOW_TEMPERATURE'] === 'true',
             'show_smart_status' => $config['SHOW_SMART_STATUS'] === 'true',
             'show_spin_status' => $config['SHOW_SPIN_STATUS'] === 'true'

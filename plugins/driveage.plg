@@ -3,7 +3,7 @@
   <!ENTITY name      "driveage">
   <!ENTITY author    "Tony Coleman">
   <!ENTITY version   "2025.11.27">
-  <!ENTITY build     "37">
+  <!ENTITY build     "39">
   <!ENTITY launch    "Settings/DriveAge">
   <!ENTITY gitURL    "https://raw.githubusercontent.com/auc0le/DriveAge/main">
   <!ENTITY pluginURL "&gitURL;/plugins/&name;.plg">
@@ -11,7 +11,7 @@
   <!ENTITY pkg       "/boot/config/plugins/&name;/packages">
   <!ENTITY plgpath   "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
-  <!ENTITY md5       "e99dbbe68feb77668ee0ee7aaa773345">
+  <!ENTITY md5       "009ccfef4c62dd03d16bed1b8a6ba3b2">
 ]>
 
 <PLUGIN
@@ -26,6 +26,12 @@
 
 <CHANGES>
 ##&name;
+
+###2025.11.27 (Build 39)
+- Fixed drive size display to show raw device size instead of useable size
+- 20TB drives now correctly show as 20TB (not 9TB)
+- Uses blockdev for accurate raw hardware size
+- Removed leftover VIEW_MODE reference in get_drive_data.php
 
 ###2025.11.27 (Build 37)
 - Removed card view functionality (table-only view)
