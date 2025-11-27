@@ -30,11 +30,13 @@ function initRateLimitDirectory() {
  * Check and enforce rate limiting
  *
  * @param array $config Plugin configuration
+ * @param bool $internalRequest Whether this is an internal dashboard request
  * @return bool True if request is allowed
  */
-function checkRateLimit($config) {
-    // Check if API is enabled
-    if ($config['API_ENABLED'] !== 'true') {
+function checkRateLimit($config, $internalRequest = false) {
+    // Check if API is enabled (only for external requests)
+    // Internal dashboard requests are always allowed
+    if (!$internalRequest && $config['API_ENABLED'] !== 'true') {
         http_response_code(403);
         header('Content-Type: application/json');
         echo json_encode([
@@ -212,7 +214,19 @@ function logSecurityEvent($event, $details = []) {
  */
 function generateCsrfToken() {
     if (session_status() === PHP_SESSION_NONE) {
-        session_start();
+        // Check if headers already sent (common in Unraid .page files)
+        if (!headers_sent()) {
+            @session_start();
+        } else {
+            // Can't start session - headers already sent
+            // Generate a temporary token (won't persist across requests)
+            return bin2hex(random_bytes(32));
+        }
+    }
+
+    if (!isset($_SESSION)) {
+        // Session not available, return temporary token
+        return bin2hex(random_bytes(32));
     }
 
     if (empty($_SESSION['driveage_csrf_token'])) {
@@ -230,7 +244,17 @@ function generateCsrfToken() {
  */
 function validateCsrfToken($token) {
     if (session_status() === PHP_SESSION_NONE) {
-        session_start();
+        if (!headers_sent()) {
+            @session_start();
+        } else {
+            // Can't validate without session
+            return false;
+        }
+    }
+
+    if (!isset($_SESSION)) {
+        // Session not available
+        return false;
     }
 
     $sessionToken = $_SESSION['driveage_csrf_token'] ?? '';

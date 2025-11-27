@@ -23,7 +23,7 @@ $config = loadConfig();
         <!-- Header Section -->
         <div class="driveage-header">
             <div>
-                <h2>DriveAge - Drive Age Monitor</h2>
+                <h2>DriveAge - Dashboard</h2>
                 <span id="last-updated" class="last-updated">Loading...</span>
             </div>
             <div class="driveage-controls">

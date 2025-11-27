@@ -18,8 +18,14 @@ try {
     // Load configuration
     $config = loadConfig();
 
+    // Detect if this is an internal dashboard request vs external API access
+    // Internal requests come from the Unraid web interface (have Referer header to our own pages)
+    $referer = $_SERVER['HTTP_REFERER'] ?? '';
+    $host = $_SERVER['HTTP_HOST'] ?? '';
+    $isInternalRequest = !empty($referer) && strpos($referer, $host) !== false;
+
     // Check rate limit and API access
-    checkRateLimit($config);
+    checkRateLimit($config, $isInternalRequest);
 
     // Clean up old rate limit files (1% chance)
     if (rand(1, 100) === 1) {
