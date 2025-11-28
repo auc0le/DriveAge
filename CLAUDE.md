@@ -188,13 +188,19 @@ All changes must maintain the cache-first approach:
 
 ## Version and Release Process
 
-Version format: `YYYY.MM.DD` (e.g., `2025.11.27`)
+Version format: `YYYY.MM.DD` (e.g., `2025.11.28`)
 
-Build number auto-increments for same-day builds (e.g., Build 39, Build 40).
+**Build Numbering Convention:**
+- Build numbers reset to 1 with each new date
+- Same-day builds auto-increment (Build 1, Build 2, Build 3)
+- When committing, use the build number that matches the package filename
+- Example: `driveage-2025.11.28-x86_64-1.txz` = "Build 1" in commit message
+- Example: `driveage-2025.11.28-x86_64-2.txz` = "Build 2" in commit message
 
 Release checklist (from `build.sh` output):
 1. Run `./build.sh`
 2. Commit and push to GitHub (including updated `plugins/driveage.plg`)
+   - Use commit message format: "Build N: [description]" where N matches the package build number
 3. Upload package and MD5 to GitHub releases
 4. Test installation on Unraid
 
