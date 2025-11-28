@@ -245,7 +245,7 @@ function getAgeLabel($category) {
     $labels = [
         'brand_new' => 'Brand New',
         'newish' => 'Newish',
-        'normal' => 'Normal',
+        'normal' => 'Mature',
         'aged' => 'Aged',
         'old' => 'Old',
         'elderly' => 'Elderly'

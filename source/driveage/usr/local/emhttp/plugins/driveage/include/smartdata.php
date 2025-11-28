@@ -38,11 +38,15 @@ function getAllDrives($config, $useCache = true) {
         $diskAssignments = parse_ini_file($disksIni, true) ?: [];
     }
 
+    // Get Unraid variables (for temperature unit preference)
+    $unraidVars = getUnraidVars();
+    $tempUnit = isset($unraidVars['TEMP']) && strtoupper($unraidVars['TEMP']) === 'F' ? 'F' : 'C';
+
     // Discover all block devices
     $devices = discoverBlockDevices();
 
     foreach ($devices as $devicePath) {
-        $driveInfo = getDriveInfo($devicePath, $diskAssignments, $config);
+        $driveInfo = getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit);
         if ($driveInfo) {
             $drives[] = $driveInfo;
         }
@@ -142,9 +146,10 @@ function getUnraidVars() {
  * @param string $devicePath Device path (e.g., /dev/sda)
  * @param array $diskAssignments Parsed disks.ini data
  * @param array $config Plugin configuration
+ * @param string $tempUnit Temperature unit ('C' or 'F')
  * @return array|null Drive information array or null if failed
  */
-function getDriveInfo($devicePath, $diskAssignments, $config) {
+function getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit = 'C') {
     // Get device name (e.g., sda from /dev/sda)
     $deviceName = basename($devicePath);
 
@@ -177,7 +182,7 @@ function getDriveInfo($devicePath, $diskAssignments, $config) {
         'power_on_hours' => $smartData['power_on_hours'],
         'power_on_human' => formatPowerOnHours($smartData['power_on_hours']),
         'temperature' => $smartData['temperature'],
-        'temperature_formatted' => formatTemperature($smartData['temperature']),
+        'temperature_formatted' => formatTemperature($smartData['temperature'], $tempUnit),
         'smart_status' => $smartData['smart_status'],
         'smart_status_formatted' => formatSmartStatus($smartData['smart_status']),
         'spin_status' => $smartData['spin_status'],
@@ -421,8 +426,20 @@ function getSpinStatus($devicePath) {
  * @return int Size in bytes
  */
 function getDriveSize($devicePath, $deviceName, $diskAssignments) {
-    // Use blockdev to get the raw device size (not formatted/useable size)
-    // Note: disks.ini 'size' field contains useable size, not raw hardware size
+    // First try to get size from disks.ini 'sizeSb' field (Unraid's superblock size)
+    if (!empty($diskAssignments)) {
+        foreach ($diskAssignments as $diskName => $diskInfo) {
+            if (isset($diskInfo['device']) && $diskInfo['device'] === $deviceName) {
+                // Use sizeSb if available (this is what Unraid main page uses)
+                if (isset($diskInfo['sizeSb']) && $diskInfo['sizeSb'] > 0) {
+                    return intval($diskInfo['sizeSb']);
+                }
+                break;
+            }
+        }
+    }
+
+    // Fallback: Use blockdev to get the raw device size
     $output = shell_exec("blockdev --getsize64 " . escapeshellarg($devicePath) . " 2>/dev/null");
     return $output ? intval(trim($output)) : 0;
 }

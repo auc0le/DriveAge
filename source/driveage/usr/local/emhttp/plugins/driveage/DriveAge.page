@@ -43,7 +43,7 @@ $timestamp = date('Y-m-d H:i:s');
         </div>
         <div class="legend-item">
             <div class="legend-color age-normal"></div>
-            <span class="legend-label">Normal</span>
+            <span class="legend-label">Mature</span>
             <span class="legend-hours">(<?= e(number_format($config['THRESHOLD_NEWISH'])); ?>-<?= e(number_format($config['THRESHOLD_NORMAL'])); ?>h)</span>
         </div>
         <div class="legend-item">
@@ -61,10 +61,6 @@ $timestamp = date('Y-m-d H:i:s');
             <span class="legend-label">Elderly</span>
             <span class="legend-hours">(≥ <?= e(number_format($config['THRESHOLD_OLD'])); ?>h)</span>
         </div>
-    </div>
-
-    <div class="driveage-info">
-        <strong>Note:</strong> Elderly drives (≥ <?= e(number_format($config['THRESHOLD_OLD'])); ?>h) are displayed in <strong>bold text</strong> to highlight drives requiring closest monitoring.
     </div>
 
     <!-- Drive data container (will be populated by JavaScript) -->
