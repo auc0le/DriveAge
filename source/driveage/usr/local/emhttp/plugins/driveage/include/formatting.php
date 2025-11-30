@@ -72,15 +72,15 @@ function formatPowerOnHours($hours) {
  *
  * @param int $bytes Size in bytes
  * @param int $precision Decimal precision (null for adaptive)
+ * @param int $kilo Base unit (1000 for SI/decimal, 1024 for binary) - default 1000 to match Unraid
  * @return string Human-readable size (e.g., "20TB", "500GB")
  */
-function formatBytes($bytes, $precision = null) {
+function formatBytes($bytes, $precision = null, $kilo = 1000) {
     if ($bytes === null || $bytes <= 0) {
         return 'N/A';
     }
 
     $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
-    $kilo = 1024;
     $bytes = max($bytes, 0);
     $base = $bytes ? intval(floor(log($bytes) / log($kilo))) : 0;
     $base = min($base, count($units) - 1);
