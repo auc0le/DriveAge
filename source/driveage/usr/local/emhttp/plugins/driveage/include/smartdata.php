@@ -439,15 +439,19 @@ function getSpinStatus($devicePath) {
  * @return int Size in bytes
  */
 function getDriveSize($devicePath, $deviceName, $diskAssignments) {
-    // First try to get size from disks.ini 'size' field
+    // First try to get size from disks.ini sectors × sector_size
     if (!empty($diskAssignments)) {
         foreach ($diskAssignments as $diskName => $diskInfo) {
             if (isset($diskInfo['device']) && $diskInfo['device'] === $deviceName) {
-                // Use 'size' field if available (device size in bytes)
-                if (isset($diskInfo['size']) && $diskInfo['size'] > 0) {
-                    return intval($diskInfo['size']);
+                // Calculate actual drive size: sectors × sector_size
+                // This matches how Unraid calculates drive capacity
+                if (isset($diskInfo['sectors']) && isset($diskInfo['sector_size'])) {
+                    $sectors = intval($diskInfo['sectors']);
+                    $sectorSize = intval($diskInfo['sector_size']);
+                    if ($sectors > 0 && $sectorSize > 0) {
+                        return $sectors * $sectorSize;
+                    }
                 }
-                // Note: sizeSb is superblock size, not drive size!
                 break;
             }
         }
