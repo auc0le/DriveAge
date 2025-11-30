@@ -168,11 +168,16 @@ function getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit = 'C') {
     // Determine age category
     $ageCategory = getAgeCategory($smartData['power_on_hours'], $config);
 
+    // Format device name and identification using Unraid's logic
+    $formattedDeviceName = formatDeviceName($assignment['display_name']);
+    $processedModel = processDeviceId($smartData['model']);
+    $identification = $processedModel . ' (' . $deviceName . ')';
+
     return [
-        'device_name' => $assignment['display_name'],
+        'device_name' => $formattedDeviceName,
         'device_path' => $devicePath,
         'device_id' => $deviceName,
-        'identification' => $smartData['model'] . ' (' . $deviceName . ')',
+        'identification' => $identification,
         'model' => $smartData['model'],
         'serial' => $smartData['serial'],
         'size_bytes' => $size,

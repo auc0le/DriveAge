@@ -68,24 +68,100 @@ function formatPowerOnHours($hours) {
 
 /**
  * Convert bytes to human-readable size
+ * Uses Unraid's adaptive decimal precision logic for consistency with Main page
  *
  * @param int $bytes Size in bytes
- * @param int $precision Decimal precision
+ * @param int $precision Decimal precision (null for adaptive)
  * @return string Human-readable size (e.g., "20TB", "500GB")
  */
-function formatBytes($bytes, $precision = 0) {
+function formatBytes($bytes, $precision = null) {
     if ($bytes === null || $bytes <= 0) {
         return 'N/A';
     }
 
     $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+    $kilo = 1024;
     $bytes = max($bytes, 0);
-    $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
-    $pow = min($pow, count($units) - 1);
+    $base = $bytes ? intval(floor(log($bytes) / log($kilo))) : 0;
+    $base = min($base, count($units) - 1);
 
-    $bytes /= pow(1024, $pow);
+    $value = $bytes / pow($kilo, $base);
 
-    return round($bytes, $precision) . $units[$pow];
+    // Adaptive decimal precision (matches Unraid's my_scale logic)
+    if ($precision === null) {
+        if ($value >= 100) {
+            $decimals = 0;
+        } elseif ($value >= 10) {
+            $decimals = 1;
+        } else {
+            // Check if it's a round number when multiplied by 100
+            $decimals = (round($value * 100) % 100 === 0) ? 0 : 2;
+        }
+    } else {
+        $decimals = $precision;
+    }
+
+    // Smart rounding: if value rounds to 1000, bump to next unit
+    if (round($value, 0) == 1000 && $base < count($units) - 1) {
+        $value = 1;
+        $base++;
+        $decimals = 0;
+    }
+
+    // Format with appropriate thousand separators for values > 9999
+    $formattedValue = number_format($value, $decimals, '.', $value > 9999 ? ',' : '');
+
+    return $formattedValue . $units[$base];
+}
+
+/**
+ * Process disk identification string (WWN processing)
+ * Matches Unraid's my_id() function logic
+ * Strips WWN suffix (last 18 characters) unless it appears to be part of the actual ID
+ *
+ * @param string $id Disk identification string
+ * @return string Processed identification
+ */
+function processDeviceId($id) {
+    if (empty($id)) {
+        return '';
+    }
+
+    $len = strlen($id);
+    if ($len <= 18) {
+        return $id; // Too short to have WWN suffix
+    }
+
+    $wwn = substr($id, -18);
+
+    // Strip WWN suffix unless:
+    // - WWN doesn't start with '_3' pattern
+    // - WWN contains dashes or underscores in positions other than start
+    if (substr($wwn, 0, 2) === '_3' && !preg_match('/.[_-]/', $wwn)) {
+        // This looks like a WWN suffix, strip it
+        return substr($id, 0, $len - 18);
+    }
+
+    return $id;
+}
+
+/**
+ * Format device/disk name for display
+ * Matches Unraid's my_disk() function logic
+ * Converts names like "disk1" to "Disk 1", "parity2" to "Parity 2"
+ *
+ * @param string $name Device name
+ * @param bool $raw Return raw name without formatting
+ * @return string Formatted device name
+ */
+function formatDeviceName($name, $raw = false) {
+    if (empty($name) || $raw) {
+        return $name;
+    }
+
+    // Capitalize first letter and add space before numbers
+    // "disk1" → "Disk 1", "parity2" → "Parity 2", "cache" → "Cache"
+    return ucfirst(preg_replace('/(\d+)$/', ' $1', $name));
 }
 
 /**
