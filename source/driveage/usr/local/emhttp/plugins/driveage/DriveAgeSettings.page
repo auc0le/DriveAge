@@ -1,11 +1,9 @@
+Menu="Settings"
 Title="DriveAge Settings"
+Icon="icon.png"
 ---
 <?PHP
-/* DriveAge Plugin
- * Settings Page
- */
-?>
-<?PHP
+/* DriveAge Plugin - Settings Page */
 require_once '/usr/local/emhttp/plugins/driveage/include/config.php';
 require_once '/usr/local/emhttp/plugins/driveage/include/helpers.php';
 require_once '/usr/local/emhttp/plugins/driveage/include/security.php';
@@ -21,14 +19,8 @@ function hoursToYears($hours) {
     return round($hours / 8766, 2);
 }
 ?>
-
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="/plugins/driveage/styles/driveage.css">
-    <style>
+<link rel="stylesheet" href="/plugins/driveage/styles/driveage.css">
+<style>
         .settings-form {
             max-width: 900px;
             margin: 20px 0;
@@ -168,10 +160,9 @@ function hoursToYears($hours) {
             margin: 10px 0;
             color: #856404;
         }
-    </style>
-</head>
-<body>
-    <div class="driveage-container">
+</style>
+
+<div class="driveage-container">
         <h2>DriveAge Settings</h2>
 
         <form method="POST" action="/update.php" target="progressFrame">
@@ -375,5 +366,4 @@ function hoursToYears($hours) {
             });
         });
     </script>
-</body>
-</html>
+</div>
