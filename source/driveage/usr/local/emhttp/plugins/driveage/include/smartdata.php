@@ -170,8 +170,16 @@ function getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit = 'C') {
 
     // Format device name and identification using Unraid's logic
     $formattedDeviceName = formatDeviceName($assignment['display_name']);
-    $processedModel = processDeviceId($smartData['model']);
-    $identification = $processedModel . ' (' . $deviceName . ')';
+
+    // Use disk ID from disks.ini if available (includes model + serial with underscores)
+    // Otherwise fall back to SMART model data
+    if (!empty($assignment['disk_id'])) {
+        $identification = $assignment['disk_id'];
+    } else {
+        // Fallback: use processed SMART model with device name
+        $processedModel = processDeviceId($smartData['model']);
+        $identification = $processedModel . ' (' . $deviceName . ')';
+    }
 
     return [
         'device_name' => $formattedDeviceName,
@@ -431,14 +439,15 @@ function getSpinStatus($devicePath) {
  * @return int Size in bytes
  */
 function getDriveSize($devicePath, $deviceName, $diskAssignments) {
-    // First try to get size from disks.ini 'sizeSb' field (Unraid's superblock size)
+    // First try to get size from disks.ini 'size' field
     if (!empty($diskAssignments)) {
         foreach ($diskAssignments as $diskName => $diskInfo) {
             if (isset($diskInfo['device']) && $diskInfo['device'] === $deviceName) {
-                // Use sizeSb if available (this is what Unraid main page uses)
-                if (isset($diskInfo['sizeSb']) && $diskInfo['sizeSb'] > 0) {
-                    return intval($diskInfo['sizeSb']);
+                // Use 'size' field if available (device size in bytes)
+                if (isset($diskInfo['size']) && $diskInfo['size'] > 0) {
+                    return intval($diskInfo['size']);
                 }
+                // Note: sizeSb is superblock size, not drive size!
                 break;
             }
         }
@@ -460,7 +469,8 @@ function getUnraidAssignment($deviceName, $diskAssignments) {
     $assignment = [
         'display_name' => $deviceName,
         'array_name' => 'Unassigned',
-        'drive_type' => 'unassigned'
+        'drive_type' => 'unassigned',
+        'disk_id' => null  // Unraid's disk identifier (model_serial)
     ];
 
     // Check if we have disk assignments data
@@ -477,6 +487,11 @@ function getUnraidAssignment($deviceName, $diskAssignments) {
         // Match device name (handle both full device like "nvme0n1" and base like "sda")
         if ($diskInfo['device'] === $deviceName) {
             $type = $diskInfo['type'] ?? 'Unknown';
+
+            // Get disk ID if available (e.g., "WDC_WD140EDGZ-11B1PA0_Y5KVGN8C")
+            if (isset($diskInfo['id'])) {
+                $assignment['disk_id'] = $diskInfo['id'];
+            }
 
             // Map Unraid type to our drive type
             switch ($type) {
