@@ -3,7 +3,7 @@
   <!ENTITY name      "driveage">
   <!ENTITY author    "Tony Coleman">
   <!ENTITY version   "2025.12.04">
-  <!ENTITY build     "2">
+  <!ENTITY build     "3">
   <!ENTITY launch    "Settings/DriveAge">
   <!ENTITY gitURL    "https://raw.githubusercontent.com/auc0le/DriveAge/main">
   <!ENTITY pluginURL "&gitURL;/plugins/&name;.plg">
@@ -137,9 +137,9 @@ EOF
 fi
 
 # Install package
-if [ -f "&plgpath;/&name;-&version;-x86_64-1.txz" ]; then
+if [ -f "&plgpath;/&name;-&version;-x86_64-&build;.txz" ]; then
   echo "Installing package..."
-  upgradepkg --install-new &plgpath;/&name;-&version;-x86_64-1.txz
+  upgradepkg --install-new &plgpath;/&name;-&version;-x86_64-&build;.txz
 
   # Set permissions
   chmod -R 755 &emhttp;
