@@ -7,6 +7,7 @@
 
 require_once 'formatting.php';
 require_once 'config.php';
+require_once 'helpers.php';
 
 // Cache directory and file for SMART data (secure location)
 define('SMART_CACHE_DIR', '/var/lib/driveage');
@@ -38,9 +39,9 @@ function getAllDrives($config, $useCache = true) {
         $diskAssignments = parse_ini_file($disksIni, true) ?: [];
     }
 
-    // Get Unraid variables (for temperature unit preference)
-    $unraidVars = getUnraidVars();
-    $tempUnit = isset($unraidVars['TEMP']) && strtoupper($unraidVars['TEMP']) === 'F' ? 'F' : 'C';
+    // Get user's temperature unit preference from Dynamix config
+    // This matches Unraid's Main page display settings (Settings -> Display Settings)
+    $tempUnit = getTemperatureUnit();
 
     // Discover all block devices
     $devices = discoverBlockDevices();

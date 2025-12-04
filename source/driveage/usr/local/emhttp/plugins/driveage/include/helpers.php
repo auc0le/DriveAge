@@ -131,3 +131,31 @@ function safeRedirect($url, $statusCode = 302) {
     header('Location: /Settings/DriveAge', true, 302);
     exit;
 }
+
+/**
+ * Get user's temperature unit preference from Dynamix config
+ * Matches Unraid's display settings for temperature unit
+ *
+ * @return string 'C' for Celsius or 'F' for Fahrenheit (default: 'C')
+ */
+function getTemperatureUnit() {
+    // Try to use Unraid's parse_plugin_cfg if available
+    if (function_exists('parse_plugin_cfg')) {
+        $dynamixConfig = parse_plugin_cfg('dynamix', true);
+        if (isset($dynamixConfig['display']['unit'])) {
+            return ($dynamixConfig['display']['unit'] === 'F') ? 'F' : 'C';
+        }
+    }
+
+    // Fallback: Read dynamix.cfg directly
+    $configFile = '/boot/config/plugins/dynamix/dynamix.cfg';
+    if (file_exists($configFile)) {
+        $config = parse_ini_file($configFile, true);
+        if (isset($config['display']['unit'])) {
+            return ($config['display']['unit'] === 'F') ? 'F' : 'C';
+        }
+    }
+
+    // Default to Celsius
+    return 'C';
+}

@@ -166,23 +166,28 @@ function formatDeviceName($name, $raw = false) {
 
 /**
  * Format temperature for display
+ * Matches Unraid's temperature display logic from Helpers.php
  *
- * @param mixed $temp Temperature value (can be int or null)
+ * @param mixed $temp Temperature value in Celsius (can be int or null)
  * @param string $unit Temperature unit ('C' or 'F')
- * @return string Formatted temperature (e.g., "34°C")
+ * @return string Formatted temperature (e.g., "34°C" or "93°F")
  */
 function formatTemperature($temp, $unit = 'C') {
     if ($temp === null || $temp === '' || $temp === false) {
         return 'N/A';
     }
 
+    // Convert to integer (matching raw SMART data format)
     $temp = intval($temp);
 
+    // Convert to Fahrenheit if needed (matching Unraid's fahrenheit() function)
+    // Formula: round(9/5 * celsius) + 32
     if ($unit === 'F') {
-        $temp = ($temp * 9/5) + 32;
+        $temp = round(9/5 * $temp) + 32;
     }
 
-    return $temp . '°' . $unit;
+    // Return with thin space (&#8201;) and degree symbol (&#176;) matching Unraid's format
+    return $temp . '&#8201;&#176;' . $unit;
 }
 
 /**
