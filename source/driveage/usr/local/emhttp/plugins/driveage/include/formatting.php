@@ -170,7 +170,7 @@ function formatDeviceName($name, $raw = false) {
  *
  * @param mixed $temp Temperature value in Celsius (can be int or null)
  * @param string $unit Temperature unit ('C' or 'F')
- * @return string Formatted temperature (e.g., "34°C" or "93°F")
+ * @return string Formatted temperature (e.g., "34 °C" or "93 °F")
  */
 function formatTemperature($temp, $unit = 'C') {
     if ($temp === null || $temp === '' || $temp === false) {
@@ -186,8 +186,9 @@ function formatTemperature($temp, $unit = 'C') {
         $temp = round(9/5 * $temp) + 32;
     }
 
-    // Return with thin space (&#8201;) and degree symbol (&#176;) matching Unraid's format
-    return $temp . '&#8201;&#176;' . $unit;
+    // Return with thin space (U+2009) and degree symbol (U+00B0) matching Unraid's format
+    // Using Unicode characters directly instead of HTML entities for JSON compatibility
+    return $temp . ' °' . $unit;
 }
 
 /**
