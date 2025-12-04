@@ -3,7 +3,7 @@
   <!ENTITY name      "driveage">
   <!ENTITY author    "Tony Coleman">
   <!ENTITY version   "2025.12.04">
-  <!ENTITY build     "5">
+  <!ENTITY build     "6">
   <!ENTITY launch    "Settings/DriveAge">
   <!ENTITY gitURL    "https://raw.githubusercontent.com/auc0le/DriveAge/main">
   <!ENTITY pluginURL "&gitURL;/plugins/&name;.plg">
@@ -137,8 +137,11 @@ EOF
 fi
 
 # Set permissions
-chmod -R 755 &emhttp;
-chmod 644 &plgpath;/driveage.cfg
+echo "Setting permissions..."
+chmod -R 755 &emhttp; 2>&1 || echo "Warning: Could not set permissions on plugin directory"
+if [ -f "&plgpath;/driveage.cfg" ]; then
+  chmod 644 &plgpath;/driveage.cfg 2>&1 || echo "Warning: Could not set permissions on config file"
+fi
 
 # Pre-populate drive data cache in background for faster first load
 echo "Pre-populating drive data cache (this may take 1-2 minutes)..."
@@ -155,6 +158,8 @@ echo " Access it at: Settings -> DriveAge"
 echo " Note: Drive data is being scanned in the background."
 echo "-----------------------------------------------------------"
 echo ""
+
+exit 0
 ]]>
 </INLINE>
 </FILE>
