@@ -3,7 +3,7 @@
   <!ENTITY name      "driveage">
   <!ENTITY author    "Tony Coleman">
   <!ENTITY version   "2025.12.04">
-  <!ENTITY build     "6">
+  <!ENTITY build     "7">
   <!ENTITY launch    "Settings/DriveAge">
   <!ENTITY gitURL    "https://raw.githubusercontent.com/auc0le/DriveAge/main">
   <!ENTITY pluginURL "&gitURL;/plugins/&name;.plg">
@@ -92,12 +92,14 @@ echo "-----------------------------------------------------------"
 echo ""
 
 # Create configuration directory if it doesn't exist
-mkdir -p &plgpath;
+echo "Creating configuration directories..."
+mkdir -p &plgpath; || echo "Warning: Could not create plugin config directory"
 
 # Create cache and log directories
-mkdir -p /var/lib/driveage/ratelimit
-mkdir -p /var/log
-chmod 700 /var/lib/driveage
+echo "Creating cache and log directories..."
+mkdir -p /var/lib/driveage/ratelimit || echo "Warning: Could not create cache directory"
+mkdir -p /var/log || true
+chmod 700 /var/lib/driveage 2>/dev/null || echo "Warning: Could not set permissions on cache directory"
 
 # Create default configuration if it doesn't exist
 if [ ! -f "&plgpath;/driveage.cfg" ]; then
@@ -138,9 +140,9 @@ fi
 
 # Set permissions
 echo "Setting permissions..."
-chmod -R 755 &emhttp; 2>&1 || echo "Warning: Could not set permissions on plugin directory"
+chmod -R 755 &emhttp; 2>/dev/null || echo "Warning: Could not set permissions on plugin directory"
 if [ -f "&plgpath;/driveage.cfg" ]; then
-  chmod 644 &plgpath;/driveage.cfg 2>&1 || echo "Warning: Could not set permissions on config file"
+  chmod 644 &plgpath;/driveage.cfg 2>/dev/null || echo "Warning: Could not set permissions on config file"
 fi
 
 # Pre-populate drive data cache in background for faster first load
