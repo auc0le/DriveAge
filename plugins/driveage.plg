@@ -3,7 +3,7 @@
   <!ENTITY name      "driveage">
   <!ENTITY author    "Tony Coleman">
   <!ENTITY version   "2025.12.04">
-  <!ENTITY build     "8">
+  <!ENTITY build     "9">
   <!ENTITY launch    "Settings/DriveAge">
   <!ENTITY gitURL    "https://raw.githubusercontent.com/auc0le/DriveAge/main">
   <!ENTITY pluginURL "&gitURL;/plugins/&name;.plg">
@@ -94,18 +94,18 @@ echo ""
 
 # Create configuration directory if it doesn't exist
 echo "Creating configuration directories..."
-mkdir -p &plgpath; || echo "Warning: Could not create plugin config directory"
+mkdir -p /boot/config/plugins/driveage
 
 # Create cache and log directories
 echo "Creating cache and log directories..."
-mkdir -p /var/lib/driveage/ratelimit || echo "Warning: Could not create cache directory"
-mkdir -p /var/log || true
-chmod 700 /var/lib/driveage 2>/dev/null || echo "Warning: Could not set permissions on cache directory"
+mkdir -p /var/lib/driveage/ratelimit
+mkdir -p /var/log
+chmod 700 /var/lib/driveage
 
 # Create default configuration if it doesn't exist
-if [ ! -f "&plgpath;/driveage.cfg" ]; then
+if [ ! -f "/boot/config/plugins/driveage/driveage.cfg" ]; then
   echo "Creating default configuration..."
-  cat > &plgpath;/driveage.cfg <<'EOF'
+  cat > /boot/config/plugins/driveage/driveage.cfg <<'EOF'
 # Display Configuration
 DEFAULT_SORT="power_on_hours"
 DEFAULT_SORT_DIR="desc"
@@ -141,10 +141,8 @@ fi
 
 # Set permissions
 echo "Setting permissions..."
-chmod -R 755 &emhttp; 2>/dev/null || echo "Warning: Could not set permissions on plugin directory"
-if [ -f "&plgpath;/driveage.cfg" ]; then
-  chmod 644 &plgpath;/driveage.cfg 2>/dev/null || echo "Warning: Could not set permissions on config file"
-fi
+chmod -R 755 /usr/local/emhttp/plugins/driveage
+chmod 644 /boot/config/plugins/driveage/driveage.cfg
 
 # Pre-populate drive data cache in background for faster first load
 echo "Pre-populating drive data cache (this may take 1-2 minutes)..."
