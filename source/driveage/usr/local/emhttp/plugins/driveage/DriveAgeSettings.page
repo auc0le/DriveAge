@@ -25,9 +25,10 @@ function hoursToYears($hours) {
 <?php
 $categories = ['brand_new', 'newish', 'normal', 'aged', 'old', 'elderly'];
 foreach ($categories as $category):
-    $colorKey = 'COLOR_' . strtoupper($category);
-    $bgColor = $config[$colorKey];
-    $textColor = getContrastTextColor($bgColor);
+    $bgColorKey = 'COLOR_' . strtoupper($category);
+    $textColorKey = 'TEXTCOLOR_' . strtoupper($category);
+    $bgColor = $config[$bgColorKey];
+    $textColor = $config[$textColorKey];
     $categoryClass = str_replace('_', '-', $category);
 ?>
     .age-<?= e($category) ?>,
@@ -357,16 +358,23 @@ foreach ($categories as $category):
                                 <small class="help-text">Drives under this age</small>
                             </div>
                             <div class="form-row">
-                                <label>Color:</label>
+                                <label>Colors:</label>
                                 <div class="color-row">
                                     <input type="color"
                                            name="COLOR_BRAND_NEW"
                                            value="<?= e($config['COLOR_BRAND_NEW']); ?>"
                                            required
                                            data-category="brand_new"
-                                           class="color-input">
-                                    <div class="color-preview-inline age-brand_new">Preview</div>
-                                    <span class="color-hex"><?= e($config['COLOR_BRAND_NEW']); ?></span>
+                                           title="Background color"
+                                           class="color-input bg-color">
+                                    <div class="color-preview-inline" data-category="brand_new">Preview</div>
+                                    <input type="color"
+                                           name="TEXTCOLOR_BRAND_NEW"
+                                           value="<?= e($config['TEXTCOLOR_BRAND_NEW']); ?>"
+                                           required
+                                           data-category="brand_new"
+                                           title="Text color"
+                                           class="color-input text-color">
                                 </div>
                             </div>
                         </div>
@@ -399,16 +407,23 @@ foreach ($categories as $category):
                                 <small class="help-text">Drives under this age</small>
                             </div>
                             <div class="form-row">
-                                <label>Color:</label>
+                                <label>Colors:</label>
                                 <div class="color-row">
                                     <input type="color"
                                            name="COLOR_NEWISH"
                                            value="<?= e($config['COLOR_NEWISH']); ?>"
                                            required
                                            data-category="newish"
-                                           class="color-input">
-                                    <div class="color-preview-inline age-newish">Preview</div>
-                                    <span class="color-hex"><?= e($config['COLOR_NEWISH']); ?></span>
+                                           title="Background color"
+                                           class="color-input bg-color">
+                                    <div class="color-preview-inline" data-category="newish">Preview</div>
+                                    <input type="color"
+                                           name="TEXTCOLOR_NEWISH"
+                                           value="<?= e($config['TEXTCOLOR_NEWISH']); ?>"
+                                           required
+                                           data-category="newish"
+                                           title="Text color"
+                                           class="color-input text-color">
                                 </div>
                             </div>
                         </div>
@@ -441,16 +456,23 @@ foreach ($categories as $category):
                                 <small class="help-text">Drives under this age</small>
                             </div>
                             <div class="form-row">
-                                <label>Color:</label>
+                                <label>Colors:</label>
                                 <div class="color-row">
                                     <input type="color"
                                            name="COLOR_NORMAL"
                                            value="<?= e($config['COLOR_NORMAL']); ?>"
                                            required
                                            data-category="normal"
-                                           class="color-input">
-                                    <div class="color-preview-inline age-normal">Preview</div>
-                                    <span class="color-hex"><?= e($config['COLOR_NORMAL']); ?></span>
+                                           title="Background color"
+                                           class="color-input bg-color">
+                                    <div class="color-preview-inline" data-category="normal">Preview</div>
+                                    <input type="color"
+                                           name="TEXTCOLOR_NORMAL"
+                                           value="<?= e($config['TEXTCOLOR_NORMAL']); ?>"
+                                           required
+                                           data-category="normal"
+                                           title="Text color"
+                                           class="color-input text-color">
                                 </div>
                             </div>
                         </div>
@@ -483,16 +505,23 @@ foreach ($categories as $category):
                                 <small class="help-text">Drives under this age</small>
                             </div>
                             <div class="form-row">
-                                <label>Color:</label>
+                                <label>Colors:</label>
                                 <div class="color-row">
                                     <input type="color"
                                            name="COLOR_AGED"
                                            value="<?= e($config['COLOR_AGED']); ?>"
                                            required
                                            data-category="aged"
-                                           class="color-input">
-                                    <div class="color-preview-inline age-aged">Preview</div>
-                                    <span class="color-hex"><?= e($config['COLOR_AGED']); ?></span>
+                                           title="Background color"
+                                           class="color-input bg-color">
+                                    <div class="color-preview-inline" data-category="aged">Preview</div>
+                                    <input type="color"
+                                           name="TEXTCOLOR_AGED"
+                                           value="<?= e($config['TEXTCOLOR_AGED']); ?>"
+                                           required
+                                           data-category="aged"
+                                           title="Text color"
+                                           class="color-input text-color">
                                 </div>
                             </div>
                         </div>
@@ -525,16 +554,23 @@ foreach ($categories as $category):
                                 <small class="help-text">Drives under this age</small>
                             </div>
                             <div class="form-row">
-                                <label>Color:</label>
+                                <label>Colors:</label>
                                 <div class="color-row">
                                     <input type="color"
                                            name="COLOR_OLD"
                                            value="<?= e($config['COLOR_OLD']); ?>"
                                            required
                                            data-category="old"
-                                           class="color-input">
-                                    <div class="color-preview-inline age-old">Preview</div>
-                                    <span class="color-hex"><?= e($config['COLOR_OLD']); ?></span>
+                                           title="Background color"
+                                           class="color-input bg-color">
+                                    <div class="color-preview-inline" data-category="old">Preview</div>
+                                    <input type="color"
+                                           name="TEXTCOLOR_OLD"
+                                           value="<?= e($config['TEXTCOLOR_OLD']); ?>"
+                                           required
+                                           data-category="old"
+                                           title="Text color"
+                                           class="color-input text-color">
                                 </div>
                             </div>
                         </div>
@@ -560,16 +596,23 @@ foreach ($categories as $category):
                                 <small class="help-text">All drives above Category 5</small>
                             </div>
                             <div class="form-row">
-                                <label>Color:</label>
+                                <label>Colors:</label>
                                 <div class="color-row">
                                     <input type="color"
                                            name="COLOR_ELDERLY"
                                            value="<?= e($config['COLOR_ELDERLY']); ?>"
                                            required
                                            data-category="elderly"
-                                           class="color-input">
-                                    <div class="color-preview-inline age-elderly">Preview</div>
-                                    <span class="color-hex"><?= e($config['COLOR_ELDERLY']); ?></span>
+                                           title="Background color"
+                                           class="color-input bg-color">
+                                    <div class="color-preview-inline" data-category="elderly">Preview</div>
+                                    <input type="color"
+                                           name="TEXTCOLOR_ELDERLY"
+                                           value="<?= e($config['TEXTCOLOR_ELDERLY']); ?>"
+                                           required
+                                           data-category="elderly"
+                                           title="Text color"
+                                           class="color-input text-color">
                                 </div>
                             </div>
                         </div>
@@ -724,18 +767,21 @@ document.addEventListener('DOMContentLoaded', function() {
     colorInputs.forEach(input => {
         input.addEventListener('input', function() {
             const category = this.dataset.category;
-            const color = this.value.toUpperCase();
             const colorRow = this.closest('.color-row');
             const preview = colorRow.querySelector('.color-preview-inline');
-            const hexDisplay = colorRow.querySelector('.color-hex');
 
-            // Update preview
-            preview.style.backgroundColor = color;
-            preview.style.color = getContrastColor(color);
-            hexDisplay.textContent = color;
+            // Get both background and text colors for this category
+            const bgColor = colorRow.querySelector('.bg-color').value.toUpperCase();
+            const textColor = colorRow.querySelector('.text-color').value.toUpperCase();
 
-            // Check for duplicates
-            checkDuplicateColors();
+            // Update preview with both colors
+            preview.style.backgroundColor = bgColor;
+            preview.style.color = textColor;
+
+            // Check for duplicates (only for background colors)
+            if (this.classList.contains('bg-color')) {
+                checkDuplicateColors();
+            }
         });
     });
 
@@ -752,14 +798,15 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Duplicate color validation
+    // Duplicate color validation (only for background colors)
     function checkDuplicateColors() {
-        const colors = Array.from(colorInputs).map(input => input.value.toUpperCase());
+        const bgColorInputs = document.querySelectorAll('.bg-color');
+        const colors = Array.from(bgColorInputs).map(input => input.value.toUpperCase());
         const hasDuplicates = colors.length !== new Set(colors).size;
 
         if (hasDuplicates) {
-            // Highlight duplicates
-            colorInputs.forEach((input, index) => {
+            // Highlight duplicates (only background color inputs)
+            bgColorInputs.forEach((input, index) => {
                 const color = input.value.toUpperCase();
                 const isDuplicate = colors.filter(c => c === color).length > 1;
                 if (isDuplicate) {
@@ -778,7 +825,7 @@ document.addEventListener('DOMContentLoaded', function() {
             submitButton.style.cursor = 'not-allowed';
         } else {
             // Clear highlights
-            colorInputs.forEach(input => {
+            bgColorInputs.forEach(input => {
                 input.classList.remove('duplicate');
             });
 
@@ -787,21 +834,6 @@ document.addEventListener('DOMContentLoaded', function() {
             submitButton.style.opacity = '1';
             submitButton.style.cursor = 'pointer';
         }
-    }
-
-    // Calculate contrast color for preview (client-side version)
-    function getContrastColor(hexColor) {
-        const hex = hexColor.replace('#', '');
-        const r = parseInt(hex.substr(0, 2), 16) / 255;
-        const g = parseInt(hex.substr(2, 2), 16) / 255;
-        const b = parseInt(hex.substr(4, 2), 16) / 255;
-
-        const rLinear = r <= 0.03928 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4);
-        const gLinear = g <= 0.03928 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4);
-        const bLinear = b <= 0.03928 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4);
-
-        const luminance = 0.2126 * rLinear + 0.7152 * gLinear + 0.0722 * bLinear;
-        return luminance < 0.5 ? 'white' : 'black';
     }
 
     function showErrorMessage(msg) {
@@ -820,16 +852,16 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initial duplicate check
     checkDuplicateColors();
 
-    // Initialize all previews with correct contrast
-    colorInputs.forEach(input => {
-        const category = input.dataset.category;
-        const color = input.value.toUpperCase();
-        const colorRow = input.closest('.color-row');
-        const preview = colorRow.querySelector('.color-preview-inline');
-        if (preview) {
-            preview.style.backgroundColor = color;
-            preview.style.color = getContrastColor(color);
-        }
+    // Initialize all previews with correct background and text colors
+    const allPreviews = document.querySelectorAll('.color-preview-inline');
+    allPreviews.forEach(preview => {
+        const category = preview.dataset.category;
+        const colorRow = preview.closest('.color-row');
+        const bgColor = colorRow.querySelector('.bg-color').value.toUpperCase();
+        const textColor = colorRow.querySelector('.text-color').value.toUpperCase();
+
+        preview.style.backgroundColor = bgColor;
+        preview.style.color = textColor;
     });
 });
 </script>

@@ -88,6 +88,14 @@ function getDefaultConfig() {
         'COLOR_OLD' => '#8B0000',
         'COLOR_ELDERLY' => '#FF0000',
 
+        // Category Text Colors (hex format)
+        'TEXTCOLOR_BRAND_NEW' => '#FFFFFF',
+        'TEXTCOLOR_NEWISH' => '#FFFFFF',
+        'TEXTCOLOR_NORMAL' => '#000000',
+        'TEXTCOLOR_AGED' => '#000000',
+        'TEXTCOLOR_OLD' => '#FFFFFF',
+        'TEXTCOLOR_ELDERLY' => '#FFFFFF',
+
         // Category Labels
         'LABEL_BRAND_NEW' => 'Brand New',
         'LABEL_NEWISH' => 'Newish',
@@ -152,6 +160,14 @@ function saveConfig($config) {
     $content .= "COLOR_AGED=\"{$config['COLOR_AGED']}\"\n";
     $content .= "COLOR_OLD=\"{$config['COLOR_OLD']}\"\n";
     $content .= "COLOR_ELDERLY=\"{$config['COLOR_ELDERLY']}\"\n\n";
+
+    $content .= "# Category Text Colors\n";
+    $content .= "TEXTCOLOR_BRAND_NEW=\"{$config['TEXTCOLOR_BRAND_NEW']}\"\n";
+    $content .= "TEXTCOLOR_NEWISH=\"{$config['TEXTCOLOR_NEWISH']}\"\n";
+    $content .= "TEXTCOLOR_NORMAL=\"{$config['TEXTCOLOR_NORMAL']}\"\n";
+    $content .= "TEXTCOLOR_AGED=\"{$config['TEXTCOLOR_AGED']}\"\n";
+    $content .= "TEXTCOLOR_OLD=\"{$config['TEXTCOLOR_OLD']}\"\n";
+    $content .= "TEXTCOLOR_ELDERLY=\"{$config['TEXTCOLOR_ELDERLY']}\"\n\n";
 
     $content .= "# Category Labels\n";
     $content .= "LABEL_BRAND_NEW=\"{$config['LABEL_BRAND_NEW']}\"\n";
@@ -307,6 +323,22 @@ function validateConfig($config) {
             $validated[$field] = $defaults[$field];
         }
         error_log('DriveAge: Duplicate colors detected, reset to defaults');
+    }
+
+    // Category text colors validation
+    $textColorFields = [
+        'TEXTCOLOR_BRAND_NEW',
+        'TEXTCOLOR_NEWISH',
+        'TEXTCOLOR_NORMAL',
+        'TEXTCOLOR_AGED',
+        'TEXTCOLOR_OLD',
+        'TEXTCOLOR_ELDERLY'
+    ];
+
+    // Validate format and normalize (no uniqueness check for text colors)
+    foreach ($textColorFields as $field) {
+        $color = $config[$field] ?? $defaults[$field];
+        $validated[$field] = isValidHexColor($color) ? strtoupper($color) : $defaults[$field];
     }
 
     // Category labels validation

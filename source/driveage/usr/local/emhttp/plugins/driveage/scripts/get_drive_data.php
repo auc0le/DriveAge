@@ -78,6 +78,14 @@ try {
             'old' => $config['COLOR_OLD'],
             'elderly' => $config['COLOR_ELDERLY']
         ],
+        'text_colors' => [
+            'brand_new' => $config['TEXTCOLOR_BRAND_NEW'],
+            'newish' => $config['TEXTCOLOR_NEWISH'],
+            'normal' => $config['TEXTCOLOR_NORMAL'],
+            'aged' => $config['TEXTCOLOR_AGED'],
+            'old' => $config['TEXTCOLOR_OLD'],
+            'elderly' => $config['TEXTCOLOR_ELDERLY']
+        ],
         'config' => [
             'show_temperature' => $config['SHOW_TEMPERATURE'] === 'true',
             'show_smart_status' => $config['SHOW_SMART_STATUS'] === 'true',

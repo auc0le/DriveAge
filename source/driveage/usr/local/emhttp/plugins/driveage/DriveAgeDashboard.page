@@ -27,9 +27,10 @@ function formatYears($hours) {
 <?php
 $categories = ['brand_new', 'newish', 'normal', 'aged', 'old', 'elderly'];
 foreach ($categories as $category):
-    $colorKey = 'COLOR_' . strtoupper($category);
-    $bgColor = $config[$colorKey];
-    $textColor = getContrastTextColor($bgColor);
+    $bgColorKey = 'COLOR_' . strtoupper($category);
+    $textColorKey = 'TEXTCOLOR_' . strtoupper($category);
+    $bgColor = $config[$bgColorKey];
+    $textColor = $config[$textColorKey];
     $categoryClass = str_replace('_', '-', $category);
 ?>
     .age-<?= e($category) ?>,
