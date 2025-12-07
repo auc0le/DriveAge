@@ -19,6 +19,25 @@ function hoursToYears($hours) {
 }
 ?>
 <link rel="stylesheet" href="/plugins/driveage/styles/driveage.css">
+
+<!-- Dynamic category color styles -->
+<style id="driveage-dynamic-colors">
+<?php
+$categories = ['brand_new', 'newish', 'normal', 'aged', 'old', 'elderly'];
+foreach ($categories as $category):
+    $colorKey = 'COLOR_' . strtoupper($category);
+    $bgColor = $config[$colorKey];
+    $textColor = getContrastTextColor($bgColor);
+    $categoryClass = str_replace('_', '-', $category);
+?>
+    .age-<?= e($category) ?>,
+    .age-<?= e($categoryClass) ?> {
+        background-color: <?= e($bgColor) ?> !important;
+        color: <?= e($textColor) ?> !important;
+    }
+<?php endforeach; ?>
+</style>
+
 <script src="/plugins/driveage/js/settings.js"></script>
 <style>
         .settings-form {
@@ -160,6 +179,76 @@ function hoursToYears($hours) {
             margin: 10px 0;
             color: #856404;
         }
+
+        .error-box {
+            background: #ffe6e6;
+            border: 1px solid #ff0000;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            color: #cc0000;
+            font-weight: bold;
+        }
+
+        .color-picker-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            max-width: 700px;
+        }
+
+        .color-picker-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .color-picker-item label {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .color-input-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .color-input-row input[type="color"] {
+            width: 60px;
+            height: 40px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            padding: 2px;
+        }
+
+        .color-input-row input[type="color"]:hover {
+            border-color: #4CAF50;
+        }
+
+        .color-input-row input[type="color"].duplicate {
+            border: 2px solid red;
+            border-width: 3px;
+        }
+
+        .color-preview-box {
+            flex: 1;
+            padding: 8px 12px;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 12px;
+            font-weight: 600;
+            min-width: 100px;
+        }
+
+        .color-value-display {
+            font-family: monospace;
+            font-size: 12px;
+            color: #666;
+            min-width: 70px;
+        }
 </style>
 
 <div class="driveage-container">
@@ -218,6 +307,106 @@ function hoursToYears($hours) {
                         <div class="color-block age-aged">Aged</div>
                         <div class="color-block age-old">Old</div>
                         <div class="color-block age-elderly">Elderly</div>
+                    </div>
+                </div>
+
+                <!-- Category Colors Section -->
+                <div class="settings-section">
+                    <h3>Category Colors</h3>
+                    <p>Customize the color for each age category. Each category must have a unique color.</p>
+
+                    <div id="color-error" style="display:none;" class="error-box"></div>
+
+                    <div class="color-picker-grid">
+                        <div class="color-picker-item">
+                            <label>Brand New</label>
+                            <div class="color-input-row">
+                                <input type="color"
+                                       id="color_brand_new"
+                                       name="COLOR_BRAND_NEW"
+                                       value="<?= e($config['COLOR_BRAND_NEW']); ?>"
+                                       required
+                                       aria-label="Brand new drive color"
+                                       data-category="brand_new">
+                                <div class="color-preview-box age-brand_new">Preview</div>
+                                <span class="color-value-display"><?= e($config['COLOR_BRAND_NEW']); ?></span>
+                            </div>
+                        </div>
+
+                        <div class="color-picker-item">
+                            <label>Newish</label>
+                            <div class="color-input-row">
+                                <input type="color"
+                                       id="color_newish"
+                                       name="COLOR_NEWISH"
+                                       value="<?= e($config['COLOR_NEWISH']); ?>"
+                                       required
+                                       aria-label="Newish drive color"
+                                       data-category="newish">
+                                <div class="color-preview-box age-newish">Preview</div>
+                                <span class="color-value-display"><?= e($config['COLOR_NEWISH']); ?></span>
+                            </div>
+                        </div>
+
+                        <div class="color-picker-item">
+                            <label>Mature</label>
+                            <div class="color-input-row">
+                                <input type="color"
+                                       id="color_normal"
+                                       name="COLOR_NORMAL"
+                                       value="<?= e($config['COLOR_NORMAL']); ?>"
+                                       required
+                                       aria-label="Mature drive color"
+                                       data-category="normal">
+                                <div class="color-preview-box age-normal">Preview</div>
+                                <span class="color-value-display"><?= e($config['COLOR_NORMAL']); ?></span>
+                            </div>
+                        </div>
+
+                        <div class="color-picker-item">
+                            <label>Aged</label>
+                            <div class="color-input-row">
+                                <input type="color"
+                                       id="color_aged"
+                                       name="COLOR_AGED"
+                                       value="<?= e($config['COLOR_AGED']); ?>"
+                                       required
+                                       aria-label="Aged drive color"
+                                       data-category="aged">
+                                <div class="color-preview-box age-aged">Preview</div>
+                                <span class="color-value-display"><?= e($config['COLOR_AGED']); ?></span>
+                            </div>
+                        </div>
+
+                        <div class="color-picker-item">
+                            <label>Old</label>
+                            <div class="color-input-row">
+                                <input type="color"
+                                       id="color_old"
+                                       name="COLOR_OLD"
+                                       value="<?= e($config['COLOR_OLD']); ?>"
+                                       required
+                                       aria-label="Old drive color"
+                                       data-category="old">
+                                <div class="color-preview-box age-old">Preview</div>
+                                <span class="color-value-display"><?= e($config['COLOR_OLD']); ?></span>
+                            </div>
+                        </div>
+
+                        <div class="color-picker-item">
+                            <label>Elderly</label>
+                            <div class="color-input-row">
+                                <input type="color"
+                                       id="color_elderly"
+                                       name="COLOR_ELDERLY"
+                                       value="<?= e($config['COLOR_ELDERLY']); ?>"
+                                       required
+                                       aria-label="Elderly drive color"
+                                       data-category="elderly">
+                                <div class="color-preview-box age-elderly">Preview</div>
+                                <span class="color-value-display"><?= e($config['COLOR_ELDERLY']); ?></span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -328,3 +517,115 @@ function hoursToYears($hours) {
         <iframe name="progressFrame" style="display:none;"></iframe>
     </div>
 </div>
+
+<script>
+// Color picker real-time preview and validation
+document.addEventListener('DOMContentLoaded', function() {
+    const colorInputs = document.querySelectorAll('input[type="color"]');
+    const form = document.querySelector('form');
+    const submitButton = form.querySelector('input[type="submit"]');
+
+    // Real-time preview updates
+    colorInputs.forEach(input => {
+        input.addEventListener('input', function() {
+            const category = this.dataset.category;
+            const color = this.value.toUpperCase();
+            const colorRow = this.closest('.color-input-row');
+            const preview = colorRow.querySelector('.color-preview-box');
+            const valueDisplay = colorRow.querySelector('.color-value-display');
+
+            // Update preview
+            preview.style.backgroundColor = color;
+            preview.style.color = getContrastColor(color);
+            valueDisplay.textContent = color;
+
+            // Check for duplicates
+            checkDuplicateColors();
+        });
+    });
+
+    // Duplicate color validation
+    function checkDuplicateColors() {
+        const colors = Array.from(colorInputs).map(input => input.value.toUpperCase());
+        const hasDuplicates = colors.length !== new Set(colors).size;
+
+        if (hasDuplicates) {
+            // Highlight duplicates
+            colorInputs.forEach((input, index) => {
+                const color = input.value.toUpperCase();
+                const isDuplicate = colors.filter(c => c === color).length > 1;
+                if (isDuplicate) {
+                    input.classList.add('duplicate');
+                } else {
+                    input.classList.remove('duplicate');
+                }
+            });
+
+            // Show error message
+            showErrorMessage('Error: Each category must have a unique color. Please change the highlighted color pickers.');
+
+            // Disable submit
+            submitButton.disabled = true;
+            submitButton.style.opacity = '0.5';
+            submitButton.style.cursor = 'not-allowed';
+        } else {
+            // Clear highlights
+            colorInputs.forEach(input => {
+                input.classList.remove('duplicate');
+            });
+
+            hideErrorMessage();
+            submitButton.disabled = false;
+            submitButton.style.opacity = '1';
+            submitButton.style.cursor = 'pointer';
+        }
+    }
+
+    // Calculate contrast color for preview (client-side version)
+    function getContrastColor(hexColor) {
+        const hex = hexColor.replace('#', '');
+        const r = parseInt(hex.substr(0, 2), 16) / 255;
+        const g = parseInt(hex.substr(2, 2), 16) / 255;
+        const b = parseInt(hex.substr(4, 2), 16) / 255;
+
+        const rLinear = r <= 0.03928 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4);
+        const gLinear = g <= 0.03928 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4);
+        const bLinear = b <= 0.03928 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4);
+
+        const luminance = 0.2126 * rLinear + 0.7152 * gLinear + 0.0722 * bLinear;
+        return luminance < 0.5 ? 'white' : 'black';
+    }
+
+    function showErrorMessage(msg) {
+        const errorDiv = document.getElementById('color-error');
+        errorDiv.textContent = msg;
+        errorDiv.style.display = 'block';
+        // Scroll to error
+        errorDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function hideErrorMessage() {
+        const errorDiv = document.getElementById('color-error');
+        errorDiv.style.display = 'none';
+    }
+
+    // Initial duplicate check
+    checkDuplicateColors();
+
+    // Also update the existing threshold color previews if they exist
+    const colorBlocks = document.querySelectorAll('.color-preview .color-block');
+    if (colorBlocks.length > 0) {
+        colorInputs.forEach(input => {
+            input.addEventListener('input', function() {
+                const category = this.dataset.category;
+                const color = this.value;
+                const block = document.querySelector(`.color-preview .color-block.age-${category}`);
+                if (block) {
+                    block.style.backgroundColor = color;
+                    block.style.color = getContrastColor(color);
+                }
+            });
+        });
+    }
+});
+</script>

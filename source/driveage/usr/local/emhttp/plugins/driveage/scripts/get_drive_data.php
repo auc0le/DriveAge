@@ -70,6 +70,14 @@ try {
             'aged' => intval($config['THRESHOLD_AGED']),
             'old' => intval($config['THRESHOLD_OLD'])
         ],
+        'colors' => [
+            'brand_new' => $config['COLOR_BRAND_NEW'],
+            'newish' => $config['COLOR_NEWISH'],
+            'normal' => $config['COLOR_NORMAL'],
+            'aged' => $config['COLOR_AGED'],
+            'old' => $config['COLOR_OLD'],
+            'elderly' => $config['COLOR_ELDERLY']
+        ],
         'config' => [
             'show_temperature' => $config['SHOW_TEMPERATURE'] === 'true',
             'show_smart_status' => $config['SHOW_SMART_STATUS'] === 'true',

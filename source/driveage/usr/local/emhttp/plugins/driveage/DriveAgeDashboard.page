@@ -21,6 +21,25 @@ function formatYears($hours) {
 }
 ?>
 <link rel="stylesheet" href="/plugins/driveage/styles/driveage.css">
+
+<!-- Dynamic category color styles -->
+<style id="driveage-dynamic-colors">
+<?php
+$categories = ['brand_new', 'newish', 'normal', 'aged', 'old', 'elderly'];
+foreach ($categories as $category):
+    $colorKey = 'COLOR_' . strtoupper($category);
+    $bgColor = $config[$colorKey];
+    $textColor = getContrastTextColor($bgColor);
+    $categoryClass = str_replace('_', '-', $category);
+?>
+    .age-<?= e($category) ?>,
+    .age-<?= e($categoryClass) ?> {
+        background-color: <?= e($bgColor) ?> !important;
+        color: <?= e($textColor) ?> !important;
+    }
+<?php endforeach; ?>
+</style>
+
 <script src="/plugins/driveage/js/dashboard.js"></script>
 
 <div class="driveage-container">

@@ -78,7 +78,15 @@ function getDefaultConfig() {
 
         // JSON API Configuration
         'API_ENABLED' => 'false',
-        'API_RATE_LIMIT' => '100'
+        'API_RATE_LIMIT' => '100',
+
+        // Category Colors (hex format)
+        'COLOR_BRAND_NEW' => '#006400',
+        'COLOR_NEWISH' => '#008000',
+        'COLOR_NORMAL' => '#90EE90',
+        'COLOR_AGED' => '#FFD700',
+        'COLOR_OLD' => '#8B0000',
+        'COLOR_ELDERLY' => '#FF0000'
     ];
 }
 
@@ -127,9 +135,60 @@ function saveConfig($config) {
 
     $content .= "# JSON API Configuration\n";
     $content .= "API_ENABLED=\"{$config['API_ENABLED']}\"\n";
-    $content .= "API_RATE_LIMIT=\"{$config['API_RATE_LIMIT']}\"\n";
+    $content .= "API_RATE_LIMIT=\"{$config['API_RATE_LIMIT']}\"\n\n";
+
+    $content .= "# Category Colors\n";
+    $content .= "COLOR_BRAND_NEW=\"{$config['COLOR_BRAND_NEW']}\"\n";
+    $content .= "COLOR_NEWISH=\"{$config['COLOR_NEWISH']}\"\n";
+    $content .= "COLOR_NORMAL=\"{$config['COLOR_NORMAL']}\"\n";
+    $content .= "COLOR_AGED=\"{$config['COLOR_AGED']}\"\n";
+    $content .= "COLOR_OLD=\"{$config['COLOR_OLD']}\"\n";
+    $content .= "COLOR_ELDERLY=\"{$config['COLOR_ELDERLY']}\"\n";
 
     return file_put_contents(DRIVEAGE_CONFIG_FILE, $content) !== false;
+}
+
+/**
+ * Validates hex color format (#RRGGBB)
+ * @param string $color Color to validate
+ * @return bool True if valid hex color
+ */
+function isValidHexColor($color) {
+    return is_string($color) && preg_match('/^#[0-9A-Fa-f]{6}$/', $color) === 1;
+}
+
+/**
+ * Validates that all category colors are unique
+ * @param array $colors Array of color values
+ * @return bool True if all colors are unique
+ */
+function hasUniqueColors($colors) {
+    $normalized = array_map('strtoupper', $colors);
+    return count($normalized) === count(array_unique($normalized));
+}
+
+/**
+ * Determines if white or black text should be used on a background color
+ * Uses relative luminance formula for WCAG compliance
+ * @param string $hexColor Background color in #RRGGBB format
+ * @return string 'white' or 'black'
+ */
+function getContrastTextColor($hexColor) {
+    // Remove # and convert to RGB
+    $hex = ltrim($hexColor, '#');
+    $r = hexdec(substr($hex, 0, 2)) / 255;
+    $g = hexdec(substr($hex, 2, 2)) / 255;
+    $b = hexdec(substr($hex, 4, 2)) / 255;
+
+    // Calculate relative luminance
+    $r = $r <= 0.03928 ? $r / 12.92 : pow(($r + 0.055) / 1.055, 2.4);
+    $g = $g <= 0.03928 ? $g / 12.92 : pow(($g + 0.055) / 1.055, 2.4);
+    $b = $b <= 0.03928 ? $b / 12.92 : pow(($b + 0.055) / 1.055, 2.4);
+
+    $luminance = 0.2126 * $r + 0.7152 * $g + 0.0722 * $b;
+
+    // WCAG recommends white text on dark backgrounds (luminance < 0.5)
+    return $luminance < 0.5 ? 'white' : 'black';
 }
 
 /**
@@ -208,6 +267,31 @@ function validateConfig($config) {
     // API settings
     $validated['API_ENABLED'] = ($config['API_ENABLED'] ?? 'false') === 'true' ? 'true' : 'false';
     $validated['API_RATE_LIMIT'] = max(10, min(1000, intval($config['API_RATE_LIMIT'] ?? 100)));
+
+    // Category colors validation
+    $colorFields = [
+        'COLOR_BRAND_NEW',
+        'COLOR_NEWISH',
+        'COLOR_NORMAL',
+        'COLOR_AGED',
+        'COLOR_OLD',
+        'COLOR_ELDERLY'
+    ];
+
+    // Validate format and normalize
+    foreach ($colorFields as $field) {
+        $color = $config[$field] ?? $defaults[$field];
+        $validated[$field] = isValidHexColor($color) ? strtoupper($color) : $defaults[$field];
+    }
+
+    // Validate uniqueness - if duplicates found, reset all to defaults
+    $colorValues = array_map(fn($field) => $validated[$field], $colorFields);
+    if (!hasUniqueColors($colorValues)) {
+        foreach ($colorFields as $field) {
+            $validated[$field] = $defaults[$field];
+        }
+        error_log('DriveAge: Duplicate colors detected, reset to defaults');
+    }
 
     return $validated;
 }
