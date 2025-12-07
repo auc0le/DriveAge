@@ -1,6 +1,5 @@
-Menu="DriveAgeSettings"
-Title="DriveAge Settings"
-Icon="icon.png"
+Menu="DriveAge:2"
+Title="Settings"
 ---
 <?PHP
 /* DriveAge Plugin - Settings Page */

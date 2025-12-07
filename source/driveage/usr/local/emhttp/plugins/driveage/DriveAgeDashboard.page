@@ -1,0 +1,81 @@
+Menu="DriveAge:1"
+Title="Dashboard"
+---
+<?PHP
+/* DriveAge Plugin - Dashboard */
+require_once '/usr/local/emhttp/plugins/driveage/include/config.php';
+require_once '/usr/local/emhttp/plugins/driveage/include/helpers.php';
+
+$config = loadConfig();
+$timestamp = date('Y-m-d H:i:s');
+
+// Helper function to format years without .0 for whole numbers
+function formatYears($hours) {
+    $years = $hours / 8760;
+    // If it's a whole number, return without decimal
+    if (floor($years) == $years) {
+        return number_format($years, 0);
+    }
+    // Otherwise return with 1 decimal place
+    return number_format($years, 1);
+}
+?>
+<link rel="stylesheet" href="/plugins/driveage/styles/driveage.css">
+<script src="/plugins/driveage/js/dashboard.js"></script>
+
+<div class="driveage-container">
+    <div class="driveage-header">
+        <div>
+            <span id="last-updated" class="last-updated">Loading...</span>
+        </div>
+        <div class="driveage-controls">
+            <button id="refresh-btn" title="Refresh drive data">
+                <span>↻</span> Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Legend Section -->
+    <div class="driveage-legend">
+        <div class="legend-item">
+            <div class="legend-color age-brand_new"></div>
+            <span class="legend-label">Brand New</span>
+            <span class="legend-hours">(< <?= e(formatYears($config['THRESHOLD_BRAND_NEW'])); ?> years)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color age-newish"></div>
+            <span class="legend-label">Newish</span>
+            <span class="legend-hours">(<?= e(formatYears($config['THRESHOLD_BRAND_NEW'])); ?>-<?= e(formatYears($config['THRESHOLD_NEWISH'])); ?> years)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color age-normal"></div>
+            <span class="legend-label">Mature</span>
+            <span class="legend-hours">(<?= e(formatYears($config['THRESHOLD_NEWISH'])); ?>-<?= e(formatYears($config['THRESHOLD_NORMAL'])); ?> years)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color age-aged"></div>
+            <span class="legend-label">Aged</span>
+            <span class="legend-hours">(<?= e(formatYears($config['THRESHOLD_NORMAL'])); ?>-<?= e(formatYears($config['THRESHOLD_AGED'])); ?> years)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color age-old"></div>
+            <span class="legend-label">Old</span>
+            <span class="legend-hours">(<?= e(formatYears($config['THRESHOLD_AGED'])); ?>-<?= e(formatYears($config['THRESHOLD_OLD'])); ?> years)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color age-elderly"></div>
+            <span class="legend-label">Elderly</span>
+            <span class="legend-hours">(≥ <?= e(formatYears($config['THRESHOLD_OLD'])); ?> years)</span>
+        </div>
+    </div>
+
+    <!-- Drive data container (will be populated by JavaScript) -->
+    <div id="drive-container"></div>
+
+    <!-- Footer Section -->
+    <div class="driveage-footer">
+        <span id="drive-count">Total Drives: 0</span> |
+        DriveAge v2025.11.27
+    </div>
+</div>
+
