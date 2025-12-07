@@ -226,25 +226,14 @@
 }
 
 .smart-unknown {
-    color: #333;
+    /* Color inherits from row */
 }
 
-/* SMART status colors on colored row backgrounds */
-.age-brand_new .smart-passed,
-.age-newish .smart-passed,
-.age-old .smart-passed,
-.age-elderly .smart-passed {
-    color: white;
-}
-
-.age-normal .smart-passed,
-.age-aged .smart-passed {
-    color: black;
-}
+/* SMART status inherits text color from row */
 
 /* Spin Status Badges */
 .spin-active {
-    /* Color set by row background rules below */
+    /* Color inherits from row */
 }
 
 .spin-standby {
@@ -252,33 +241,10 @@
 }
 
 .spin-unknown {
-    color: #333;
+    /* Color inherits from row */
 }
 
-/* Spin status colors on colored row backgrounds */
-.age-brand_new .spin-active,
-.age-brand_new .spin-standby,
-.age-brand_new .spin-unknown,
-.age-newish .spin-active,
-.age-newish .spin-standby,
-.age-newish .spin-unknown,
-.age-old .spin-active,
-.age-old .spin-standby,
-.age-old .spin-unknown,
-.age-elderly .spin-active,
-.age-elderly .spin-standby,
-.age-elderly .spin-unknown {
-    color: white;
-}
-
-.age-normal .spin-active,
-.age-normal .spin-standby,
-.age-normal .spin-unknown,
-.age-aged .spin-active,
-.age-aged .spin-standby,
-.age-aged .spin-unknown {
-    color: black;
-}
+/* Spin status inherits text color from row */
 
 /* Temperature Classes */
 .temp-normal,
@@ -289,42 +255,7 @@
     font-weight: 600;
 }
 
-/* Temperature colors on colored row backgrounds */
-.age-brand_new td.temp-normal,
-.age-brand_new td.temp-elevated,
-.age-brand_new td.temp-high,
-.age-brand_new td.temp-critical,
-.age-brand_new td.temp-unknown,
-.age-newish td.temp-normal,
-.age-newish td.temp-elevated,
-.age-newish td.temp-high,
-.age-newish td.temp-critical,
-.age-newish td.temp-unknown,
-.age-old td.temp-normal,
-.age-old td.temp-elevated,
-.age-old td.temp-high,
-.age-old td.temp-critical,
-.age-old td.temp-unknown,
-.age-elderly td.temp-normal,
-.age-elderly td.temp-elevated,
-.age-elderly td.temp-high,
-.age-elderly td.temp-critical,
-.age-elderly td.temp-unknown {
-    color: white;
-}
-
-.age-normal td.temp-normal,
-.age-normal td.temp-elevated,
-.age-normal td.temp-high,
-.age-normal td.temp-critical,
-.age-normal td.temp-unknown,
-.age-aged td.temp-normal,
-.age-aged td.temp-elevated,
-.age-aged td.temp-high,
-.age-aged td.temp-critical,
-.age-aged td.temp-unknown {
-    color: black;
-}
+/* Temperature inherits text color from row */
 
 /* Loading Spinner */
 .driveage-loading {
