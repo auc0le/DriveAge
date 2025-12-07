@@ -26,6 +26,33 @@
 <CHANGES>
 ##&name;
 
+###2025.12.07 (Build 10)
+- Added customizable text colors for each age category
+- Fixed real-time color preview in settings page
+- Reorganized color picker layout: [Background] [Preview] [Text Color]
+- Users can now fully customize both background and text colors
+
+###2025.12.07 (Build 9)
+- Fixed cache invalidation when settings change
+- Settings changes now automatically refresh dashboard data
+- Added cache clearing endpoint for immediate updates
+
+###2025.12.07 (Build 8)
+- Unified age category settings into integrated card layout
+- Single section now contains labels, thresholds, and colors
+- Improved UX with responsive 3-column grid (desktop/tablet/mobile)
+
+###2025.12.07 (Build 7)
+- Added customizable category labels
+- Users can rename categories (e.g., "Baby", "Child", "Teen")
+- Labels apply across dashboard and legend
+
+###2025.12.07 (Build 6)
+- Added color picker for age categories
+- Customizable background colors with duplicate prevention
+- Dynamic CSS generation from user configuration
+- HTML5 color input with real-time preview
+
 ###2025.11.27 (Build 39)
 - Fixed drive size display to show raw device size instead of useable size
 - 20TB drives now correctly show as 20TB (not 9TB)
@@ -153,7 +180,7 @@ echo "Pre-populating drive data cache (this may take 1-2 minutes)..."
 echo ""
 echo "-----------------------------------------------------------"
 echo " DriveAge has been installed successfully!"
-echo " Version: &version;"
+echo " Version: &version; (Build &build;)"
 echo " Access it at: Settings -> DriveAge"
 echo " Note: Drive data is being scanned in the background."
 echo "-----------------------------------------------------------"
