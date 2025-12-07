@@ -203,7 +203,7 @@ function getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit = 'C') {
         'spin_status_formatted' => formatSpinStatus($smartData['spin_status']),
         'age_category' => $ageCategory,
         'color_class' => getAgeColorClass($ageCategory),
-        'age_label' => getAgeLabel($ageCategory),
+        'age_label' => getAgeLabel($ageCategory, $config),
         'is_oldest' => false // Will be set later
     ];
 }

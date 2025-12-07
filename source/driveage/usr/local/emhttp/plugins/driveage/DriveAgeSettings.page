@@ -301,25 +301,33 @@ foreach ($categories as $category):
                     </div>
 
                     <div class="color-preview">
-                        <div class="color-block age-brand_new">Brand New</div>
-                        <div class="color-block age-newish">Newish</div>
-                        <div class="color-block age-normal">Mature</div>
-                        <div class="color-block age-aged">Aged</div>
-                        <div class="color-block age-old">Old</div>
-                        <div class="color-block age-elderly">Elderly</div>
+                        <div class="color-block age-brand_new" data-category="brand_new"><?= e($config['LABEL_BRAND_NEW']); ?></div>
+                        <div class="color-block age-newish" data-category="newish"><?= e($config['LABEL_NEWISH']); ?></div>
+                        <div class="color-block age-normal" data-category="normal"><?= e($config['LABEL_NORMAL']); ?></div>
+                        <div class="color-block age-aged" data-category="aged"><?= e($config['LABEL_AGED']); ?></div>
+                        <div class="color-block age-old" data-category="old"><?= e($config['LABEL_OLD']); ?></div>
+                        <div class="color-block age-elderly" data-category="elderly"><?= e($config['LABEL_ELDERLY']); ?></div>
                     </div>
                 </div>
 
                 <!-- Category Colors Section -->
                 <div class="settings-section">
-                    <h3>Category Colors</h3>
-                    <p>Customize the color for each age category. Each category must have a unique color.</p>
+                    <h3>Category Colors & Labels</h3>
+                    <p>Customize the color and label for each age category. Each category must have a unique color.</p>
 
                     <div id="color-error" style="display:none;" class="error-box"></div>
 
                     <div class="color-picker-grid">
                         <div class="color-picker-item">
-                            <label>Brand New</label>
+                            <label>Category 1</label>
+                            <input type="text"
+                                   name="LABEL_BRAND_NEW"
+                                   value="<?= e($config['LABEL_BRAND_NEW']); ?>"
+                                   maxlength="50"
+                                   placeholder="Label"
+                                   style="margin-bottom: 5px; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;"
+                                   data-category="brand_new"
+                                   class="label-input">
                             <div class="color-input-row">
                                 <input type="color"
                                        id="color_brand_new"
@@ -334,7 +342,15 @@ foreach ($categories as $category):
                         </div>
 
                         <div class="color-picker-item">
-                            <label>Newish</label>
+                            <label>Category 2</label>
+                            <input type="text"
+                                   name="LABEL_NEWISH"
+                                   value="<?= e($config['LABEL_NEWISH']); ?>"
+                                   maxlength="50"
+                                   placeholder="Label"
+                                   style="margin-bottom: 5px; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;"
+                                   data-category="newish"
+                                   class="label-input">
                             <div class="color-input-row">
                                 <input type="color"
                                        id="color_newish"
@@ -349,7 +365,15 @@ foreach ($categories as $category):
                         </div>
 
                         <div class="color-picker-item">
-                            <label>Mature</label>
+                            <label>Category 3</label>
+                            <input type="text"
+                                   name="LABEL_NORMAL"
+                                   value="<?= e($config['LABEL_NORMAL']); ?>"
+                                   maxlength="50"
+                                   placeholder="Label"
+                                   style="margin-bottom: 5px; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;"
+                                   data-category="normal"
+                                   class="label-input">
                             <div class="color-input-row">
                                 <input type="color"
                                        id="color_normal"
@@ -364,7 +388,15 @@ foreach ($categories as $category):
                         </div>
 
                         <div class="color-picker-item">
-                            <label>Aged</label>
+                            <label>Category 4</label>
+                            <input type="text"
+                                   name="LABEL_AGED"
+                                   value="<?= e($config['LABEL_AGED']); ?>"
+                                   maxlength="50"
+                                   placeholder="Label"
+                                   style="margin-bottom: 5px; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;"
+                                   data-category="aged"
+                                   class="label-input">
                             <div class="color-input-row">
                                 <input type="color"
                                        id="color_aged"
@@ -379,7 +411,15 @@ foreach ($categories as $category):
                         </div>
 
                         <div class="color-picker-item">
-                            <label>Old</label>
+                            <label>Category 5</label>
+                            <input type="text"
+                                   name="LABEL_OLD"
+                                   value="<?= e($config['LABEL_OLD']); ?>"
+                                   maxlength="50"
+                                   placeholder="Label"
+                                   style="margin-bottom: 5px; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;"
+                                   data-category="old"
+                                   class="label-input">
                             <div class="color-input-row">
                                 <input type="color"
                                        id="color_old"
@@ -394,7 +434,15 @@ foreach ($categories as $category):
                         </div>
 
                         <div class="color-picker-item">
-                            <label>Elderly</label>
+                            <label>Category 6</label>
+                            <input type="text"
+                                   name="LABEL_ELDERLY"
+                                   value="<?= e($config['LABEL_ELDERLY']); ?>"
+                                   maxlength="50"
+                                   placeholder="Label"
+                                   style="margin-bottom: 5px; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;"
+                                   data-category="elderly"
+                                   class="label-input">
                             <div class="color-input-row">
                                 <input type="color"
                                        id="color_elderly"
@@ -522,10 +570,11 @@ foreach ($categories as $category):
 // Color picker real-time preview and validation
 document.addEventListener('DOMContentLoaded', function() {
     const colorInputs = document.querySelectorAll('input[type="color"]');
+    const labelInputs = document.querySelectorAll('.label-input');
     const form = document.querySelector('form');
     const submitButton = form.querySelector('input[type="submit"]');
 
-    // Real-time preview updates
+    // Real-time preview updates for colors
     colorInputs.forEach(input => {
         input.addEventListener('input', function() {
             const category = this.dataset.category;
@@ -541,6 +590,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Check for duplicates
             checkDuplicateColors();
+        });
+    });
+
+    // Real-time preview updates for labels
+    labelInputs.forEach(input => {
+        input.addEventListener('input', function() {
+            const category = this.dataset.category;
+            const label = this.value.trim() || 'Unnamed';
+
+            // Update threshold preview blocks
+            const block = document.querySelector(`.color-preview .color-block[data-category="${category}"]`);
+            if (block) {
+                block.textContent = label;
+            }
         });
     });
 

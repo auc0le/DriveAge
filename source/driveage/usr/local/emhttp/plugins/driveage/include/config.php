@@ -86,7 +86,15 @@ function getDefaultConfig() {
         'COLOR_NORMAL' => '#90EE90',
         'COLOR_AGED' => '#FFD700',
         'COLOR_OLD' => '#8B0000',
-        'COLOR_ELDERLY' => '#FF0000'
+        'COLOR_ELDERLY' => '#FF0000',
+
+        // Category Labels
+        'LABEL_BRAND_NEW' => 'Brand New',
+        'LABEL_NEWISH' => 'Newish',
+        'LABEL_NORMAL' => 'Mature',
+        'LABEL_AGED' => 'Aged',
+        'LABEL_OLD' => 'Old',
+        'LABEL_ELDERLY' => 'Elderly'
     ];
 }
 
@@ -143,7 +151,15 @@ function saveConfig($config) {
     $content .= "COLOR_NORMAL=\"{$config['COLOR_NORMAL']}\"\n";
     $content .= "COLOR_AGED=\"{$config['COLOR_AGED']}\"\n";
     $content .= "COLOR_OLD=\"{$config['COLOR_OLD']}\"\n";
-    $content .= "COLOR_ELDERLY=\"{$config['COLOR_ELDERLY']}\"\n";
+    $content .= "COLOR_ELDERLY=\"{$config['COLOR_ELDERLY']}\"\n\n";
+
+    $content .= "# Category Labels\n";
+    $content .= "LABEL_BRAND_NEW=\"{$config['LABEL_BRAND_NEW']}\"\n";
+    $content .= "LABEL_NEWISH=\"{$config['LABEL_NEWISH']}\"\n";
+    $content .= "LABEL_NORMAL=\"{$config['LABEL_NORMAL']}\"\n";
+    $content .= "LABEL_AGED=\"{$config['LABEL_AGED']}\"\n";
+    $content .= "LABEL_OLD=\"{$config['LABEL_OLD']}\"\n";
+    $content .= "LABEL_ELDERLY=\"{$config['LABEL_ELDERLY']}\"\n";
 
     return file_put_contents(DRIVEAGE_CONFIG_FILE, $content) !== false;
 }
@@ -293,6 +309,30 @@ function validateConfig($config) {
         error_log('DriveAge: Duplicate colors detected, reset to defaults');
     }
 
+    // Category labels validation
+    $labelFields = [
+        'LABEL_BRAND_NEW',
+        'LABEL_NEWISH',
+        'LABEL_NORMAL',
+        'LABEL_AGED',
+        'LABEL_OLD',
+        'LABEL_ELDERLY'
+    ];
+
+    foreach ($labelFields as $field) {
+        $label = $config[$field] ?? $defaults[$field];
+
+        // Strip tags and trim whitespace
+        $label = trim(strip_tags($label));
+
+        // Validate: non-empty and reasonable length (1-50 characters)
+        if (empty($label) || strlen($label) > 50) {
+            $validated[$field] = $defaults[$field];
+        } else {
+            $validated[$field] = $label;
+        }
+    }
+
     return $validated;
 }
 
@@ -324,8 +364,20 @@ function getAgeColorClass($category) {
 
 /**
  * Get human-readable label for age category
+ * @param string $category The age category (brand_new, newish, etc.)
+ * @param array|null $config Optional configuration array with custom labels
+ * @return string The label for the category
  */
-function getAgeLabel($category) {
+function getAgeLabel($category, $config = null) {
+    // If config provided, use configured labels
+    if ($config !== null) {
+        $labelKey = 'LABEL_' . strtoupper($category);
+        if (isset($config[$labelKey])) {
+            return $config[$labelKey];
+        }
+    }
+
+    // Fallback to default labels
     $labels = [
         'brand_new' => 'Brand New',
         'newish' => 'Newish',

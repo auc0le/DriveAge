@@ -58,32 +58,32 @@ foreach ($categories as $category):
     <div class="driveage-legend">
         <div class="legend-item">
             <div class="legend-color age-brand_new"></div>
-            <span class="legend-label">Brand New</span>
+            <span class="legend-label"><?= e(getAgeLabel('brand_new', $config)); ?></span>
             <span class="legend-hours">(< <?= e(formatYears($config['THRESHOLD_BRAND_NEW'])); ?> years)</span>
         </div>
         <div class="legend-item">
             <div class="legend-color age-newish"></div>
-            <span class="legend-label">Newish</span>
+            <span class="legend-label"><?= e(getAgeLabel('newish', $config)); ?></span>
             <span class="legend-hours">(<?= e(formatYears($config['THRESHOLD_BRAND_NEW'])); ?>-<?= e(formatYears($config['THRESHOLD_NEWISH'])); ?> years)</span>
         </div>
         <div class="legend-item">
             <div class="legend-color age-normal"></div>
-            <span class="legend-label">Mature</span>
+            <span class="legend-label"><?= e(getAgeLabel('normal', $config)); ?></span>
             <span class="legend-hours">(<?= e(formatYears($config['THRESHOLD_NEWISH'])); ?>-<?= e(formatYears($config['THRESHOLD_NORMAL'])); ?> years)</span>
         </div>
         <div class="legend-item">
             <div class="legend-color age-aged"></div>
-            <span class="legend-label">Aged</span>
+            <span class="legend-label"><?= e(getAgeLabel('aged', $config)); ?></span>
             <span class="legend-hours">(<?= e(formatYears($config['THRESHOLD_NORMAL'])); ?>-<?= e(formatYears($config['THRESHOLD_AGED'])); ?> years)</span>
         </div>
         <div class="legend-item">
             <div class="legend-color age-old"></div>
-            <span class="legend-label">Old</span>
+            <span class="legend-label"><?= e(getAgeLabel('old', $config)); ?></span>
             <span class="legend-hours">(<?= e(formatYears($config['THRESHOLD_AGED'])); ?>-<?= e(formatYears($config['THRESHOLD_OLD'])); ?> years)</span>
         </div>
         <div class="legend-item">
             <div class="legend-color age-elderly"></div>
-            <span class="legend-label">Elderly</span>
+            <span class="legend-label"><?= e(getAgeLabel('elderly', $config)); ?></span>
             <span class="legend-hours">(≥ <?= e(formatYears($config['THRESHOLD_OLD'])); ?> years)</span>
         </div>
     </div>
