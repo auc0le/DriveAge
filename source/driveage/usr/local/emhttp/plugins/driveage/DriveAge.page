@@ -1,5 +1,5 @@
 Menu="Utilities"
-Title="DriveAge"
+Title="DriveAge - Dashboard"
 Icon="icon.png"
 ---
 <?PHP
@@ -16,7 +16,6 @@ $timestamp = date('Y-m-d H:i:s');
 <div class="driveage-container">
     <div class="driveage-header">
         <div>
-            <h2>DriveAge - Dashboard</h2>
             <span id="last-updated" class="last-updated">Loading...</span>
         </div>
         <div class="driveage-controls">
@@ -34,32 +33,32 @@ $timestamp = date('Y-m-d H:i:s');
         <div class="legend-item">
             <div class="legend-color age-brand_new"></div>
             <span class="legend-label">Brand New</span>
-            <span class="legend-hours">(< <?= e(number_format($config['THRESHOLD_BRAND_NEW'])); ?>h)</span>
+            <span class="legend-hours">(< <?= e(number_format($config['THRESHOLD_BRAND_NEW'] / 8760, 1)); ?> years)</span>
         </div>
         <div class="legend-item">
             <div class="legend-color age-newish"></div>
             <span class="legend-label">Newish</span>
-            <span class="legend-hours">(<?= e(number_format($config['THRESHOLD_BRAND_NEW'])); ?>-<?= e(number_format($config['THRESHOLD_NEWISH'])); ?>h)</span>
+            <span class="legend-hours">(<?= e(number_format($config['THRESHOLD_BRAND_NEW'] / 8760, 1)); ?>-<?= e(number_format($config['THRESHOLD_NEWISH'] / 8760, 1)); ?> years)</span>
         </div>
         <div class="legend-item">
             <div class="legend-color age-normal"></div>
             <span class="legend-label">Mature</span>
-            <span class="legend-hours">(<?= e(number_format($config['THRESHOLD_NEWISH'])); ?>-<?= e(number_format($config['THRESHOLD_NORMAL'])); ?>h)</span>
+            <span class="legend-hours">(<?= e(number_format($config['THRESHOLD_NEWISH'] / 8760, 1)); ?>-<?= e(number_format($config['THRESHOLD_NORMAL'] / 8760, 1)); ?> years)</span>
         </div>
         <div class="legend-item">
             <div class="legend-color age-aged"></div>
             <span class="legend-label">Aged</span>
-            <span class="legend-hours">(<?= e(number_format($config['THRESHOLD_NORMAL'])); ?>-<?= e(number_format($config['THRESHOLD_AGED'])); ?>h)</span>
+            <span class="legend-hours">(<?= e(number_format($config['THRESHOLD_NORMAL'] / 8760, 1)); ?>-<?= e(number_format($config['THRESHOLD_AGED'] / 8760, 1)); ?> years)</span>
         </div>
         <div class="legend-item">
             <div class="legend-color age-old"></div>
             <span class="legend-label">Old</span>
-            <span class="legend-hours">(<?= e(number_format($config['THRESHOLD_AGED'])); ?>-<?= e(number_format($config['THRESHOLD_OLD'])); ?>h)</span>
+            <span class="legend-hours">(<?= e(number_format($config['THRESHOLD_AGED'] / 8760, 1)); ?>-<?= e(number_format($config['THRESHOLD_OLD'] / 8760, 1)); ?> years)</span>
         </div>
         <div class="legend-item">
             <div class="legend-color age-elderly"></div>
             <span class="legend-label">Elderly</span>
-            <span class="legend-hours">(≥ <?= e(number_format($config['THRESHOLD_OLD'])); ?>h)</span>
+            <span class="legend-hours">(≥ <?= e(number_format($config['THRESHOLD_OLD'] / 8760, 1)); ?> years)</span>
         </div>
     </div>
 

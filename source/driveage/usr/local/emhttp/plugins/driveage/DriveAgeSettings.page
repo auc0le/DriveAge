@@ -16,7 +16,7 @@ $csrfToken = generateCsrfToken();
 
 // Convert hours to years for display
 function hoursToYears($hours) {
-    return round($hours / 8766, 2);
+    return round($hours / 8760, 1);
 }
 ?>
 <link rel="stylesheet" href="/plugins/driveage/styles/driveage.css">
@@ -164,8 +164,6 @@ function hoursToYears($hours) {
 </style>
 
 <div class="driveage-container">
-        <h2>DriveAge Settings</h2>
-
         <form method="POST" action="/update.php" target="progressFrame">
             <input type="hidden" name="#file" value="/boot/config/plugins/driveage/driveage.cfg">
             <input type="hidden" name="csrf_token" value="<?= e($csrfToken); ?>">
@@ -174,37 +172,37 @@ function hoursToYears($hours) {
                 <!-- Age Thresholds Section -->
                 <div class="settings-section">
                     <h3>Age Thresholds</h3>
-                    <p>Configure the power-on hour thresholds for each age category. Thresholds must be in ascending order.</p>
+                    <p>Configure the age thresholds for each category in years. Thresholds must be in ascending order. You can enter whole numbers (e.g., 3) or decimals (e.g., 6.5).</p>
 
                     <div class="threshold-input">
                         <div class="threshold-item age-brand_new">
                             <label>Brand New (< years)</label>
-                            <input type="number" name="THRESHOLD_BRAND_NEW" value="<?= e($config['THRESHOLD_BRAND_NEW']); ?>" min="0" step="100">
-                            <div class="help-text"><?= e(hoursToYears($config['THRESHOLD_BRAND_NEW'])); ?> years</div>
+                            <input type="number" class="threshold-years" data-field="THRESHOLD_BRAND_NEW" value="<?= e(hoursToYears($config['THRESHOLD_BRAND_NEW'])); ?>" min="0" step="0.1">
+                            <input type="hidden" name="THRESHOLD_BRAND_NEW" value="<?= e($config['THRESHOLD_BRAND_NEW']); ?>">
                         </div>
 
                         <div class="threshold-item age-newish">
                             <label>Newish (years)</label>
-                            <input type="number" name="THRESHOLD_NEWISH" value="<?= e($config['THRESHOLD_NEWISH']); ?>" min="0" step="100">
-                            <div class="help-text"><?= e(hoursToYears($config['THRESHOLD_NEWISH'])); ?> years</div>
+                            <input type="number" class="threshold-years" data-field="THRESHOLD_NEWISH" value="<?= e(hoursToYears($config['THRESHOLD_NEWISH'])); ?>" min="0" step="0.1">
+                            <input type="hidden" name="THRESHOLD_NEWISH" value="<?= e($config['THRESHOLD_NEWISH']); ?>">
                         </div>
 
                         <div class="threshold-item age-normal">
                             <label>Mature (years)</label>
-                            <input type="number" name="THRESHOLD_NORMAL" value="<?= e($config['THRESHOLD_NORMAL']); ?>" min="0" step="100">
-                            <div class="help-text"><?= e(hoursToYears($config['THRESHOLD_NORMAL'])); ?> years</div>
+                            <input type="number" class="threshold-years" data-field="THRESHOLD_NORMAL" value="<?= e(hoursToYears($config['THRESHOLD_NORMAL'])); ?>" min="0" step="0.1">
+                            <input type="hidden" name="THRESHOLD_NORMAL" value="<?= e($config['THRESHOLD_NORMAL']); ?>">
                         </div>
 
                         <div class="threshold-item age-aged">
                             <label>Aged (years)</label>
-                            <input type="number" name="THRESHOLD_AGED" value="<?= e($config['THRESHOLD_AGED']); ?>" min="0" step="100">
-                            <div class="help-text"><?= e(hoursToYears($config['THRESHOLD_AGED'])); ?> years</div>
+                            <input type="number" class="threshold-years" data-field="THRESHOLD_AGED" value="<?= e(hoursToYears($config['THRESHOLD_AGED'])); ?>" min="0" step="0.1">
+                            <input type="hidden" name="THRESHOLD_AGED" value="<?= e($config['THRESHOLD_AGED']); ?>">
                         </div>
 
                         <div class="threshold-item age-old">
                             <label>Old (years)</label>
-                            <input type="number" name="THRESHOLD_OLD" value="<?= e($config['THRESHOLD_OLD']); ?>" min="0" step="100">
-                            <div class="help-text"><?= e(hoursToYears($config['THRESHOLD_OLD'])); ?> years</div>
+                            <input type="number" class="threshold-years" data-field="THRESHOLD_OLD" value="<?= e(hoursToYears($config['THRESHOLD_OLD'])); ?>" min="0" step="0.1">
+                            <input type="hidden" name="THRESHOLD_OLD" value="<?= e($config['THRESHOLD_OLD']); ?>">
                         </div>
 
                         <div class="threshold-item age-elderly">

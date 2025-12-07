@@ -4,12 +4,12 @@
 
 function resetToDefaults() {
     if (confirm('Are you sure you want to reset all settings to defaults? This cannot be undone.')) {
-        // Set all values to defaults
-        document.querySelector('[name="THRESHOLD_BRAND_NEW"]').value = '17520';
-        document.querySelector('[name="THRESHOLD_NEWISH"]').value = '26280';
-        document.querySelector('[name="THRESHOLD_NORMAL"]').value = '35040';
-        document.querySelector('[name="THRESHOLD_AGED"]').value = '43800';
-        document.querySelector('[name="THRESHOLD_OLD"]').value = '52560';
+        // Set all values to defaults (in years)
+        document.querySelector('[data-field="THRESHOLD_BRAND_NEW"]').value = '2.0';
+        document.querySelector('[data-field="THRESHOLD_NEWISH"]').value = '3.0';
+        document.querySelector('[data-field="THRESHOLD_NORMAL"]').value = '4.0';
+        document.querySelector('[data-field="THRESHOLD_AGED"]').value = '5.0';
+        document.querySelector('[data-field="THRESHOLD_OLD"]').value = '6.0';
 
         document.querySelector('[name="DEFAULT_SORT"]').value = 'power_on_hours';
         document.querySelector('[name="DEFAULT_SORT_DIR"]').value = 'desc';
@@ -28,13 +28,22 @@ function resetToDefaults() {
     }
 }
 
-// Update year display when threshold values change
+// Convert years to hours before form submission
 document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.threshold-item input[type="number"]').forEach(input => {
-        input.addEventListener('input', function() {
-            const helpText = this.nextElementSibling;
-            const years = (parseFloat(this.value) / 8766).toFixed(2);
-            helpText.textContent = years + ' years';
+    const form = document.querySelector('form');
+
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            // Convert all threshold inputs from years to hours
+            document.querySelectorAll('.threshold-years').forEach(input => {
+                const years = parseFloat(input.value) || 0;
+                const hours = Math.round(years * 8760);
+                const fieldName = input.getAttribute('data-field');
+                const hiddenField = document.querySelector('input[name="' + fieldName + '"]');
+                if (hiddenField) {
+                    hiddenField.value = hours;
+                }
+            });
         });
-    });
+    }
 });
