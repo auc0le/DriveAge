@@ -693,6 +693,33 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.querySelector('form');
     const submitButton = form.querySelector('input[type="submit"]');
 
+    // Intercept form submission to clear cache
+    form.addEventListener('submit', function(e) {
+        // Send AJAX request to clear cache (non-blocking)
+        // This ensures drive data will be refreshed with new labels/colors
+        fetch('/plugins/driveage/scripts/clear_cache.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        }).then(response => response.json())
+          .then(data => {
+              if (data.success) {
+                  console.log('DriveAge cache cleared');
+                  // Set flag in localStorage to trigger dashboard refresh
+                  localStorage.setItem('driveage_settings_changed', Date.now().toString());
+              } else {
+                  console.warn('Failed to clear DriveAge cache:', data.message);
+              }
+          })
+          .catch(error => {
+              console.error('Error clearing DriveAge cache:', error);
+          });
+
+        // Don't prevent form submission - let it continue to /update.php
+        // Cache clear happens in parallel
+    });
+
     // Real-time preview updates for colors
     colorInputs.forEach(input => {
         input.addEventListener('input', function() {

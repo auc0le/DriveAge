@@ -33,9 +33,20 @@ document.addEventListener('DOMContentLoaded', function() {
 function initializeDashboard() {
     console.log('DriveAge: initializeDashboard() started');
 
+    // Check if settings were just changed (cache was cleared)
+    const settingsChanged = localStorage.getItem('driveage_settings_changed');
+    let forceRefresh = false;
+
+    if (settingsChanged) {
+        console.log('DriveAge: Settings were changed, forcing data refresh');
+        forceRefresh = true;
+        // Clear the flag
+        localStorage.removeItem('driveage_settings_changed');
+    }
+
     // Load drive data
     console.log('DriveAge: About to call loadDriveData()');
-    loadDriveData(false);
+    loadDriveData(forceRefresh);
     console.log('DriveAge: loadDriveData() called');
 
     // Set up event listeners
