@@ -3,7 +3,7 @@
   <!ENTITY name      "driveage">
   <!ENTITY author    "Tony Coleman">
   <!ENTITY version   "2025.12.25">
-  <!ENTITY build     "1">
+  <!ENTITY build     "2">
   <!ENTITY launch    "Settings/DriveAge">
   <!ENTITY gitURL    "https://raw.githubusercontent.com/auc0le/DriveAge/main">
   <!ENTITY pluginURL "&gitURL;/plugins/&name;.plg">
@@ -11,7 +11,7 @@
   <!ENTITY pkg       "/boot/config/plugins/&name;/packages">
   <!ENTITY plgpath   "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
-  <!ENTITY md5       "ce023092076235cc1d7351eb38a7e5e4">
+  <!ENTITY md5       "b663ef6e7e25c4180575bb1bbeea1509">
 ]>
 
 <PLUGIN
@@ -170,19 +170,11 @@ echo "Setting permissions..."
 chmod -R 755 /usr/local/emhttp/plugins/driveage
 chmod 644 /boot/config/plugins/driveage/driveage.cfg
 
-# Pre-populate drive data cache in background for faster first load
-echo "Pre-populating drive data cache (this may take 1-2 minutes)..."
-(
-  sleep 2
-  /usr/bin/curl -s "http://localhost/plugins/driveage/scripts/get_drive_data.php?refresh=true" > /dev/null 2>&1
-) &
-
 echo ""
 echo "-----------------------------------------------------------"
 echo " DriveAge has been installed successfully!"
-echo " Version: 2025.12.25 (Build 1)"
+echo " Version: 2025.12.25 (Build 2)"
 echo " Access it at: Settings -> DriveAge"
-echo " Note: Drive data is being scanned in the background."
 echo "-----------------------------------------------------------"
 echo ""
 

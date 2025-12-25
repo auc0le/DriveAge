@@ -33,20 +33,19 @@ document.addEventListener('DOMContentLoaded', function() {
 function initializeDashboard() {
     console.log('DriveAge: initializeDashboard() started');
 
-    // Check if settings were just changed (cache was cleared)
+    // Check if settings were just changed
     const settingsChanged = localStorage.getItem('driveage_settings_changed');
-    let forceRefresh = false;
 
     if (settingsChanged) {
-        console.log('DriveAge: Settings were changed, forcing data refresh');
-        forceRefresh = true;
+        console.log('DriveAge: Settings were changed, will reload data');
         // Clear the flag
         localStorage.removeItem('driveage_settings_changed');
     }
 
     // Load drive data
+    // No force refresh needed - we always read from Unraid's current cache
     console.log('DriveAge: About to call loadDriveData()');
-    loadDriveData(forceRefresh);
+    loadDriveData();
     console.log('DriveAge: loadDriveData() called');
 
     // Set up event listeners
@@ -63,19 +62,21 @@ function setupEventListeners() {
     const refreshBtn = document.getElementById('refresh-btn');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', function() {
-            loadDriveData(true);
+            loadDriveData();
         });
     }
 }
 
 /**
  * Load drive data from server
+ *
+ * Fetches drive data from Unraid's SMART cache (updated every 30s by emhttpd)
  */
-function loadDriveData(forceRefresh = false) {
-    console.log('DriveAge: loadDriveData called, forceRefresh:', forceRefresh);
+function loadDriveData() {
+    console.log('DriveAge: loadDriveData called');
     showLoading();
 
-    const url = '/plugins/driveage/scripts/get_drive_data.php' + (forceRefresh ? '?refresh=true' : '');
+    const url = '/plugins/driveage/scripts/get_drive_data.php';
     console.log('DriveAge: Fetching from:', url);
 
     fetch(url)

@@ -722,31 +722,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.querySelector('form');
     const submitButton = form.querySelector('input[type="submit"]');
 
-    // Intercept form submission to clear cache
+    // Intercept form submission to set settings changed flag
     form.addEventListener('submit', function(e) {
-        // Send AJAX request to clear cache (non-blocking)
-        // This ensures drive data will be refreshed with new labels/colors
-        fetch('/plugins/driveage/scripts/clear_cache.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        }).then(response => response.json())
-          .then(data => {
-              if (data.success) {
-                  console.log('DriveAge cache cleared');
-                  // Set flag in localStorage to trigger dashboard refresh
-                  localStorage.setItem('driveage_settings_changed', Date.now().toString());
-              } else {
-                  console.warn('Failed to clear DriveAge cache:', data.message);
-              }
-          })
-          .catch(error => {
-              console.error('Error clearing DriveAge cache:', error);
-          });
+        // Set flag in localStorage to trigger dashboard to reload data
+        // No cache clearing needed - we rely on Unraid's emhttpd cache
+        // Settings changes (labels, colors) are applied dynamically via JavaScript
+        localStorage.setItem('driveage_settings_changed', Date.now().toString());
+        console.log('DriveAge settings changed flag set');
 
-        // Don't prevent form submission - let it continue to /update.php
-        // Cache clear happens in parallel
+        // Let form submission continue to /update.php
     });
 
     // Real-time preview updates for colors

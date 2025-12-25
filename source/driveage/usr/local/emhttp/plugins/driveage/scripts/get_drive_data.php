@@ -35,22 +35,9 @@ try {
     // Log API access
     logSecurityEvent('api_access', ['endpoint' => 'get_drive_data.php']);
 
-    // Validate refresh parameter
-    $forceRefresh = false;
-    if (isset($_GET['refresh'])) {
-        if ($_GET['refresh'] === 'true') {
-            $forceRefresh = true;
-        } elseif ($_GET['refresh'] !== 'false') {
-            // Log suspicious input
-            logSecurityEvent('invalid_parameter', [
-                'parameter' => 'refresh',
-                'value' => substr($_GET['refresh'], 0, 50)
-            ]);
-        }
-    }
-
-    // Get all drives
-    $drives = getAllDrives($config, !$forceRefresh);
+    // Get all drives from Unraid's SMART cache
+    // No refresh parameter needed - data is always current from emhttpd
+    $drives = getAllDrives($config);
 
     // Group drives by array and type
     $grouped = groupDrives($drives);

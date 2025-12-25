@@ -9,27 +9,20 @@ require_once 'formatting.php';
 require_once 'config.php';
 require_once 'helpers.php';
 
-// Cache directory and file for SMART data (secure location)
-define('SMART_CACHE_DIR', '/var/lib/driveage');
-define('SMART_CACHE_FILE', SMART_CACHE_DIR . '/cache.json');
-define('SMART_CACHE_TTL', 300); // Cache TTL in seconds (5 minutes)
+// DriveAge now relies entirely on Unraid's SMART cache at /var/local/emhttp/smart/
+// This cache is updated by emhttpd every 30 seconds (configurable via poll_attributes)
+// No plugin-level caching is used to avoid spinning up drives
 
 /**
  * Get all drives with their SMART data
  *
+ * Reads exclusively from Unraid's SMART cache at /var/local/emhttp/smart/
+ * This cache is maintained by emhttpd and updated every 30 seconds
+ *
  * @param array $config Plugin configuration
- * @param bool $useCache Whether to use cached data
  * @return array Array of drive information
  */
-function getAllDrives($config, $useCache = true) {
-    // Check cache
-    if ($useCache && isCacheValid()) {
-        $cached = loadCache();
-        if ($cached !== null) {
-            return $cached;
-        }
-    }
-
+function getAllDrives($config) {
     $drives = [];
 
     // Parse disks.ini once for all drives (performance optimization)
@@ -62,9 +55,6 @@ function getAllDrives($config, $useCache = true) {
     foreach ($drives as &$drive) {
         $drive['is_oldest'] = ($drive['age_category'] === 'elderly');
     }
-
-    // Save to cache
-    saveCache($drives);
 
     return $drives;
 }
@@ -234,6 +224,8 @@ function getSmartDataFromUnraidCache($deviceName) {
 /**
  * Parse smartctl text output to extract SMART attributes
  *
+ * Used to parse Unraid's cached SMART data from /var/local/emhttp/smart/
+ *
  * @param string $output Raw smartctl output
  * @return array|null SMART data array or null if failed
  */
@@ -281,155 +273,48 @@ function parseSmartctlOutput($output) {
         }
     }
 
+    // Determine spin status from power state line
+    // Example: "Power mode is:    STANDBY" or "Power mode is:    ACTIVE"
+    $fullOutput = implode("\n", $lines);
+    if (stripos($fullOutput, 'STANDBY') !== false || stripos($fullOutput, 'SLEEP') !== false) {
+        $smartData['spin_status'] = 'standby';
+    } elseif (stripos($fullOutput, 'ACTIVE') !== false || stripos($fullOutput, 'IDLE') !== false) {
+        $smartData['spin_status'] = 'active';
+    }
+
     // Return null if we couldn't get critical data
     return $smartData['power_on_hours'] !== null ? $smartData : null;
 }
 
 /**
- * Query SMART data from a drive
+ * Get SMART data for a drive
  *
- * @param string $devicePath Device path
- * @return array|null SMART data or null if failed
+ * Reads exclusively from Unraid's SMART cache. Never queries drives directly.
+ * This prevents spinning up drives in standby mode.
+ *
+ * @param string $devicePath Device path (e.g., /dev/sda)
+ * @return array|null SMART data or null if cache not available
  */
 function getSmartData($devicePath) {
     $deviceName = basename($devicePath);
 
-    // First, try to read from Unraid's cached SMART data for performance
+    // Read from Unraid's cached SMART data
+    // This cache is updated by emhttpd every 30 seconds
     $cachedData = getSmartDataFromUnraidCache($deviceName);
+
     if ($cachedData !== null) {
         return $cachedData;
     }
 
-    // Fallback: Run smartctl directly if cache not available
-    $output = shell_exec("smartctl -a -j " . escapeshellarg($devicePath) . " 2>/dev/null");
-
-    if (!$output) {
-        // Try without JSON output for older smartctl versions
-        return getSmartDataLegacy($devicePath);
-    }
-
-    $data = json_decode($output, true);
-    if (!$data) {
-        return getSmartDataLegacy($devicePath);
-    }
-
-    // Extract relevant SMART attributes
-    $smartData = [
-        'model' => $data['model_name'] ?? $data['model_family'] ?? 'Unknown',
-        'serial' => $data['serial_number'] ?? 'Unknown',
-        'smart_status' => ($data['smart_status']['passed'] ?? false) ? 'PASSED' : 'FAILED',
-        'temperature' => null,
-        'power_on_hours' => null,
-        'spin_status' => 'unknown'
-    ];
-
-    // Get temperature
-    if (isset($data['temperature']['current'])) {
-        $smartData['temperature'] = $data['temperature']['current'];
-    }
-
-    // Get power-on hours and other attributes
-    if (isset($data['ata_smart_attributes']['table'])) {
-        foreach ($data['ata_smart_attributes']['table'] as $attr) {
-            if ($attr['id'] === 9) { // Power_On_Hours
-                $smartData['power_on_hours'] = $attr['raw']['value'];
-            }
-            if ($attr['id'] === 194 && $smartData['temperature'] === null) { // Temperature
-                $smartData['temperature'] = $attr['raw']['value'];
-            }
-        }
-    }
-
-    // For NVMe drives
-    if (isset($data['nvme_smart_health_information_log'])) {
-        $nvmeData = $data['nvme_smart_health_information_log'];
-        $smartData['temperature'] = $nvmeData['temperature'] ?? null;
-        $smartData['power_on_hours'] = isset($nvmeData['power_on_hours'])
-            ? floor($nvmeData['power_on_hours'])
-            : null;
-    }
-
-    // Get spin status
-    $smartData['spin_status'] = getSpinStatus($devicePath);
-
-    return $smartData['power_on_hours'] !== null ? $smartData : null;
+    // If Unraid's cache doesn't exist for this drive, return null
+    // This can happen for:
+    // - Drives that emhttpd hasn't scanned yet
+    // - Drives in standby mode (cache shows last known values)
+    // - Drives that don't support SMART
+    error_log("DriveAge: No SMART cache found for $deviceName - drive may be in standby or not yet scanned by emhttpd");
+    return null;
 }
 
-/**
- * Get SMART data using legacy text parsing (fallback)
- *
- * @param string $devicePath Device path
- * @return array|null SMART data or null if failed
- */
-function getSmartDataLegacy($devicePath) {
-    $output = shell_exec("smartctl -a " . escapeshellarg($devicePath) . " 2>/dev/null");
-
-    if (!$output) {
-        return null;
-    }
-
-    $smartData = [
-        'model' => 'Unknown',
-        'serial' => 'Unknown',
-        'smart_status' => 'UNKNOWN',
-        'temperature' => null,
-        'power_on_hours' => null,
-        'spin_status' => 'unknown'
-    ];
-
-    $lines = explode("\n", $output);
-
-    foreach ($lines as $line) {
-        // Model
-        if (preg_match('/Device Model:\s+(.+)/', $line, $matches)) {
-            $smartData['model'] = trim($matches[1]);
-        } elseif (preg_match('/Model Number:\s+(.+)/', $line, $matches)) {
-            $smartData['model'] = trim($matches[1]);
-        }
-
-        // Serial
-        if (preg_match('/Serial Number:\s+(.+)/', $line, $matches)) {
-            $smartData['serial'] = trim($matches[1]);
-        }
-
-        // SMART status
-        if (preg_match('/SMART overall-health.*:\s+(.+)/', $line, $matches)) {
-            $smartData['smart_status'] = (stripos($matches[1], 'PASSED') !== false) ? 'PASSED' : 'FAILED';
-        }
-
-        // Power-on hours (attribute 9)
-        if (preg_match('/^\s*9\s+Power_On_Hours.*\s+(\d+)$/', $line, $matches)) {
-            $smartData['power_on_hours'] = intval($matches[1]);
-        }
-
-        // Temperature (attribute 194)
-        if (preg_match('/^\s*194\s+Temperature_Celsius.*\s+(\d+)(\s+|$)/', $line, $matches)) {
-            $smartData['temperature'] = intval($matches[1]);
-        }
-    }
-
-    $smartData['spin_status'] = getSpinStatus($devicePath);
-
-    return $smartData['power_on_hours'] !== null ? $smartData : null;
-}
-
-/**
- * Get spin status of a drive
- *
- * @param string $devicePath Device path
- * @return string Spin status (active, standby, unknown)
- */
-function getSpinStatus($devicePath) {
-    $output = shell_exec("smartctl -n standby " . escapeshellarg($devicePath) . " 2>/dev/null");
-
-    if (stripos($output, 'STANDBY') !== false || stripos($output, 'SLEEP') !== false) {
-        return 'standby';
-    } elseif (stripos($output, 'ACTIVE') !== false || stripos($output, 'IDLE') !== false) {
-        return 'active';
-    }
-
-    return 'active'; // Default to active if can't determine
-}
 
 /**
  * Get drive size in bytes
@@ -537,114 +422,3 @@ function getUnraidAssignment($deviceName, $diskAssignments) {
     return $assignment;
 }
 
-/**
- * Initialize cache directory with secure permissions
- *
- * @return bool True if successful
- */
-function initCacheDirectory() {
-    if (!is_dir(SMART_CACHE_DIR)) {
-        if (!mkdir(SMART_CACHE_DIR, 0700, true)) {
-            error_log('DriveAge: Failed to create cache directory');
-            return false;
-        }
-    }
-
-    // Ensure directory has secure permissions
-    chmod(SMART_CACHE_DIR, 0700);
-    return true;
-}
-
-/**
- * Check if cache is valid
- *
- * @return bool True if cache exists and is not expired
- */
-function isCacheValid() {
-    if (!file_exists(SMART_CACHE_FILE)) {
-        return false;
-    }
-
-    // Verify it's a regular file (not a symlink)
-    if (!is_file(SMART_CACHE_FILE) || is_link(SMART_CACHE_FILE)) {
-        error_log('DriveAge: Cache file is not a regular file');
-        return false;
-    }
-
-    $cacheTime = filemtime(SMART_CACHE_FILE);
-    return (time() - $cacheTime) < SMART_CACHE_TTL;
-}
-
-/**
- * Load data from cache
- *
- * @return array|null Cached data or null if invalid
- */
-function loadCache() {
-    if (!initCacheDirectory()) {
-        return null;
-    }
-
-    if (!file_exists(SMART_CACHE_FILE)) {
-        return null;
-    }
-
-    // Verify it's a regular file (not a symlink)
-    if (!is_file(SMART_CACHE_FILE) || is_link(SMART_CACHE_FILE)) {
-        error_log('DriveAge: Cache file is not a regular file');
-        return null;
-    }
-
-    $content = file_get_contents(SMART_CACHE_FILE);
-    if (!$content) {
-        return null;
-    }
-
-    $data = json_decode($content, true);
-    return $data ?: null;
-}
-
-/**
- * Save data to cache using atomic write
- *
- * @param array $data Data to cache
- * @return bool True if successful
- */
-function saveCache($data) {
-    if (!initCacheDirectory()) {
-        return false;
-    }
-
-    $tempFile = SMART_CACHE_FILE . '.tmp.' . getmypid();
-    $json = json_encode($data, JSON_PRETTY_PRINT);
-
-    // Write to temp file with exclusive lock
-    if (file_put_contents($tempFile, $json, LOCK_EX) === false) {
-        error_log('DriveAge: Failed to write cache temp file');
-        return false;
-    }
-
-    // Set restrictive permissions
-    chmod($tempFile, 0600);
-
-    // Atomic rename
-    if (!rename($tempFile, SMART_CACHE_FILE)) {
-        error_log('DriveAge: Failed to rename cache file');
-        @unlink($tempFile);
-        return false;
-    }
-
-    return true;
-}
-
-/**
- * Clear cache
- *
- * @return bool True if successful
- */
-function clearCache() {
-    if (file_exists(SMART_CACHE_FILE)) {
-        return unlink(SMART_CACHE_FILE);
-    }
-    return true;
-}
