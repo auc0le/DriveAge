@@ -26,77 +26,8 @@
 <CHANGES>
 ##&name;
 
-###2025.12.07 (Build 10)
-- Added customizable text colors for each age category
-- Fixed real-time color preview in settings page
-- Reorganized color picker layout: [Background] [Preview] [Text Color]
-- Users can now fully customize both background and text colors
-
-###2025.12.07 (Build 9)
-- Fixed cache invalidation when settings change
-- Settings changes now automatically refresh dashboard data
-- Added cache clearing endpoint for immediate updates
-
-###2025.12.07 (Build 8)
-- Unified age category settings into integrated card layout
-- Single section now contains labels, thresholds, and colors
-- Improved UX with responsive 3-column grid (desktop/tablet/mobile)
-
-###2025.12.07 (Build 7)
-- Added customizable category labels
-- Users can rename categories (e.g., "Baby", "Child", "Teen")
-- Labels apply across dashboard and legend
-
-###2025.12.07 (Build 6)
-- Added color picker for age categories
-- Customizable background colors with duplicate prevention
-- Dynamic CSS generation from user configuration
-- HTML5 color input with real-time preview
-
-###2025.11.27 (Build 39)
-- Fixed drive size display to show raw device size instead of useable size
-- 20TB drives now correctly show as 20TB (not 9TB)
-- Uses blockdev for accurate raw hardware size
-- Removed leftover VIEW_MODE reference in get_drive_data.php
-
-###2025.11.27 (Build 37)
-- Removed card view functionality (table-only view)
-- Simplified codebase by removing VIEW_MODE configuration
-- Improved maintainability and reduced complexity
-
-###2025.11.27 (Build 36)
-- Dramatic performance improvement: 26-52 seconds → ~100ms load time
-- Now uses Unraid's cached SMART data from /var/local/emhttp/smart/
-- Fallback to direct smartctl if cache unavailable
-- Increased cache TTL from 60 to 300 seconds
-- Pre-populate cache on plugin installation for faster first load
-
-###2025.11.27 (Build 31-35)
-- Added legend section showing age categories with threshold ranges
-- Added info note explaining elderly drive bold text emphasis
-- Added footer with drive count, version, and settings link
-- Enhanced visual hierarchy and user experience
-
 ###2025.11.26
 - Initial release
-- Drive age monitoring based on SMART power-on hours
-- Six-tier color coding system (brand new to elderly)
-- Human-readable time format (years, months, days, hours)
-- Bold text emphasis for oldest drives
-- Configurable age thresholds
-- Support for multi-array configurations (Unraid 6.12+)
-- Table view with sortable columns
-- Comprehensive settings page with live preview
-- Temperature, SMART status, and spin status display
-- Optional JSON API for external monitoring integration
-- Security features:
-  * XSS prevention (output encoding in PHP and JavaScript)
-  * CSRF protection with session-based tokens
-  * Command injection prevention (secure device discovery)
-  * IP-based rate limiting (configurable)
-  * Security event logging
-  * Input validation and sanitization
-  * OWASP Top 10 compliant
 </CHANGES>
 
 <!-- Download Package File -->
