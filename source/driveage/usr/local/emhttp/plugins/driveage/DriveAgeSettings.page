@@ -19,7 +19,7 @@ function hoursToYears($hours) {
 }
 
 // Cache busting version - use simple incrementing version number
-$cacheVersion = '2025.12.25-10';
+$cacheVersion = '2025.12.25-20';
 ?>
 <link rel="stylesheet" href="/plugins/driveage/styles/driveage.css?v=<?= $cacheVersion; ?>">
 
