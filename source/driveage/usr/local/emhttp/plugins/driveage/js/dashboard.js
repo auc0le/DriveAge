@@ -105,6 +105,44 @@ function loadDriveData(forceRefresh = false) {
 }
 
 /**
+ * Apply dynamic colors from JSON response to all elements
+ */
+function applyDynamicColors() {
+    if (!driveData || !driveData.colors || !driveData.text_colors) {
+        console.warn('DriveAge: No color data available');
+        return;
+    }
+
+    const categories = ['brand_new', 'newish', 'normal', 'aged', 'old', 'elderly'];
+
+    categories.forEach(category => {
+        const bgColor = driveData.colors[category];
+        const textColor = driveData.text_colors[category];
+
+        if (!bgColor || !textColor) {
+            console.warn(`DriveAge: Missing colors for category ${category}`);
+            return;
+        }
+
+        // Apply to all elements with this category class
+        // Handle both underscore and hyphen versions
+        const selectors = [
+            `.age-${category}`,
+            `.age-${category.replace('_', '-')}`
+        ];
+
+        selectors.forEach(selector => {
+            document.querySelectorAll(selector).forEach(element => {
+                element.style.backgroundColor = bgColor;
+                element.style.color = textColor;
+            });
+        });
+    });
+
+    console.log('DriveAge: Dynamic colors applied');
+}
+
+/**
  * Render the dashboard in table view
  */
 function renderDashboard() {
@@ -115,6 +153,7 @@ function renderDashboard() {
     hideLoading();
     renderTableView();
     updateDriveCount(driveData.drive_count);
+    applyDynamicColors();
 }
 
 /**

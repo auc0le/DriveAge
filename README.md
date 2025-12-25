@@ -17,7 +17,6 @@ DriveAge is an Unraid plugin that provides a unified dashboard to monitor drive 
 - **Comprehensive Drive Information**: Shows device name, model, size, temperature, SMART status, and spin status
 
 ### Display Options
-- **Multiple View Modes**: Toggle between compact table view and visual card view
 - **Sortable Columns**: Click any column header to sort (device, size, age, temperature, SMART status)
 - **Hierarchical Grouping**: Drives organized by array and type (Parity, Array, Cache, Pool, Unassigned)
 - **Collapsible Groups**: Expand/collapse drive groups for easier navigation
@@ -36,17 +35,9 @@ DriveAge is an Unraid plugin that provides a unified dashboard to monitor drive 
 - **Rate Limiting**: Configurable IP-based rate limiting prevents API abuse
 - **Security Logging**: All security events logged for audit and monitoring
 
-## Screenshots
-
-![Dashboard View](docs/screenshots/dashboard.png)
-*Main dashboard showing drives with six-tier color coding*
-
-![Settings Page](docs/screenshots/settings.png)
-*Configurable age thresholds and display options*
-
 ## Installation
 
-### Via Community Applications (Recommended)
+### Via Community Applications (Not yet available)
 1. Open Unraid WebGUI
 2. Navigate to **Apps** tab
 3. Search for "DriveAge"
@@ -377,17 +368,6 @@ Contributions are welcome! Please:
 - **Forum**: [Unraid Community Forums](https://forums.unraid.net/topic/xxxxx-driveage/)
 - **Issues**: [GitHub Issues](https://github.com/auc0le/DriveAge/issues)
 - **Documentation**: [Requirements Document](REQUIREMENTS.md)
-
-## Changelog
-
-### 2025.11.26 - Initial Release
-- Six-tier color coding system
-- Table and card view modes
-- Configurable age thresholds
-- Multi-array support
-- Temperature, SMART, and spin status display
-- JSON API with rate limiting
-- Bold emphasis for oldest drives
 
 #### Security Enhancements
 - Comprehensive XSS prevention (output encoding in PHP and JavaScript)
