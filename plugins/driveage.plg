@@ -104,7 +104,11 @@ chmod 644 /boot/config/plugins/driveage/driveage.cfg
 echo ""
 echo "-----------------------------------------------------------"
 echo " DriveAge has been installed successfully!"
+<<<<<<< HEAD
 echo " Version: 2025.12.25 (Build 6)"
+=======
+echo " Version: 2025.12.25 (Build 4)"
+>>>>>>> 64b7ffe00dec0956cbf76fcb036e5f01d6ba34a2
 echo " Access it at: Settings -> DriveAge"
 echo "-----------------------------------------------------------"
 echo ""
