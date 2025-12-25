@@ -86,32 +86,38 @@
 
 /* Age Color Classes - Six-Tier System
  * NOTE: These default colors are overridden by user-configured colors
- * via dynamic <style> block injected in DriveAge.page
- * Default colors provided here for reference only
+ * via JavaScript applyDynamicColors() function using inline styles
+ * Default colors provided here for fallback only
  */
 .age-brand_new,
 .age-brand-new {
-    background-color: #006400 !important;  /* Default: Dark Green */
+    background-color: #006400;  /* Default: Dark Green */
+    color: #FFFFFF;
 }
 
 .age-newish {
-    background-color: #008000 !important;  /* Default: Green */
+    background-color: #008000;  /* Default: Green */
+    color: #FFFFFF;
 }
 
 .age-normal {
-    background-color: #90EE90 !important;  /* Default: Light Green */
+    background-color: #90EE90;  /* Default: Light Green */
+    color: #000000;
 }
 
 .age-aged {
-    background-color: #FFD700 !important;  /* Default: Gold */
+    background-color: #FFD700;  /* Default: Gold */
+    color: #000000;
 }
 
 .age-old {
-    background-color: #8B0000 !important;  /* Default: Dark Red */
+    background-color: #8B0000;  /* Default: Dark Red */
+    color: #FFFFFF;
 }
 
 .age-elderly {
-    background-color: #FF0000 !important;  /* Default: Bright Red */
+    background-color: #FF0000;  /* Default: Bright Red */
+    color: #FFFFFF;
 }
 
 /* Oldest Drive Emphasis */
