@@ -16,6 +16,10 @@ define('DRIVEAGE_CONFIG_DIR', '/boot/config/plugins/driveage');
 function loadConfig() {
     $defaults = getDefaultConfig();
 
+    // Clear PHP's stat cache to ensure we read the latest file
+    // This prevents delays when config changes (e.g., color updates)
+    clearstatcache();
+
     if (!file_exists(DRIVEAGE_CONFIG_FILE)) {
         return $defaults;
     }
