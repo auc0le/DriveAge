@@ -51,9 +51,9 @@ function getAllDrives($config) {
         return $b['power_on_hours'] - $a['power_on_hours'];
     });
 
-    // Mark elderly drives for bold formatting
+    // Mark high risk drives for bold formatting
     foreach ($drives as &$drive) {
-        $drive['is_oldest'] = ($drive['age_category'] === 'elderly');
+        $drive['is_oldest'] = ($drive['age_category'] === 'high_risk');
     }
 
     return $drives;

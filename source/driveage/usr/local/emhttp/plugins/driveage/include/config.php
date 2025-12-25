@@ -61,12 +61,12 @@ function getDefaultConfig() {
         'AUTO_REFRESH' => 'false',
         'REFRESH_INTERVAL' => '300',
 
-        // Age Thresholds (in hours)
-        'THRESHOLD_BRAND_NEW' => '17520',   // < 2 years
-        'THRESHOLD_NEWISH' => '26280',      // 2-3 years
-        'THRESHOLD_NORMAL' => '35040',      // 3-4 years
-        'THRESHOLD_AGED' => '43800',        // 4-5 years
-        'THRESHOLD_OLD' => '52560',         // 5-6 years
+        // Age Thresholds (in hours) - Risk-Based Model
+        'THRESHOLD_MINIMAL_RISK' => '26280',    // < 3 years (AFR <1%)
+        'THRESHOLD_LOW_RISK' => '43800',        // 3-5 years (AFR 1-2%)
+        'THRESHOLD_MODERATE_RISK' => '61320',   // 5-7 years (AFR 2-5%)
+        'THRESHOLD_ELEVATED_RISK' => '87600',   // 7-10 years (AFR 5-10%)
+        // High Risk: >= 10 years (AFR >10%)
 
         // Display Filters
         'SHOW_PARITY' => 'true',
@@ -85,28 +85,25 @@ function getDefaultConfig() {
         'API_RATE_LIMIT' => '100',
 
         // Category Colors (hex format)
-        'COLOR_BRAND_NEW' => '#006400',
-        'COLOR_NEWISH' => '#008000',
-        'COLOR_NORMAL' => '#90EE90',
-        'COLOR_AGED' => '#FFD700',
-        'COLOR_OLD' => '#8B0000',
-        'COLOR_ELDERLY' => '#FF0000',
+        'COLOR_MINIMAL_RISK' => '#4CAF50',
+        'COLOR_LOW_RISK' => '#8BC34A',
+        'COLOR_MODERATE_RISK' => '#FFC107',
+        'COLOR_ELEVATED_RISK' => '#FF9800',
+        'COLOR_HIGH_RISK' => '#F44336',
 
         // Category Text Colors (hex format)
-        'TEXTCOLOR_BRAND_NEW' => '#FFFFFF',
-        'TEXTCOLOR_NEWISH' => '#FFFFFF',
-        'TEXTCOLOR_NORMAL' => '#000000',
-        'TEXTCOLOR_AGED' => '#000000',
-        'TEXTCOLOR_OLD' => '#FFFFFF',
-        'TEXTCOLOR_ELDERLY' => '#FFFFFF',
+        'TEXTCOLOR_MINIMAL_RISK' => '#000000',
+        'TEXTCOLOR_LOW_RISK' => '#000000',
+        'TEXTCOLOR_MODERATE_RISK' => '#000000',
+        'TEXTCOLOR_ELEVATED_RISK' => '#000000',
+        'TEXTCOLOR_HIGH_RISK' => '#FFFFFF',
 
         // Category Labels
-        'LABEL_BRAND_NEW' => 'Brand New',
-        'LABEL_NEWISH' => 'Newish',
-        'LABEL_NORMAL' => 'Mature',
-        'LABEL_AGED' => 'Aged',
-        'LABEL_OLD' => 'Old',
-        'LABEL_ELDERLY' => 'Elderly'
+        'LABEL_MINIMAL_RISK' => 'Minimal Risk (AFR <1%)',
+        'LABEL_LOW_RISK' => 'Low Risk (AFR 1-2%)',
+        'LABEL_MODERATE_RISK' => 'Moderate Risk (AFR 2-5%)',
+        'LABEL_ELEVATED_RISK' => 'Elevated Risk (AFR 5-10%)',
+        'LABEL_HIGH_RISK' => 'High Risk (AFR >10%)'
     ];
 }
 
@@ -134,12 +131,11 @@ function saveConfig($config) {
     $content .= "AUTO_REFRESH=\"{$config['AUTO_REFRESH']}\"\n";
     $content .= "REFRESH_INTERVAL=\"{$config['REFRESH_INTERVAL']}\"\n\n";
 
-    $content .= "# Age Thresholds (in hours)\n";
-    $content .= "THRESHOLD_BRAND_NEW=\"{$config['THRESHOLD_BRAND_NEW']}\"\n";
-    $content .= "THRESHOLD_NEWISH=\"{$config['THRESHOLD_NEWISH']}\"\n";
-    $content .= "THRESHOLD_NORMAL=\"{$config['THRESHOLD_NORMAL']}\"\n";
-    $content .= "THRESHOLD_AGED=\"{$config['THRESHOLD_AGED']}\"\n";
-    $content .= "THRESHOLD_OLD=\"{$config['THRESHOLD_OLD']}\"\n\n";
+    $content .= "# Age Thresholds (in hours) - Risk-Based Model\n";
+    $content .= "THRESHOLD_MINIMAL_RISK=\"{$config['THRESHOLD_MINIMAL_RISK']}\"\n";
+    $content .= "THRESHOLD_LOW_RISK=\"{$config['THRESHOLD_LOW_RISK']}\"\n";
+    $content .= "THRESHOLD_MODERATE_RISK=\"{$config['THRESHOLD_MODERATE_RISK']}\"\n";
+    $content .= "THRESHOLD_ELEVATED_RISK=\"{$config['THRESHOLD_ELEVATED_RISK']}\"\n\n";
 
     $content .= "# Display Filters\n";
     $content .= "SHOW_PARITY=\"{$config['SHOW_PARITY']}\"\n";
@@ -158,28 +154,25 @@ function saveConfig($config) {
     $content .= "API_RATE_LIMIT=\"{$config['API_RATE_LIMIT']}\"\n\n";
 
     $content .= "# Category Colors\n";
-    $content .= "COLOR_BRAND_NEW=\"{$config['COLOR_BRAND_NEW']}\"\n";
-    $content .= "COLOR_NEWISH=\"{$config['COLOR_NEWISH']}\"\n";
-    $content .= "COLOR_NORMAL=\"{$config['COLOR_NORMAL']}\"\n";
-    $content .= "COLOR_AGED=\"{$config['COLOR_AGED']}\"\n";
-    $content .= "COLOR_OLD=\"{$config['COLOR_OLD']}\"\n";
-    $content .= "COLOR_ELDERLY=\"{$config['COLOR_ELDERLY']}\"\n\n";
+    $content .= "COLOR_MINIMAL_RISK=\"{$config['COLOR_MINIMAL_RISK']}\"\n";
+    $content .= "COLOR_LOW_RISK=\"{$config['COLOR_LOW_RISK']}\"\n";
+    $content .= "COLOR_MODERATE_RISK=\"{$config['COLOR_MODERATE_RISK']}\"\n";
+    $content .= "COLOR_ELEVATED_RISK=\"{$config['COLOR_ELEVATED_RISK']}\"\n";
+    $content .= "COLOR_HIGH_RISK=\"{$config['COLOR_HIGH_RISK']}\"\n\n";
 
     $content .= "# Category Text Colors\n";
-    $content .= "TEXTCOLOR_BRAND_NEW=\"{$config['TEXTCOLOR_BRAND_NEW']}\"\n";
-    $content .= "TEXTCOLOR_NEWISH=\"{$config['TEXTCOLOR_NEWISH']}\"\n";
-    $content .= "TEXTCOLOR_NORMAL=\"{$config['TEXTCOLOR_NORMAL']}\"\n";
-    $content .= "TEXTCOLOR_AGED=\"{$config['TEXTCOLOR_AGED']}\"\n";
-    $content .= "TEXTCOLOR_OLD=\"{$config['TEXTCOLOR_OLD']}\"\n";
-    $content .= "TEXTCOLOR_ELDERLY=\"{$config['TEXTCOLOR_ELDERLY']}\"\n\n";
+    $content .= "TEXTCOLOR_MINIMAL_RISK=\"{$config['TEXTCOLOR_MINIMAL_RISK']}\"\n";
+    $content .= "TEXTCOLOR_LOW_RISK=\"{$config['TEXTCOLOR_LOW_RISK']}\"\n";
+    $content .= "TEXTCOLOR_MODERATE_RISK=\"{$config['TEXTCOLOR_MODERATE_RISK']}\"\n";
+    $content .= "TEXTCOLOR_ELEVATED_RISK=\"{$config['TEXTCOLOR_ELEVATED_RISK']}\"\n";
+    $content .= "TEXTCOLOR_HIGH_RISK=\"{$config['TEXTCOLOR_HIGH_RISK']}\"\n\n";
 
     $content .= "# Category Labels\n";
-    $content .= "LABEL_BRAND_NEW=\"{$config['LABEL_BRAND_NEW']}\"\n";
-    $content .= "LABEL_NEWISH=\"{$config['LABEL_NEWISH']}\"\n";
-    $content .= "LABEL_NORMAL=\"{$config['LABEL_NORMAL']}\"\n";
-    $content .= "LABEL_AGED=\"{$config['LABEL_AGED']}\"\n";
-    $content .= "LABEL_OLD=\"{$config['LABEL_OLD']}\"\n";
-    $content .= "LABEL_ELDERLY=\"{$config['LABEL_ELDERLY']}\"\n";
+    $content .= "LABEL_MINIMAL_RISK=\"{$config['LABEL_MINIMAL_RISK']}\"\n";
+    $content .= "LABEL_LOW_RISK=\"{$config['LABEL_LOW_RISK']}\"\n";
+    $content .= "LABEL_MODERATE_RISK=\"{$config['LABEL_MODERATE_RISK']}\"\n";
+    $content .= "LABEL_ELEVATED_RISK=\"{$config['LABEL_ELEVATED_RISK']}\"\n";
+    $content .= "LABEL_HIGH_RISK=\"{$config['LABEL_HIGH_RISK']}\"\n";
 
     return file_put_contents(DRIVEAGE_CONFIG_FILE, $content) !== false;
 }
@@ -256,11 +249,10 @@ function validateConfig($config) {
     $maxThreshold = 876600; // 100 years in hours
 
     $thresholds = [
-        'THRESHOLD_BRAND_NEW' => max(0, min($maxThreshold, intval($config['THRESHOLD_BRAND_NEW'] ?? $defaults['THRESHOLD_BRAND_NEW']))),
-        'THRESHOLD_NEWISH' => max(0, min($maxThreshold, intval($config['THRESHOLD_NEWISH'] ?? $defaults['THRESHOLD_NEWISH']))),
-        'THRESHOLD_NORMAL' => max(0, min($maxThreshold, intval($config['THRESHOLD_NORMAL'] ?? $defaults['THRESHOLD_NORMAL']))),
-        'THRESHOLD_AGED' => max(0, min($maxThreshold, intval($config['THRESHOLD_AGED'] ?? $defaults['THRESHOLD_AGED']))),
-        'THRESHOLD_OLD' => max(0, min($maxThreshold, intval($config['THRESHOLD_OLD'] ?? $defaults['THRESHOLD_OLD'])))
+        'THRESHOLD_MINIMAL_RISK' => max(0, min($maxThreshold, intval($config['THRESHOLD_MINIMAL_RISK'] ?? $defaults['THRESHOLD_MINIMAL_RISK']))),
+        'THRESHOLD_LOW_RISK' => max(0, min($maxThreshold, intval($config['THRESHOLD_LOW_RISK'] ?? $defaults['THRESHOLD_LOW_RISK']))),
+        'THRESHOLD_MODERATE_RISK' => max(0, min($maxThreshold, intval($config['THRESHOLD_MODERATE_RISK'] ?? $defaults['THRESHOLD_MODERATE_RISK']))),
+        'THRESHOLD_ELEVATED_RISK' => max(0, min($maxThreshold, intval($config['THRESHOLD_ELEVATED_RISK'] ?? $defaults['THRESHOLD_ELEVATED_RISK'])))
     ];
 
     // Validate ascending order
@@ -279,11 +271,10 @@ function validateConfig($config) {
         // Reset to defaults
         $defaults_thresh = getDefaultConfig();
         $thresholds = [
-            'THRESHOLD_BRAND_NEW' => $defaults_thresh['THRESHOLD_BRAND_NEW'],
-            'THRESHOLD_NEWISH' => $defaults_thresh['THRESHOLD_NEWISH'],
-            'THRESHOLD_NORMAL' => $defaults_thresh['THRESHOLD_NORMAL'],
-            'THRESHOLD_AGED' => $defaults_thresh['THRESHOLD_AGED'],
-            'THRESHOLD_OLD' => $defaults_thresh['THRESHOLD_OLD']
+            'THRESHOLD_MINIMAL_RISK' => $defaults_thresh['THRESHOLD_MINIMAL_RISK'],
+            'THRESHOLD_LOW_RISK' => $defaults_thresh['THRESHOLD_LOW_RISK'],
+            'THRESHOLD_MODERATE_RISK' => $defaults_thresh['THRESHOLD_MODERATE_RISK'],
+            'THRESHOLD_ELEVATED_RISK' => $defaults_thresh['THRESHOLD_ELEVATED_RISK']
         ];
     }
 
@@ -306,12 +297,11 @@ function validateConfig($config) {
 
     // Category colors validation
     $colorFields = [
-        'COLOR_BRAND_NEW',
-        'COLOR_NEWISH',
-        'COLOR_NORMAL',
-        'COLOR_AGED',
-        'COLOR_OLD',
-        'COLOR_ELDERLY'
+        'COLOR_MINIMAL_RISK',
+        'COLOR_LOW_RISK',
+        'COLOR_MODERATE_RISK',
+        'COLOR_ELEVATED_RISK',
+        'COLOR_HIGH_RISK'
     ];
 
     // Validate format and normalize
@@ -331,12 +321,11 @@ function validateConfig($config) {
 
     // Category text colors validation
     $textColorFields = [
-        'TEXTCOLOR_BRAND_NEW',
-        'TEXTCOLOR_NEWISH',
-        'TEXTCOLOR_NORMAL',
-        'TEXTCOLOR_AGED',
-        'TEXTCOLOR_OLD',
-        'TEXTCOLOR_ELDERLY'
+        'TEXTCOLOR_MINIMAL_RISK',
+        'TEXTCOLOR_LOW_RISK',
+        'TEXTCOLOR_MODERATE_RISK',
+        'TEXTCOLOR_ELEVATED_RISK',
+        'TEXTCOLOR_HIGH_RISK'
     ];
 
     // Validate format and normalize (no uniqueness check for text colors)
@@ -347,12 +336,11 @@ function validateConfig($config) {
 
     // Category labels validation
     $labelFields = [
-        'LABEL_BRAND_NEW',
-        'LABEL_NEWISH',
-        'LABEL_NORMAL',
-        'LABEL_AGED',
-        'LABEL_OLD',
-        'LABEL_ELDERLY'
+        'LABEL_MINIMAL_RISK',
+        'LABEL_LOW_RISK',
+        'LABEL_MODERATE_RISK',
+        'LABEL_ELEVATED_RISK',
+        'LABEL_HIGH_RISK'
     ];
 
     foreach ($labelFields as $field) {
@@ -376,18 +364,16 @@ function validateConfig($config) {
  * Get age category based on power-on hours and configured thresholds
  */
 function getAgeCategory($hours, $config) {
-    if ($hours < intval($config['THRESHOLD_BRAND_NEW'])) {
-        return 'brand_new';
-    } elseif ($hours < intval($config['THRESHOLD_NEWISH'])) {
-        return 'newish';
-    } elseif ($hours < intval($config['THRESHOLD_NORMAL'])) {
-        return 'normal';
-    } elseif ($hours < intval($config['THRESHOLD_AGED'])) {
-        return 'aged';
-    } elseif ($hours < intval($config['THRESHOLD_OLD'])) {
-        return 'old';
+    if ($hours < intval($config['THRESHOLD_MINIMAL_RISK'])) {
+        return 'minimal_risk';
+    } elseif ($hours < intval($config['THRESHOLD_LOW_RISK'])) {
+        return 'low_risk';
+    } elseif ($hours < intval($config['THRESHOLD_MODERATE_RISK'])) {
+        return 'moderate_risk';
+    } elseif ($hours < intval($config['THRESHOLD_ELEVATED_RISK'])) {
+        return 'elevated_risk';
     } else {
-        return 'elderly';
+        return 'high_risk';
     }
 }
 
@@ -400,7 +386,7 @@ function getAgeColorClass($category) {
 
 /**
  * Get human-readable label for age category
- * @param string $category The age category (brand_new, newish, etc.)
+ * @param string $category The age category (minimal_risk, low_risk, etc.)
  * @param array|null $config Optional configuration array with custom labels
  * @return string The label for the category
  */
@@ -415,12 +401,11 @@ function getAgeLabel($category, $config = null) {
 
     // Fallback to default labels
     $labels = [
-        'brand_new' => 'Brand New',
-        'newish' => 'Newish',
-        'normal' => 'Mature',
-        'aged' => 'Aged',
-        'old' => 'Old',
-        'elderly' => 'Elderly'
+        'minimal_risk' => 'Minimal Risk (AFR <1%)',
+        'low_risk' => 'Low Risk (AFR 1-2%)',
+        'moderate_risk' => 'Moderate Risk (AFR 2-5%)',
+        'elevated_risk' => 'Elevated Risk (AFR 5-10%)',
+        'high_risk' => 'High Risk (AFR >10%)'
     ];
 
     return $labels[$category] ?? 'Unknown';
