@@ -51,27 +51,24 @@ try {
         'drives' => $drives,
         'grouped' => $grouped,
         'thresholds' => [
-            'brand_new' => intval($config['THRESHOLD_BRAND_NEW']),
-            'newish' => intval($config['THRESHOLD_NEWISH']),
-            'normal' => intval($config['THRESHOLD_NORMAL']),
-            'aged' => intval($config['THRESHOLD_AGED']),
-            'old' => intval($config['THRESHOLD_OLD'])
+            'minimal_risk' => intval($config['THRESHOLD_MINIMAL_RISK']),
+            'low_risk' => intval($config['THRESHOLD_LOW_RISK']),
+            'moderate_risk' => intval($config['THRESHOLD_MODERATE_RISK']),
+            'elevated_risk' => intval($config['THRESHOLD_ELEVATED_RISK'])
         ],
         'colors' => [
-            'brand_new' => $config['COLOR_BRAND_NEW'],
-            'newish' => $config['COLOR_NEWISH'],
-            'normal' => $config['COLOR_NORMAL'],
-            'aged' => $config['COLOR_AGED'],
-            'old' => $config['COLOR_OLD'],
-            'elderly' => $config['COLOR_ELDERLY']
+            'minimal_risk' => $config['COLOR_MINIMAL_RISK'],
+            'low_risk' => $config['COLOR_LOW_RISK'],
+            'moderate_risk' => $config['COLOR_MODERATE_RISK'],
+            'elevated_risk' => $config['COLOR_ELEVATED_RISK'],
+            'high_risk' => $config['COLOR_HIGH_RISK']
         ],
         'text_colors' => [
-            'brand_new' => $config['TEXTCOLOR_BRAND_NEW'],
-            'newish' => $config['TEXTCOLOR_NEWISH'],
-            'normal' => $config['TEXTCOLOR_NORMAL'],
-            'aged' => $config['TEXTCOLOR_AGED'],
-            'old' => $config['TEXTCOLOR_OLD'],
-            'elderly' => $config['TEXTCOLOR_ELDERLY']
+            'minimal_risk' => $config['TEXTCOLOR_MINIMAL_RISK'],
+            'low_risk' => $config['TEXTCOLOR_LOW_RISK'],
+            'moderate_risk' => $config['TEXTCOLOR_MODERATE_RISK'],
+            'elevated_risk' => $config['TEXTCOLOR_ELEVATED_RISK'],
+            'high_risk' => $config['TEXTCOLOR_HIGH_RISK']
         ],
         'config' => [
             'show_temperature' => $config['SHOW_TEMPERATURE'] === 'true',

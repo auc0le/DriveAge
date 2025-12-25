@@ -114,7 +114,7 @@ function applyDynamicColors() {
         return;
     }
 
-    const categories = ['brand_new', 'newish', 'normal', 'aged', 'old', 'elderly'];
+    const categories = ['minimal_risk', 'low_risk', 'moderate_risk', 'elevated_risk', 'high_risk'];
 
     categories.forEach(category => {
         const bgColor = driveData.colors[category];

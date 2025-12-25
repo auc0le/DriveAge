@@ -19,7 +19,7 @@ function hoursToYears($hours) {
 }
 
 // Cache busting version - use simple incrementing version number
-$cacheVersion = '2025.12.25-22';
+$cacheVersion = '2025.12.25-24';
 ?>
 <link rel="stylesheet" href="/plugins/driveage/styles/driveage.css?v=<?= $cacheVersion; ?>">
 
@@ -318,23 +318,23 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
             <div class="settings-form">
                 <!-- Age Categories Section -->
                 <div class="settings-section">
-                    <h3>Age Categories</h3>
-                    <p>Customize the label, maximum age threshold, and color for each category. Categories progress from youngest to oldest drives. Each category must have a unique color, and thresholds must be in ascending order.</p>
+                    <h3>Risk Categories</h3>
+                    <p>Customize the label, maximum age threshold, and color for each risk category. Categories progress from lowest to highest failure risk based on Annual Failure Rate (AFR) data. Each category must have a unique color, and thresholds must be in ascending order.</p>
 
                     <div id="color-error" style="display:none;" class="error-box"></div>
 
                     <div class="category-grid">
-                        <!-- Category 1 -->
+                        <!-- Category 1: Minimal Risk -->
                         <div class="category-card">
-                            <h4>Category 1</h4>
+                            <h4>Category 1: Minimal Risk</h4>
                             <div class="form-row">
                                 <label>Label:</label>
                                 <input type="text"
-                                       name="LABEL_BRAND_NEW"
-                                       value="<?= e($config['LABEL_BRAND_NEW']); ?>"
+                                       name="LABEL_MINIMAL_RISK"
+                                       value="<?= e($config['LABEL_MINIMAL_RISK']); ?>"
                                        maxlength="50"
                                        placeholder="Category name"
-                                       data-category="brand_new"
+                                       data-category="minimal_risk"
                                        class="label-input">
                             </div>
                             <div class="form-row">
@@ -342,12 +342,12 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
                                 <div class="threshold-row">
                                     <input type="number"
                                            class="threshold-years"
-                                           data-field="THRESHOLD_BRAND_NEW"
-                                           value="<?= e(hoursToYears($config['THRESHOLD_BRAND_NEW'])); ?>"
+                                           data-field="THRESHOLD_MINIMAL_RISK"
+                                           value="<?= e(hoursToYears($config['THRESHOLD_MINIMAL_RISK'])); ?>"
                                            min="0"
                                            step="0.1">
                                     <span class="unit">years</span>
-                                    <input type="hidden" name="THRESHOLD_BRAND_NEW" value="<?= e($config['THRESHOLD_BRAND_NEW']); ?>">
+                                    <input type="hidden" name="THRESHOLD_MINIMAL_RISK" value="<?= e($config['THRESHOLD_MINIMAL_RISK']); ?>">
                                 </div>
                                 <small class="help-text">Drives under this age</small>
                             </div>
@@ -355,35 +355,35 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
                                 <label>Colors:</label>
                                 <div class="color-row">
                                     <input type="color"
-                                           name="COLOR_BRAND_NEW"
-                                           value="<?= e($config['COLOR_BRAND_NEW']); ?>"
+                                           name="COLOR_MINIMAL_RISK"
+                                           value="<?= e($config['COLOR_MINIMAL_RISK']); ?>"
                                            required
-                                           data-category="brand_new"
+                                           data-category="minimal_risk"
                                            title="Background color"
                                            class="color-input bg-color">
-                                    <div class="color-preview-inline" data-category="brand_new">Preview</div>
+                                    <div class="color-preview-inline" data-category="minimal_risk">Preview</div>
                                     <input type="color"
-                                           name="TEXTCOLOR_BRAND_NEW"
-                                           value="<?= e($config['TEXTCOLOR_BRAND_NEW']); ?>"
+                                           name="TEXTCOLOR_MINIMAL_RISK"
+                                           value="<?= e($config['TEXTCOLOR_MINIMAL_RISK']); ?>"
                                            required
-                                           data-category="brand_new"
+                                           data-category="minimal_risk"
                                            title="Text color"
                                            class="color-input text-color">
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Category 2 -->
+                        <!-- Category 2: Low Risk -->
                         <div class="category-card">
-                            <h4>Category 2</h4>
+                            <h4>Category 2: Low Risk</h4>
                             <div class="form-row">
                                 <label>Label:</label>
                                 <input type="text"
-                                       name="LABEL_NEWISH"
-                                       value="<?= e($config['LABEL_NEWISH']); ?>"
+                                       name="LABEL_LOW_RISK"
+                                       value="<?= e($config['LABEL_LOW_RISK']); ?>"
                                        maxlength="50"
                                        placeholder="Category name"
-                                       data-category="newish"
+                                       data-category="low_risk"
                                        class="label-input">
                             </div>
                             <div class="form-row">
@@ -391,12 +391,12 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
                                 <div class="threshold-row">
                                     <input type="number"
                                            class="threshold-years"
-                                           data-field="THRESHOLD_NEWISH"
-                                           value="<?= e(hoursToYears($config['THRESHOLD_NEWISH'])); ?>"
+                                           data-field="THRESHOLD_LOW_RISK"
+                                           value="<?= e(hoursToYears($config['THRESHOLD_LOW_RISK'])); ?>"
                                            min="0"
                                            step="0.1">
                                     <span class="unit">years</span>
-                                    <input type="hidden" name="THRESHOLD_NEWISH" value="<?= e($config['THRESHOLD_NEWISH']); ?>">
+                                    <input type="hidden" name="THRESHOLD_LOW_RISK" value="<?= e($config['THRESHOLD_LOW_RISK']); ?>">
                                 </div>
                                 <small class="help-text">Drives under this age</small>
                             </div>
@@ -404,35 +404,35 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
                                 <label>Colors:</label>
                                 <div class="color-row">
                                     <input type="color"
-                                           name="COLOR_NEWISH"
-                                           value="<?= e($config['COLOR_NEWISH']); ?>"
+                                           name="COLOR_LOW_RISK"
+                                           value="<?= e($config['COLOR_LOW_RISK']); ?>"
                                            required
-                                           data-category="newish"
+                                           data-category="low_risk"
                                            title="Background color"
                                            class="color-input bg-color">
-                                    <div class="color-preview-inline" data-category="newish">Preview</div>
+                                    <div class="color-preview-inline" data-category="low_risk">Preview</div>
                                     <input type="color"
-                                           name="TEXTCOLOR_NEWISH"
-                                           value="<?= e($config['TEXTCOLOR_NEWISH']); ?>"
+                                           name="TEXTCOLOR_LOW_RISK"
+                                           value="<?= e($config['TEXTCOLOR_LOW_RISK']); ?>"
                                            required
-                                           data-category="newish"
+                                           data-category="low_risk"
                                            title="Text color"
                                            class="color-input text-color">
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Category 3 -->
+                        <!-- Category 3: Moderate Risk -->
                         <div class="category-card">
-                            <h4>Category 3</h4>
+                            <h4>Category 3: Moderate Risk</h4>
                             <div class="form-row">
                                 <label>Label:</label>
                                 <input type="text"
-                                       name="LABEL_NORMAL"
-                                       value="<?= e($config['LABEL_NORMAL']); ?>"
+                                       name="LABEL_MODERATE_RISK"
+                                       value="<?= e($config['LABEL_MODERATE_RISK']); ?>"
                                        maxlength="50"
                                        placeholder="Category name"
-                                       data-category="normal"
+                                       data-category="moderate_risk"
                                        class="label-input">
                             </div>
                             <div class="form-row">
@@ -440,12 +440,12 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
                                 <div class="threshold-row">
                                     <input type="number"
                                            class="threshold-years"
-                                           data-field="THRESHOLD_NORMAL"
-                                           value="<?= e(hoursToYears($config['THRESHOLD_NORMAL'])); ?>"
+                                           data-field="THRESHOLD_MODERATE_RISK"
+                                           value="<?= e(hoursToYears($config['THRESHOLD_MODERATE_RISK'])); ?>"
                                            min="0"
                                            step="0.1">
                                     <span class="unit">years</span>
-                                    <input type="hidden" name="THRESHOLD_NORMAL" value="<?= e($config['THRESHOLD_NORMAL']); ?>">
+                                    <input type="hidden" name="THRESHOLD_MODERATE_RISK" value="<?= e($config['THRESHOLD_MODERATE_RISK']); ?>">
                                 </div>
                                 <small class="help-text">Drives under this age</small>
                             </div>
@@ -453,35 +453,35 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
                                 <label>Colors:</label>
                                 <div class="color-row">
                                     <input type="color"
-                                           name="COLOR_NORMAL"
-                                           value="<?= e($config['COLOR_NORMAL']); ?>"
+                                           name="COLOR_MODERATE_RISK"
+                                           value="<?= e($config['COLOR_MODERATE_RISK']); ?>"
                                            required
-                                           data-category="normal"
+                                           data-category="moderate_risk"
                                            title="Background color"
                                            class="color-input bg-color">
-                                    <div class="color-preview-inline" data-category="normal">Preview</div>
+                                    <div class="color-preview-inline" data-category="moderate_risk">Preview</div>
                                     <input type="color"
-                                           name="TEXTCOLOR_NORMAL"
-                                           value="<?= e($config['TEXTCOLOR_NORMAL']); ?>"
+                                           name="TEXTCOLOR_MODERATE_RISK"
+                                           value="<?= e($config['TEXTCOLOR_MODERATE_RISK']); ?>"
                                            required
-                                           data-category="normal"
+                                           data-category="moderate_risk"
                                            title="Text color"
                                            class="color-input text-color">
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Category 4 -->
+                        <!-- Category 4: Elevated Risk -->
                         <div class="category-card">
-                            <h4>Category 4</h4>
+                            <h4>Category 4: Elevated Risk</h4>
                             <div class="form-row">
                                 <label>Label:</label>
                                 <input type="text"
-                                       name="LABEL_AGED"
-                                       value="<?= e($config['LABEL_AGED']); ?>"
+                                       name="LABEL_ELEVATED_RISK"
+                                       value="<?= e($config['LABEL_ELEVATED_RISK']); ?>"
                                        maxlength="50"
                                        placeholder="Category name"
-                                       data-category="aged"
+                                       data-category="elevated_risk"
                                        class="label-input">
                             </div>
                             <div class="form-row">
@@ -489,12 +489,12 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
                                 <div class="threshold-row">
                                     <input type="number"
                                            class="threshold-years"
-                                           data-field="THRESHOLD_AGED"
-                                           value="<?= e(hoursToYears($config['THRESHOLD_AGED'])); ?>"
+                                           data-field="THRESHOLD_ELEVATED_RISK"
+                                           value="<?= e(hoursToYears($config['THRESHOLD_ELEVATED_RISK'])); ?>"
                                            min="0"
                                            step="0.1">
                                     <span class="unit">years</span>
-                                    <input type="hidden" name="THRESHOLD_AGED" value="<?= e($config['THRESHOLD_AGED']); ?>">
+                                    <input type="hidden" name="THRESHOLD_ELEVATED_RISK" value="<?= e($config['THRESHOLD_ELEVATED_RISK']); ?>">
                                 </div>
                                 <small class="help-text">Drives under this age</small>
                             </div>
@@ -502,84 +502,35 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
                                 <label>Colors:</label>
                                 <div class="color-row">
                                     <input type="color"
-                                           name="COLOR_AGED"
-                                           value="<?= e($config['COLOR_AGED']); ?>"
+                                           name="COLOR_ELEVATED_RISK"
+                                           value="<?= e($config['COLOR_ELEVATED_RISK']); ?>"
                                            required
-                                           data-category="aged"
+                                           data-category="elevated_risk"
                                            title="Background color"
                                            class="color-input bg-color">
-                                    <div class="color-preview-inline" data-category="aged">Preview</div>
+                                    <div class="color-preview-inline" data-category="elevated_risk">Preview</div>
                                     <input type="color"
-                                           name="TEXTCOLOR_AGED"
-                                           value="<?= e($config['TEXTCOLOR_AGED']); ?>"
+                                           name="TEXTCOLOR_ELEVATED_RISK"
+                                           value="<?= e($config['TEXTCOLOR_ELEVATED_RISK']); ?>"
                                            required
-                                           data-category="aged"
+                                           data-category="elevated_risk"
                                            title="Text color"
                                            class="color-input text-color">
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Category 5 -->
+                        <!-- Category 5: High Risk -->
                         <div class="category-card">
-                            <h4>Category 5</h4>
+                            <h4>Category 5: High Risk</h4>
                             <div class="form-row">
                                 <label>Label:</label>
                                 <input type="text"
-                                       name="LABEL_OLD"
-                                       value="<?= e($config['LABEL_OLD']); ?>"
+                                       name="LABEL_HIGH_RISK"
+                                       value="<?= e($config['LABEL_HIGH_RISK']); ?>"
                                        maxlength="50"
                                        placeholder="Category name"
-                                       data-category="old"
-                                       class="label-input">
-                            </div>
-                            <div class="form-row">
-                                <label>Max Age:</label>
-                                <div class="threshold-row">
-                                    <input type="number"
-                                           class="threshold-years"
-                                           data-field="THRESHOLD_OLD"
-                                           value="<?= e(hoursToYears($config['THRESHOLD_OLD'])); ?>"
-                                           min="0"
-                                           step="0.1">
-                                    <span class="unit">years</span>
-                                    <input type="hidden" name="THRESHOLD_OLD" value="<?= e($config['THRESHOLD_OLD']); ?>">
-                                </div>
-                                <small class="help-text">Drives under this age</small>
-                            </div>
-                            <div class="form-row">
-                                <label>Colors:</label>
-                                <div class="color-row">
-                                    <input type="color"
-                                           name="COLOR_OLD"
-                                           value="<?= e($config['COLOR_OLD']); ?>"
-                                           required
-                                           data-category="old"
-                                           title="Background color"
-                                           class="color-input bg-color">
-                                    <div class="color-preview-inline" data-category="old">Preview</div>
-                                    <input type="color"
-                                           name="TEXTCOLOR_OLD"
-                                           value="<?= e($config['TEXTCOLOR_OLD']); ?>"
-                                           required
-                                           data-category="old"
-                                           title="Text color"
-                                           class="color-input text-color">
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Category 6 -->
-                        <div class="category-card">
-                            <h4>Category 6</h4>
-                            <div class="form-row">
-                                <label>Label:</label>
-                                <input type="text"
-                                       name="LABEL_ELDERLY"
-                                       value="<?= e($config['LABEL_ELDERLY']); ?>"
-                                       maxlength="50"
-                                       placeholder="Category name"
-                                       data-category="elderly"
+                                       data-category="high_risk"
                                        class="label-input">
                             </div>
                             <div class="form-row">
@@ -587,259 +538,26 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
                                 <div class="threshold-row">
                                     <input type="text" value="No limit" disabled style="background: #f5f5f5;">
                                 </div>
-                                <small class="help-text">All drives above Category 5</small>
+                                <small class="help-text">All drives above Category 4</small>
                             </div>
                             <div class="form-row">
                                 <label>Colors:</label>
                                 <div class="color-row">
                                     <input type="color"
-                                           name="COLOR_ELDERLY"
-                                           value="<?= e($config['COLOR_ELDERLY']); ?>"
+                                           name="COLOR_HIGH_RISK"
+                                           value="<?= e($config['COLOR_HIGH_RISK']); ?>"
                                            required
-                                           data-category="elderly"
+                                           data-category="high_risk"
                                            title="Background color"
                                            class="color-input bg-color">
-                                    <div class="color-preview-inline" data-category="elderly">Preview</div>
+                                    <div class="color-preview-inline" data-category="high_risk">Preview</div>
                                     <input type="color"
-                                           name="TEXTCOLOR_ELDERLY"
-                                           value="<?= e($config['TEXTCOLOR_ELDERLY']); ?>"
+                                           name="TEXTCOLOR_HIGH_RISK"
+                                           value="<?= e($config['TEXTCOLOR_HIGH_RISK']); ?>"
                                            required
-                                           data-category="elderly"
+                                           data-category="high_risk"
                                            title="Text color"
                                            class="color-input text-color">
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </div>
-
-                <!-- Display Options Section -->
-                <div class="settings-section">
-                    <h3>Display Options</h3>
-
-                    <div class="form-group">
-                        <label>Default Sorting</label>
-                        <select name="DEFAULT_SORT">
-                            <option value="power_on_hours" <?= selected($config['DEFAULT_SORT'], 'power_on_hours'); ?>>Power On Hours</option>
-                            <option value="device_name" <?= selected($config['DEFAULT_SORT'], 'device_name'); ?>>Device Name</option>
-                            <option value="size_bytes" <?= selected($config['DEFAULT_SORT'], 'size_bytes'); ?>>Size</option>
-                            <option value="temperature" <?= selected($config['DEFAULT_SORT'], 'temperature'); ?>>Temperature</option>
-                        </select>
-                        <select name="DEFAULT_SORT_DIR">
-                            <option value="desc" <?= selected($config['DEFAULT_SORT_DIR'], 'desc'); ?>>Descending</option>
-                            <option value="asc" <?= selected($config['DEFAULT_SORT_DIR'], 'asc'); ?>>Ascending</option>
-                        </select>
-                        <div class="help-text">Default column and sort direction</div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Show Drive Types</label>
-                        <div>
-                            <input type="hidden" name="SHOW_PARITY" value="false">
-                            <label><input type="checkbox" name="SHOW_PARITY" value="true" <?= checked($config['SHOW_PARITY']); ?>> Parity Disks</label><br>
-                            <input type="hidden" name="SHOW_ARRAY" value="false">
-                            <label><input type="checkbox" name="SHOW_ARRAY" value="true" <?= checked($config['SHOW_ARRAY']); ?>> Array Disks</label><br>
-                            <input type="hidden" name="SHOW_CACHE" value="false">
-                            <label><input type="checkbox" name="SHOW_CACHE" value="true" <?= checked($config['SHOW_CACHE']); ?>> Cache Disks</label><br>
-                            <input type="hidden" name="SHOW_POOL" value="false">
-                            <label><input type="checkbox" name="SHOW_POOL" value="true" <?= checked($config['SHOW_POOL']); ?>> Pool Disks</label><br>
-                            <input type="hidden" name="SHOW_UNASSIGNED" value="false">
-                            <label><input type="checkbox" name="SHOW_UNASSIGNED" value="true" <?= checked($config['SHOW_UNASSIGNED']); ?>> Unassigned Devices</label>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Show Columns</label>
-                        <div>
-                            <input type="hidden" name="SHOW_TEMPERATURE" value="false">
-                            <label><input type="checkbox" name="SHOW_TEMPERATURE" value="true" <?= checked($config['SHOW_TEMPERATURE']); ?>> Temperature</label><br>
-                            <input type="hidden" name="SHOW_SMART_STATUS" value="false">
-                            <label><input type="checkbox" name="SHOW_SMART_STATUS" value="true" <?= checked($config['SHOW_SMART_STATUS']); ?>> SMART Status</label><br>
-                            <input type="hidden" name="SHOW_SPIN_STATUS" value="false">
-                            <label><input type="checkbox" name="SHOW_SPIN_STATUS" value="true" <?= checked($config['SHOW_SPIN_STATUS']); ?>> Spin Status</label>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Refresh Options Section -->
-                <div class="settings-section">
-                    <h3>Refresh Options</h3>
-
-                    <div class="form-group">
-                        <input type="hidden" name="AUTO_REFRESH" value="false">
-                        <label><input type="checkbox" name="AUTO_REFRESH" value="true" <?= checked($config['AUTO_REFRESH']); ?>> Enable Auto-Refresh</label>
-                        <div class="help-text">Automatically refresh drive data at specified interval</div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Refresh Interval (seconds)</label>
-                        <input type="number" name="REFRESH_INTERVAL" value="<?= e($config['REFRESH_INTERVAL']); ?>" min="30" max="3600" step="30">
-                        <div class="help-text">How often to refresh data (30-3600 seconds)</div>
-                    </div>
-                </div>
-
-                <!-- JSON API Settings Section -->
-                <div class="settings-section">
-                    <h3>JSON API Settings</h3>
-                    <div class="warning-box">
-                        <strong>Security Warning:</strong> The JSON API exposes drive information via HTTP endpoint.
-                        Only enable if you need to integrate with external monitoring tools.
-                        Rate limiting is enforced to prevent abuse.
-                    </div>
-
-                    <div class="form-group">
-                        <input type="hidden" name="API_ENABLED" value="false">
-                        <label><input type="checkbox" name="API_ENABLED" value="true" <?= checked($config['API_ENABLED']); ?>> Enable JSON API</label>
-                        <div class="help-text">Enable external access to drive data via JSON endpoint</div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Rate Limit (requests per minute)</label>
-                        <input type="number" name="API_RATE_LIMIT" value="<?= e($config['API_RATE_LIMIT']); ?>" min="10" max="1000" step="10">
-                        <div class="help-text">Maximum API calls allowed per minute (10-1000)</div>
-                    </div>
-
-                    <?PHP if ($config['API_ENABLED'] === 'true'): ?>
-                    <div class="form-group">
-                        <label>API Endpoint</label>
-                        <input type="text" value="/plugins/driveage/scripts/get_drive_data.php" readonly onclick="this.select()">
-                        <div class="help-text">Click to select and copy the endpoint URL</div>
-                    </div>
-                    <?PHP endif; ?>
-                </div>
-
-                <!-- Action Buttons -->
-                <div class="buttons">
-                    <input type="submit" value="Apply Settings" class="btn-primary">
-                    <button type="button" onclick="resetToDefaults()" class="btn-danger">Reset to Defaults</button>
-                    <button type="button" onclick="window.location.href='/Settings/DriveAge'" class="btn-secondary">Back to Dashboard</button>
-                </div>
-            </div>
-        </form>
-
-        <iframe name="progressFrame" style="display:none;"></iframe>
-    </div>
-</div>
-
-<script>
-// Unified category settings real-time preview and validation
-document.addEventListener('DOMContentLoaded', function() {
-    const colorInputs = document.querySelectorAll('.color-input');
-    const labelInputs = document.querySelectorAll('.label-input');
-    const thresholdInputs = document.querySelectorAll('.threshold-years');
-    const form = document.querySelector('form');
-    const submitButton = form.querySelector('input[type="submit"]');
-
-    // Intercept form submission to set settings changed flag
-    form.addEventListener('submit', function(e) {
-        // Set flag in localStorage to trigger dashboard to reload data
-        // No cache clearing needed - we rely on Unraid's emhttpd cache
-        // Settings changes (labels, colors) are applied dynamically via JavaScript
-        localStorage.setItem('driveage_settings_changed', Date.now().toString());
-        console.log('DriveAge settings changed flag set');
-
-        // Let form submission continue to /update.php
-    });
-
-    // Real-time preview updates for colors
-    colorInputs.forEach(input => {
-        input.addEventListener('input', function() {
-            const category = this.dataset.category;
-            const colorRow = this.closest('.color-row');
-            const preview = colorRow.querySelector('.color-preview-inline');
-
-            // Get both background and text colors for this category
-            const bgColor = colorRow.querySelector('.bg-color').value.toUpperCase();
-            const textColor = colorRow.querySelector('.text-color').value.toUpperCase();
-
-            // Update preview with both colors
-            preview.style.backgroundColor = bgColor;
-            preview.style.color = textColor;
-
-            // Check for duplicates (only for background colors)
-            if (this.classList.contains('bg-color')) {
-                checkDuplicateColors();
-            }
-        });
-    });
-
-    // Threshold year-to-hour conversion
-    thresholdInputs.forEach(input => {
-        input.addEventListener('input', function() {
-            const years = parseFloat(this.value) || 0;
-            const hours = Math.round(years * 8760);
-            const field = this.dataset.field;
-            const hiddenInput = document.querySelector(`input[name="${field}"]`);
-            if (hiddenInput) {
-                hiddenInput.value = hours;
-            }
-        });
-    });
-
-    // Duplicate color validation (only for background colors)
-    function checkDuplicateColors() {
-        const bgColorInputs = document.querySelectorAll('.bg-color');
-        const colors = Array.from(bgColorInputs).map(input => input.value.toUpperCase());
-        const hasDuplicates = colors.length !== new Set(colors).size;
-
-        if (hasDuplicates) {
-            // Highlight duplicates (only background color inputs)
-            bgColorInputs.forEach((input, index) => {
-                const color = input.value.toUpperCase();
-                const isDuplicate = colors.filter(c => c === color).length > 1;
-                if (isDuplicate) {
-                    input.classList.add('duplicate');
-                } else {
-                    input.classList.remove('duplicate');
-                }
-            });
-
-            // Show error message
-            showErrorMessage('Error: Each category must have a unique color. Please change the highlighted color pickers.');
-
-            // Disable submit
-            submitButton.disabled = true;
-            submitButton.style.opacity = '0.5';
-            submitButton.style.cursor = 'not-allowed';
-        } else {
-            // Clear highlights
-            bgColorInputs.forEach(input => {
-                input.classList.remove('duplicate');
-            });
-
-            hideErrorMessage();
-            submitButton.disabled = false;
-            submitButton.style.opacity = '1';
-            submitButton.style.cursor = 'pointer';
-        }
-    }
-
-    function showErrorMessage(msg) {
-        const errorDiv = document.getElementById('color-error');
-        errorDiv.textContent = msg;
-        errorDiv.style.display = 'block';
-        // Scroll to error
-        errorDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-
-    function hideErrorMessage() {
-        const errorDiv = document.getElementById('color-error');
-        errorDiv.style.display = 'none';
-    }
-
-    // Initial duplicate check
-    checkDuplicateColors();
-
-    // Initialize all previews with correct background and text colors
-    const allPreviews = document.querySelectorAll('.color-preview-inline');
-    allPreviews.forEach(preview => {
-        const category = preview.dataset.category;
-        const colorRow = preview.closest('.color-row');
-        const bgColor = colorRow.querySelector('.bg-color').value.toUpperCase();
-        const textColor = colorRow.querySelector('.text-color').value.toUpperCase();
-
-        preview.style.backgroundColor = bgColor;
-        preview.style.color = textColor;
-    });
-});
-</script>

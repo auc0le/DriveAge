@@ -84,39 +84,38 @@
     color: #666;
 }
 
-/* Age Color Classes - Six-Tier System
+/* Risk Category Color Classes - Five-Tier System
  * NOTE: These default colors are overridden by user-configured colors
  * via JavaScript applyDynamicColors() function using inline styles
  * Default colors provided here for fallback only
  */
-.age-brand_new,
-.age-brand-new {
-    background-color: #006400;  /* Default: Dark Green */
-    color: #FFFFFF;
-}
-
-.age-newish {
-    background-color: #008000;  /* Default: Green */
-    color: #FFFFFF;
-}
-
-.age-normal {
-    background-color: #90EE90;  /* Default: Light Green */
+.age-minimal_risk,
+.age-minimal-risk {
+    background-color: #4CAF50;  /* Green - AFR <1% */
     color: #000000;
 }
 
-.age-aged {
-    background-color: #FFD700;  /* Default: Gold */
+.age-low_risk,
+.age-low-risk {
+    background-color: #8BC34A;  /* Light Green - AFR 1-2% */
     color: #000000;
 }
 
-.age-old {
-    background-color: #8B0000;  /* Default: Dark Red */
-    color: #FFFFFF;
+.age-moderate_risk,
+.age-moderate-risk {
+    background-color: #FFC107;  /* Amber - AFR 2-5% */
+    color: #000000;
 }
 
-.age-elderly {
-    background-color: #FF0000;  /* Default: Bright Red */
+.age-elevated_risk,
+.age-elevated-risk {
+    background-color: #FF9800;  /* Orange - AFR 5-10% */
+    color: #000000;
+}
+
+.age-high_risk,
+.age-high-risk {
+    background-color: #F44336;  /* Red - AFR >10% */
     color: #FFFFFF;
 }
 
