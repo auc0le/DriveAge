@@ -3,7 +3,7 @@
   <!ENTITY name      "driveage">
   <!ENTITY author    "Tony Coleman">
   <!ENTITY version   "2025.12.25">
-  <!ENTITY build     "21">
+  <!ENTITY build     "22">
   <!ENTITY launch    "Settings/DriveAge">
   <!ENTITY gitURL    "https://raw.githubusercontent.com/auc0le/DriveAge/main">
   <!ENTITY pluginURL "&gitURL;/plugins/&name;.plg">
@@ -104,17 +104,7 @@ chmod 644 /boot/config/plugins/driveage/driveage.cfg
 echo ""
 echo "-----------------------------------------------------------"
 echo " DriveAge has been installed successfully!"
-<<<<<<< HEAD
-<<<<<<< HEAD
-echo " Version: 2025.12.25 (Build 21)"
-=======
-echo " Version: 2025.12.25 (Build 21)"
-=======
-echo " Version: 2025.12.25 (Build 21)"
-=======
-echo " Version: 2025.12.25 (Build 21)"
->>>>>>> aaaed637b390cb2ebda2af37c0e51d7e3f8f0a8f
->>>>>>> 64b7ffe00dec0956cbf76fcb036e5f01d6ba34a2
+echo " Version: 2025.12.25 (Build 22)"
 echo " Access it at: Settings -> DriveAge"
 echo "-----------------------------------------------------------"
 echo ""
