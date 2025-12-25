@@ -18,11 +18,10 @@ function hoursToYears($hours) {
     return round($hours / 8760, 1);
 }
 
-// Cache busting version based on file modification times
-$cssVersion = @filemtime('/usr/local/emhttp/plugins/driveage/styles/driveage.css') ?: time();
-$jsVersion = @filemtime('/usr/local/emhttp/plugins/driveage/js/settings.js') ?: time();
+// Cache busting version - use simple incrementing version number
+$cacheVersion = '2025.12.25-10';
 ?>
-<link rel="stylesheet" href="/plugins/driveage/styles/driveage.css?v=<?= $cssVersion; ?>">
+<link rel="stylesheet" href="/plugins/driveage/styles/driveage.css?v=<?= $cacheVersion; ?>">
 
 <!-- Dynamic category color styles -->
 <style id="driveage-dynamic-colors">
@@ -34,7 +33,7 @@ $jsVersion = @filemtime('/usr/local/emhttp/plugins/driveage/js/settings.js') ?: 
 const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
 </script>
 
-<script src="/plugins/driveage/js/settings.js?v=<?= $jsVersion; ?>"></script>
+<script src="/plugins/driveage/js/settings.js?v=<?= $cacheVersion; ?>"></script>
 <style>
         .settings-form {
             max-width: 900px;
