@@ -144,11 +144,8 @@ function getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit = 'C') {
     // Get device name (e.g., sda from /dev/sda)
     $deviceName = basename($devicePath);
 
-    // Get SMART data
+    // Get SMART data (may be null if drive in standby or SMART unavailable)
     $smartData = getSmartData($devicePath);
-    if (!$smartData) {
-        return null; // Skip drives without SMART data
-    }
 
     // Get Unraid assignment info
     $assignment = getUnraidAssignment($deviceName, $diskAssignments);
@@ -156,8 +153,21 @@ function getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit = 'C') {
     // Get drive size (preferably from Unraid's disks.ini for accuracy)
     $size = getDriveSize($devicePath, $deviceName, $diskAssignments);
 
-    // Determine age category
-    $ageCategory = getAgeCategory($smartData['power_on_hours'], $config);
+    // If no SMART data and no size, skip this device
+    if (!$smartData && $size == 0) {
+        return null;
+    }
+
+    // Use SMART data if available, otherwise use defaults
+    $model = $smartData['model'] ?? 'Unknown';
+    $serial = $smartData['serial'] ?? 'Unknown';
+    $powerOnHours = $smartData['power_on_hours'] ?? 0;
+    $temperature = $smartData['temperature'] ?? null;
+    $smartStatus = $smartData['smart_status'] ?? 'UNKNOWN';
+    $spinStatus = $smartData['spin_status'] ?? 'unknown';
+
+    // Determine age category (use 0 if no data)
+    $ageCategory = getAgeCategory($powerOnHours, $config);
 
     // Format device name and identification using Unraid's logic
     $formattedDeviceName = formatDeviceName($assignment['display_name']);
@@ -168,7 +178,7 @@ function getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit = 'C') {
         $identification = $assignment['disk_id'];
     } else {
         // Fallback: use processed SMART model with device name
-        $processedModel = processDeviceId($smartData['model']);
+        $processedModel = processDeviceId($model);
         $identification = $processedModel . ' (' . $deviceName . ')';
     }
 
@@ -177,20 +187,20 @@ function getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit = 'C') {
         'device_path' => $devicePath,
         'device_id' => $deviceName,
         'identification' => $identification,
-        'model' => $smartData['model'],
-        'serial' => $smartData['serial'],
+        'model' => $model,
+        'serial' => $serial,
         'size_bytes' => $size,
         'size_human' => formatBytes($size),
         'array_name' => $assignment['array_name'],
         'drive_type' => $assignment['drive_type'],
-        'power_on_hours' => $smartData['power_on_hours'],
-        'power_on_human' => formatPowerOnHours($smartData['power_on_hours']),
-        'temperature' => $smartData['temperature'],
-        'temperature_formatted' => formatTemperature($smartData['temperature'], $tempUnit),
-        'smart_status' => $smartData['smart_status'],
-        'smart_status_formatted' => formatSmartStatus($smartData['smart_status']),
-        'spin_status' => $smartData['spin_status'],
-        'spin_status_formatted' => formatSpinStatus($smartData['spin_status']),
+        'power_on_hours' => $powerOnHours,
+        'power_on_human' => formatPowerOnHours($powerOnHours),
+        'temperature' => $temperature,
+        'temperature_formatted' => formatTemperature($temperature, $tempUnit),
+        'smart_status' => $smartStatus,
+        'smart_status_formatted' => formatSmartStatus($smartStatus),
+        'spin_status' => $spinStatus,
+        'spin_status_formatted' => formatSpinStatus($spinStatus),
         'age_category' => $ageCategory,
         'color_class' => getAgeColorClass($ageCategory),
         'age_label' => getAgeLabel($ageCategory, $config),
@@ -215,6 +225,13 @@ function getSmartDataFromUnraidCache($deviceName) {
     $output = file_get_contents($cacheFile);
     if (!$output) {
         return null;
+    }
+
+    // Check if cache file indicates drive is in standby
+    // smartctl -n standby outputs "Device is in STANDBY mode" if drive is sleeping
+    // In this case, return null to trigger fallback query
+    if (stripos($output, 'STANDBY') !== false || stripos($output, 'SLEEP') !== false) {
+        return null; // Will fallback to direct query
     }
 
     // Parse the cached smartctl output (same format as smartctl -A)
