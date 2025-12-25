@@ -197,6 +197,13 @@ Version format: `YYYY.MM.DD` (e.g., `2025.11.28`)
 - Example: `driveage-2025.11.28-x86_64-1.txz` = "Build 1" in commit message
 - Example: `driveage-2025.11.28-x86_64-2.txz` = "Build 2" in commit message
 
+**CRITICAL - Version Attribute in Plugin Manifest:**
+- The `version` attribute in `plugins/driveage.plg` **MUST** include the build number: `version="&version;-&build;"`
+- Unraid uses this attribute to determine if a plugin needs updating
+- Without the build number, Unraid sees same-day builds as "same version" and refuses to reinstall
+- Bug discovered: Previously used `version="&version;"` which caused "not reinstalling same version" errors
+- Fixed in Build 4 (2025.12.25) - now uses `version="&version;-&build;"` to ensure unique versions
+
 Release checklist (from `build.sh` output):
 1. Run `./build.sh`
 2. Commit and push to GitHub (including updated `plugins/driveage.plg`)
