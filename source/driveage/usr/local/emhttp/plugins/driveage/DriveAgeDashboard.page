@@ -21,8 +21,8 @@ function formatYears($hours) {
 }
 
 // Cache busting version based on file modification times
-$cssVersion = filemtime('/usr/local/emhttp/plugins/driveage/styles/driveage.css');
-$jsVersion = filemtime('/usr/local/emhttp/plugins/driveage/js/dashboard.js');
+$cssVersion = @filemtime('/usr/local/emhttp/plugins/driveage/styles/driveage.css') ?: time();
+$jsVersion = @filemtime('/usr/local/emhttp/plugins/driveage/js/dashboard.js') ?: time();
 ?>
 <link rel="stylesheet" href="/plugins/driveage/styles/driveage.css?v=<?= $cssVersion; ?>">
 
