@@ -25,6 +25,11 @@ function hoursToYears($hours) {
 /* Colors are applied client-side for real-time preview updates */
 </style>
 
+<!-- Inject default configuration for JavaScript -->
+<script>
+const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
+</script>
+
 <script src="/plugins/driveage/js/settings.js"></script>
 <style>
         .settings-form {

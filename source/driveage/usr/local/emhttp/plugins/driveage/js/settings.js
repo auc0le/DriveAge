@@ -3,29 +3,54 @@
  */
 
 function resetToDefaults() {
-    if (confirm('Are you sure you want to reset all settings to defaults? This cannot be undone.')) {
-        // Set all values to defaults (in years)
-        document.querySelector('[data-field="THRESHOLD_BRAND_NEW"]').value = '2.0';
-        document.querySelector('[data-field="THRESHOLD_NEWISH"]').value = '3.0';
-        document.querySelector('[data-field="THRESHOLD_NORMAL"]').value = '4.0';
-        document.querySelector('[data-field="THRESHOLD_AGED"]').value = '5.0';
-        document.querySelector('[data-field="THRESHOLD_OLD"]').value = '6.0';
-
-        document.querySelector('[name="DEFAULT_SORT"]').value = 'power_on_hours';
-        document.querySelector('[name="DEFAULT_SORT_DIR"]').value = 'desc';
-
-        document.querySelector('[name="AUTO_REFRESH"]').checked = false;
-        document.querySelector('[name="REFRESH_INTERVAL"]').value = '300';
-
-        document.querySelectorAll('input[type="checkbox"][name^="SHOW_"]').forEach(cb => {
-            cb.checked = true;
-        });
-
-        document.querySelector('[name="API_ENABLED"]').checked = false;
-        document.querySelector('[name="API_RATE_LIMIT"]').value = '100';
-
-        alert('Settings reset to defaults. Click "Apply Settings" to save.');
+    if (!confirm('Are you sure you want to reset all settings to defaults? This cannot be undone.')) {
+        return;
     }
+
+    // Verify defaults are available
+    if (typeof DRIVEAGE_DEFAULTS === 'undefined') {
+        alert('Error: Default configuration not loaded. Please refresh the page.');
+        return;
+    }
+
+    // Reset all fields programmatically from injected defaults
+    Object.keys(DRIVEAGE_DEFAULTS).forEach(function(key) {
+        const value = DRIVEAGE_DEFAULTS[key];
+
+        // Handle threshold fields - convert hours to years for display
+        if (key.startsWith('THRESHOLD_')) {
+            const yearsInput = document.querySelector('[data-field="' + key + '"]');
+            if (yearsInput) {
+                const years = parseFloat(value) / 8760;
+                yearsInput.value = years.toFixed(1);
+            }
+            return;
+        }
+
+        // Find the form field by name attribute
+        const field = document.querySelector('[name="' + key + '"]');
+
+        if (!field) {
+            return; // Skip if field doesn't exist
+        }
+
+        // Handle different input types
+        if (field.type === 'checkbox') {
+            // Convert string 'true'/'false' to boolean
+            field.checked = (value === 'true' || value === true);
+        } else if (field.type === 'color') {
+            // Color inputs need uppercase hex format
+            field.value = value.toUpperCase();
+        } else if (field.tagName === 'SELECT') {
+            // Dropdown/select fields
+            field.value = value;
+        } else {
+            // Text, number, and other input types
+            field.value = value;
+        }
+    });
+
+    alert('Settings reset to defaults. Click "Apply Settings" to save.');
 }
 
 // Convert years to hours before form submission
