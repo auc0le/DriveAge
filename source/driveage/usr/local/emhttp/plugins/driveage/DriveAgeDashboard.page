@@ -19,15 +19,19 @@ function formatYears($hours) {
     // Otherwise return with 1 decimal place
     return number_format($years, 1);
 }
+
+// Cache busting version based on file modification times
+$cssVersion = filemtime('/usr/local/emhttp/plugins/driveage/styles/driveage.css');
+$jsVersion = filemtime('/usr/local/emhttp/plugins/driveage/js/dashboard.js');
 ?>
-<link rel="stylesheet" href="/plugins/driveage/styles/driveage.css">
+<link rel="stylesheet" href="/plugins/driveage/styles/driveage.css?v=<?= $cssVersion; ?>">
 
 <!-- Dynamic category color styles -->
 <style id="driveage-dynamic-colors">
 /* Dynamic colors are now applied via JavaScript from JSON API response */
 </style>
 
-<script src="/plugins/driveage/js/dashboard.js"></script>
+<script src="/plugins/driveage/js/dashboard.js?v=<?= $jsVersion; ?>"></script>
 
 <div class="driveage-container">
     <div class="driveage-header">

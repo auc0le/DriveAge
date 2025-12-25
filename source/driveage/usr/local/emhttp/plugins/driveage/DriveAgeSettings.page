@@ -17,8 +17,12 @@ $csrfToken = generateCsrfToken();
 function hoursToYears($hours) {
     return round($hours / 8760, 1);
 }
+
+// Cache busting version based on file modification times
+$cssVersion = filemtime('/usr/local/emhttp/plugins/driveage/styles/driveage.css');
+$jsVersion = filemtime('/usr/local/emhttp/plugins/driveage/js/settings.js');
 ?>
-<link rel="stylesheet" href="/plugins/driveage/styles/driveage.css">
+<link rel="stylesheet" href="/plugins/driveage/styles/driveage.css?v=<?= $cssVersion; ?>">
 
 <!-- Dynamic category color styles -->
 <style id="driveage-dynamic-colors">
@@ -30,7 +34,7 @@ function hoursToYears($hours) {
 const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
 </script>
 
-<script src="/plugins/driveage/js/settings.js"></script>
+<script src="/plugins/driveage/js/settings.js?v=<?= $jsVersion; ?>"></script>
 <style>
         .settings-form {
             max-width: 900px;
