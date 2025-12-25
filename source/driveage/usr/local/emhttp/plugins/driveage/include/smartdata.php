@@ -289,16 +289,16 @@ function parseSmartctlOutput($output) {
 /**
  * Get SMART data for a drive
  *
- * Reads exclusively from Unraid's SMART cache. Never queries drives directly.
- * This prevents spinning up drives in standby mode.
+ * Primary: Reads from Unraid's SMART cache (fast, no spinup risk)
+ * Fallback: Queries drive directly if cache unavailable (first run, cache not ready)
  *
  * @param string $devicePath Device path (e.g., /dev/sda)
- * @return array|null SMART data or null if cache not available
+ * @return array|null SMART data or null if failed
  */
 function getSmartData($devicePath) {
     $deviceName = basename($devicePath);
 
-    // Read from Unraid's cached SMART data
+    // Primary: Try to read from Unraid's cached SMART data
     // This cache is updated by emhttpd every 30 seconds
     $cachedData = getSmartDataFromUnraidCache($deviceName);
 
@@ -306,13 +306,82 @@ function getSmartData($devicePath) {
         return $cachedData;
     }
 
-    // If Unraid's cache doesn't exist for this drive, return null
-    // This can happen for:
-    // - Drives that emhttpd hasn't scanned yet
-    // - Drives in standby mode (cache shows last known values)
-    // - Drives that don't support SMART
-    error_log("DriveAge: No SMART cache found for $deviceName - drive may be in standby or not yet scanned by emhttpd");
+    // Fallback: If Unraid's cache doesn't exist, query drive directly
+    // This can happen on first load before emhttpd has populated cache
+    // Use smartctl with -n standby to avoid spinning up sleeping drives
+    error_log("DriveAge: No SMART cache found for $deviceName, querying drive directly");
+
+    // Check if drive is in standby first
+    exec("smartctl -n standby " . escapeshellarg($devicePath) . " 2>&1", $output, $exitCode);
+    if ($exitCode === 2) {
+        // Drive is in STANDBY/SLEEP - don't spin it up
+        error_log("DriveAge: Drive $deviceName is in standby, skipping");
+        return null;
+    }
+
+    // Drive is active or cache check failed - safe to query
+    // Try JSON output first (faster, more reliable)
+    $jsonOutput = shell_exec("smartctl -a -j " . escapeshellarg($devicePath) . " 2>/dev/null");
+
+    if ($jsonOutput) {
+        $data = json_decode($jsonOutput, true);
+        if ($data) {
+            return parseSmartctlJsonOutput($data);
+        }
+    }
+
+    // Fallback to text parsing
+    $textOutput = shell_exec("smartctl -a " . escapeshellarg($devicePath) . " 2>/dev/null");
+    if ($textOutput) {
+        return parseSmartctlOutput($textOutput);
+    }
+
     return null;
+}
+
+/**
+ * Parse smartctl JSON output
+ *
+ * @param array $data Parsed JSON data from smartctl -j
+ * @return array|null SMART data or null if failed
+ */
+function parseSmartctlJsonOutput($data) {
+    $smartData = [
+        'model' => $data['model_name'] ?? $data['model_family'] ?? 'Unknown',
+        'serial' => $data['serial_number'] ?? 'Unknown',
+        'smart_status' => ($data['smart_status']['passed'] ?? false) ? 'PASSED' : 'FAILED',
+        'temperature' => null,
+        'power_on_hours' => null,
+        'spin_status' => 'active' // If we got here, drive is active
+    ];
+
+    // Get temperature
+    if (isset($data['temperature']['current'])) {
+        $smartData['temperature'] = $data['temperature']['current'];
+    }
+
+    // Get power-on hours (ATA drives)
+    if (isset($data['ata_smart_attributes']['table'])) {
+        foreach ($data['ata_smart_attributes']['table'] as $attr) {
+            if ($attr['id'] === 9) { // Power_On_Hours
+                $smartData['power_on_hours'] = $attr['raw']['value'];
+            }
+            if ($attr['id'] === 194 && $smartData['temperature'] === null) { // Temperature
+                $smartData['temperature'] = $attr['raw']['value'];
+            }
+        }
+    }
+
+    // Get power-on hours (NVMe drives)
+    if (isset($data['nvme_smart_health_information_log'])) {
+        $nvmeData = $data['nvme_smart_health_information_log'];
+        $smartData['temperature'] = $nvmeData['temperature'] ?? $smartData['temperature'];
+        $smartData['power_on_hours'] = isset($nvmeData['power_on_hours'])
+            ? floor($nvmeData['power_on_hours'])
+            : $smartData['power_on_hours'];
+    }
+
+    return $smartData['power_on_hours'] !== null ? $smartData : null;
 }
 
 
