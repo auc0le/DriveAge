@@ -231,10 +231,10 @@ function estimateHddRemainingLife($driveInfo, $predictionMode = 'conservative') 
     }
 
     // Linear age-based estimates using Backblaze AFR curves
-    // Conservative: Target replacement at 4 years (AFR increases significantly after 4-5 years)
-    // Aggressive: Target replacement at 5.5 years (more optimistic)
+    // Conservative: Target replacement at 6 years (AFR ~10%, balance of safety vs longevity)
+    // Aggressive: Target replacement at 8 years (higher AFR acceptable, maximize drive life)
 
-    $targetAge = ($predictionMode === 'conservative') ? 4.0 : 5.5;
+    $targetAge = ($predictionMode === 'conservative') ? 6.0 : 8.0;
 
     // Calculate remaining years until target age
     $remainingYears = $targetAge - $ageYears;
