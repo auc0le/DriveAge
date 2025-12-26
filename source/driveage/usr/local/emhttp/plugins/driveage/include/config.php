@@ -84,6 +84,9 @@ function getDefaultConfig() {
         'API_ENABLED' => 'false',
         'API_RATE_LIMIT' => '100',
 
+        // Prediction Configuration
+        'PREDICTION_MODE' => 'conservative',  // 'conservative' or 'aggressive'
+
         // Category Colors (hex format)
         'COLOR_MINIMAL_RISK' => '#4CAF50',
         'COLOR_LOW_RISK' => '#8BC34A',
@@ -375,6 +378,79 @@ function getAgeCategory($hours, $config) {
     } else {
         return 'high_risk';
     }
+}
+
+/**
+ * Determine NVMe risk category based on wear metrics
+ *
+ * Uses Percentage Used and Available Spare to assess failure risk
+ * This is different from HDD age-based assessment
+ *
+ * @param array $driveInfo Drive information array with NVMe SMART attributes
+ * @return string Risk category: minimal_risk, low_risk, moderate_risk, elevated_risk, high_risk
+ */
+function getNvmeRiskCategory($driveInfo) {
+    // Only process if this is an NVMe drive
+    if ($driveInfo['physical_type'] !== 'nvme') {
+        // Return null to indicate this function doesn't apply
+        return null;
+    }
+
+    $percentageUsed = $driveInfo['nvme_percentage_used'] ?? null;
+    $availableSpare = $driveInfo['nvme_available_spare'] ?? null;
+    $spareThreshold = $driveInfo['nvme_available_spare_threshold'] ?? 10;
+    $mediaErrors = $driveInfo['nvme_media_errors'] ?? 0;
+    $criticalWarning = $driveInfo['nvme_critical_warning'] ?? 0;
+
+    // CRITICAL: Media errors or critical warning = high risk
+    if ($mediaErrors > 0 || $criticalWarning > 0) {
+        return 'high_risk';
+    }
+
+    // CRITICAL: Available spare below threshold = high risk
+    if ($availableSpare !== null && $availableSpare < $spareThreshold) {
+        return 'high_risk';
+    }
+
+    // ELEVATED: Available spare close to threshold (within 10%) OR percentage used >100%
+    if (($availableSpare !== null && $availableSpare < ($spareThreshold + 10)) ||
+        ($percentageUsed !== null && $percentageUsed > 100)) {
+        return 'elevated_risk';
+    }
+
+    // Risk assessment based on Percentage Used and Available Spare
+    // Both metrics must agree on risk level (use more conservative)
+
+    $riskByPercentage = 'minimal_risk';
+    if ($percentageUsed !== null) {
+        if ($percentageUsed >= 80) {
+            $riskByPercentage = 'moderate_risk';
+        } elseif ($percentageUsed >= 50) {
+            $riskByPercentage = 'low_risk';
+        }
+    }
+
+    $riskBySpare = 'minimal_risk';
+    if ($availableSpare !== null) {
+        if ($availableSpare <= 50) {
+            $riskBySpare = 'moderate_risk';
+        } elseif ($availableSpare <= 80) {
+            $riskBySpare = 'low_risk';
+        }
+    }
+
+    // Return more conservative (higher risk)
+    $riskLevels = [
+        'minimal_risk' => 0,
+        'low_risk' => 1,
+        'moderate_risk' => 2,
+        'elevated_risk' => 3,
+        'high_risk' => 4
+    ];
+
+    $maxRisk = max($riskLevels[$riskByPercentage], $riskLevels[$riskBySpare]);
+
+    return array_search($maxRisk, $riskLevels);
 }
 
 /**

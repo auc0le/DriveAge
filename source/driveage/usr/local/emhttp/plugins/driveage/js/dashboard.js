@@ -191,6 +191,8 @@ function renderTableView() {
     }
 
     html += '<th>Age</th>';
+    html += '<th>Health Status</th>';
+    html += '<th title="Estimated time until recommended replacement">Est. Replacement</th>';
     html += '</tr></thead>';
     html += '<tbody>';
 
@@ -242,6 +244,29 @@ function renderTableView() {
                 }
 
                 html += `<td>${escapeHtml(drive.age_label)}</td>`;
+
+                // Health Status column
+                html += '<td class="health-status-cell">';
+                if (drive.has_warnings) {
+                    drive.health_warnings.forEach(warning => {
+                        const iconClass = warning.level === 'critical' ? 'warning-critical' : 'warning-caution';
+                        const icon = warning.level === 'critical' ? '⚠️' : '⚡';
+                        html += `<span class="${iconClass}" title="${escapeHtml(warning.tooltip)}">`;
+                        html += `${icon} ${escapeHtml(warning.message)}`;
+                        html += '</span><br>';
+                    });
+                } else {
+                    html += '<span class="health-ok" title="No warnings detected">✓ Healthy</span>';
+                }
+                html += '</td>';
+
+                // Est. Replacement column
+                const prediction = drive.replacement_prediction || {};
+                const tooltipText = `Confidence: ${prediction.confidence || 'none'}. Method: ${prediction.method || 'unknown'}. ${prediction.notes || ''}`;
+                html += `<td class="${prediction.timeline_class || 'timeline-unknown'}" title="${escapeHtml(tooltipText)}">`;
+                html += escapeHtml(prediction.timeline_text || 'Unknown');
+                html += '</td>';
+
                 html += '</tr>';
             });
         }

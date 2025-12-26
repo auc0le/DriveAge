@@ -1,20 +1,31 @@
 # DriveAge - Drive Age Monitor for Unraid
 
-![Version](https://img.shields.io/badge/version-2025.11.26-blue.svg)
+![Version](https://img.shields.io/badge/version-2025.12.26-blue.svg)
 ![Unraid](https://img.shields.io/badge/unraid-6.12+-orange.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Security](https://img.shields.io/badge/security-OWASP%20compliant-brightgreen.svg)
 
-DriveAge is an Unraid plugin that provides a unified dashboard to monitor drive health and age based on SMART power-on hours. It helps you identify aging drives at a glance with visual color coding, making drive replacement planning simple and proactive.
+DriveAge is an Unraid plugin that provides intelligent drive health monitoring with **dual risk assessment** and **predictive replacement estimates**. It uses age-based analysis for HDDs and wear-based assessment for NVMe drives, helping you proactively plan drive replacements before failures occur.
 
 ## Features
 
 ### Core Features
-- **Six-Tier Color Coding System**: Drives are color-coded from "Brand New" (dark green) to "Elderly" (bright red) based on power-on hours
+- **Dual Risk Assessment Model**:
+  - **HDD**: Age-based risk using Annual Failure Rate (AFR) curves from Backblaze data
+  - **NVMe**: Wear-based risk using Percentage Used and Available Spare metrics
+- **Predictive Replacement Estimates**: Calculates estimated time until recommended replacement based on:
+  - HDD: Age + AFR curves + critical SMART attributes
+  - NVMe: TBW calculations + wear rate projections
+- **Health Warning Detection**: Monitors critical SMART attributes for pre-failure indicators:
+  - Pending sectors, reallocated sectors, uncorrectable errors (HDD)
+  - Media errors, available spare depletion, critical warnings (NVMe)
+- **Five-Tier Risk Categories**: Drives color-coded by risk level (Minimal → Low → Moderate → Elevated → High)
+- **Confidence Levels**: All predictions include confidence ratings (High/Medium/Low/None) based on data quality
+- **Conservative vs Aggressive Modes**: User-selectable prediction modes (default: conservative for safer estimates)
 - **Human-Readable Time Format**: Displays drive age as years, months, days, and hours (e.g., "2y 10m 5d 20h")
 - **Bold Oldest Drives**: Automatically highlights the oldest drives in bold for immediate attention
 - **Multi-Array Support**: Full support for Unraid 6.12+ multi-array configurations
-- **Comprehensive Drive Information**: Shows device name, model, size, temperature, SMART status, and spin status
+- **Comprehensive Drive Information**: Shows device name, model, size, temperature, SMART status, spin status, health warnings, and replacement timeline
 
 ### Display Options
 - **Sortable Columns**: Click any column header to sort (device, size, age, temperature, SMART status)
@@ -60,16 +71,34 @@ DriveAge is an Unraid plugin that provides a unified dashboard to monitor drive 
 4. Toggle between table and card views
 5. Click **Refresh** to update drive data
 
-### Interpreting the Colors
+### Interpreting Risk Categories
 
-| Color | Category | Default Range | Description |
-|-------|----------|---------------|-------------|
-| 🟢 Dark Green | Brand New | < 2 years (< 17,520h) | Recently purchased drives |
-| 🟢 Green | Newish | 2-3 years (17,520-26,280h) | Drives with light usage |
-| 🟢 Light Green | Normal | 3-4 years (26,280-35,040h) | Drives in normal operational range |
-| 🟡 Yellow | Aged | 4-5 years (35,040-43,800h) | Consider monitoring closely |
-| 🔴 Dark Red | Old | 5-6 years (43,800-52,560h) | Plan for replacement |
-| 🔴 Bright Red | Elderly | 6+ years (52,560+h) | Priority replacement candidate |
+DriveAge uses different risk assessment methods for HDDs and NVMe drives:
+
+#### HDD Age-Based Risk (Based on Backblaze AFR Data)
+
+| Color | Risk Category | Typical Age | AFR Range | Description |
+|-------|--------------|-------------|-----------|-------------|
+| 🟢 Green | Minimal Risk | < 2 years | < 1.5% | Brand new drives, minimal failure risk |
+| 🟢 Light Green | Low Risk | 2-3 years | 1.5-2% | Normal operation, low failure risk |
+| 🟡 Amber | Moderate Risk | 3-4 years | 2-5% | Mid-life drives, moderate failure risk |
+| 🟠 Orange | Elevated Risk | 4-5 years | 5-10% | Aging drives, elevated failure risk |
+| 🔴 Red | High Risk | 5-6 years | 10-15% | Old drives, plan replacement |
+| 🔴 Dark Red | High Risk | 6+ years | > 15% | Elderly drives, priority replacement |
+
+**Note**: HDDs with critical SMART warnings (pending sectors, uncorrectable errors) are automatically categorized as High Risk regardless of age.
+
+#### NVMe Wear-Based Risk
+
+| Color | Risk Category | Percentage Used | Available Spare | Description |
+|-------|--------------|----------------|-----------------|-------------|
+| 🟢 Green | Minimal Risk | < 50% | > 80% | Minimal wear, plenty of spare capacity |
+| 🟢 Light Green | Low Risk | 50-79% | 60-80% | Low wear, good spare capacity |
+| 🟡 Amber | Moderate Risk | 80-99% | 40-60% | Moderate wear, spare declining |
+| 🟠 Orange | Elevated Risk | 100-120% | 20-40% | High wear, spare capacity low |
+| 🔴 Red | High Risk | > 120% | < 20% | Critical wear or spare depletion |
+
+**Note**: NVMe drives with media errors or critical warnings are automatically categorized as High Risk.
 
 ### Configuring Thresholds
 1. Navigate to **Settings** → **User Utilities** → **DriveAge Settings**
@@ -87,6 +116,29 @@ DriveAge is an Unraid plugin that provides a unified dashboard to monitor drive 
 **Temperature**: Current drive temperature from SMART
 **SMART Status**: Overall health assessment (PASSED/FAILED)
 **Spin Status**: Whether drive is active or in standby
+**Health Status**: Critical SMART attribute warnings:
+  - ⚠️ **Critical Warning** (red): Immediate attention required (pending sectors, media errors)
+  - ⚡ **Caution** (orange): Monitor closely (reallocated sectors, reported errors)
+  - ✓ **Healthy** (green): No warnings detected
+**Est. Replacement**: Predicted timeline until recommended replacement:
+  - **Replace Now** (red): Critical condition, replace immediately
+  - **N months** (orange): Replace within timeframe
+  - **Within 1 year** (yellow): Plan replacement this year
+  - **N years** (green): Normal lifespan remaining
+  - **5+ years** (bright green): Plenty of life remaining
+  - Hover over values to see confidence level, estimation method, and detailed notes
+
+### Technical Details & Methodology
+
+For in-depth technical information about risk assessment algorithms, prediction methods, research sources, and assumptions, see:
+
+**[METHODOLOGY.md](METHODOLOGY.md)** - Comprehensive technical documentation including:
+- Backblaze AFR curve research and data sources
+- NVMe TBW estimation formulas and write rate assumptions
+- Critical SMART attribute thresholds and failure indicators
+- Conservative vs Aggressive mode calculation details
+- Confidence level determination logic
+- Limitations and assumptions for all prediction methods
 
 ## JSON API (Optional)
 
@@ -251,6 +303,11 @@ THRESHOLD_NORMAL="35040"
 THRESHOLD_AGED="43800"
 THRESHOLD_OLD="52560"
 
+# Prediction Mode
+PREDICTION_MODE="conservative"  # Options: "conservative" (default), "aggressive"
+                                # Conservative: Assumes faster wear, shorter lifespan (safer estimates)
+                                # Aggressive: Assumes slower wear, longer lifespan (optimistic estimates)
+
 # Display Filters
 SHOW_PARITY="true"
 SHOW_ARRAY="true"
@@ -325,33 +382,41 @@ DriveAge/
 │       ├── DriveAge.page         # Main dashboard
 │       ├── DriveAgeSettings.page # Settings page
 │       ├── include/
-│       │   ├── config.php        # Configuration handler
-│       │   ├── smartdata.php     # SMART data collection
+│       │   ├── config.php        # Configuration handler & risk assessment
+│       │   ├── smartdata.php     # SMART data collection & health warnings
+│       │   ├── predictions.php   # Predictive replacement estimates (NEW)
 │       │   ├── formatting.php    # Formatting utilities
 │       │   ├── security.php      # Security functions (CSRF, rate limiting, logging)
 │       │   └── helpers.php       # Helper functions (escaping, validation)
 │       ├── scripts/
 │       │   └── get_drive_data.php # AJAX endpoint with rate limiting
 │       ├── styles/
-│       │   └── driveage.css      # Stylesheet
+│       │   └── driveage.css      # Stylesheet with risk category colors
 │       └── js/
 │           └── dashboard.js      # Dashboard interactivity with XSS protection
 ├── docs/
 │   ├── screenshots/
 │   ├── SECURITY_REVIEW.md        # Comprehensive security audit
 │   └── SECURITY_FIXES_COMPLETED.md # Implementation details
+├── METHODOLOGY.md                # Technical documentation & research sources (NEW)
 └── README.md
 ```
 
 ## Roadmap
 
-### Future Enhancements (Not in Current Version)
-- Email notifications when drives cross age thresholds
-- Historical tracking and trend graphs
-- Drive replacement predictions
-- Integration with drive warranty databases
+### Completed Features (v2025.12.26)
+- ✅ Dual risk assessment model (age-based for HDD, wear-based for NVMe)
+- ✅ Predictive replacement estimates with confidence levels
+- ✅ Health warning detection for critical SMART attributes
+- ✅ Conservative vs aggressive prediction modes
+
+### Future Enhancements
+- Email notifications when drives reach critical thresholds or high risk
+- Historical tracking and trend graphs for drive wear over time
+- Integration with manufacturer warranty databases
 - Multi-language support
-- Export to PDF/CSV
+- Export reports to PDF/CSV
+- Machine learning-based failure prediction refinement
 
 ## Contributing
 
@@ -367,7 +432,10 @@ Contributions are welcome! Please:
 
 - **Forum**: [Unraid Community Forums](https://forums.unraid.net/topic/xxxxx-driveage/)
 - **Issues**: [GitHub Issues](https://github.com/auc0le/DriveAge/issues)
-- **Documentation**: [Requirements Document](REQUIREMENTS.md)
+- **Documentation**:
+  - [README.md](README.md) - User guide and feature overview
+  - [METHODOLOGY.md](METHODOLOGY.md) - Technical details and research sources
+  - [REQUIREMENTS.md](REQUIREMENTS.md) - Original requirements document
 
 #### Security Enhancements
 - Comprehensive XSS prevention (output encoding in PHP and JavaScript)

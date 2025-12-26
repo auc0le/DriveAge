@@ -9,6 +9,7 @@ require_once 'formatting.php';
 require_once 'config.php';
 require_once 'helpers.php';
 require_once 'cache.php';
+require_once 'predictions.php';
 
 // DriveAge now relies entirely on Unraid's SMART cache at /var/local/emhttp/smart/
 // This cache is updated by emhttpd every 30 seconds (configurable via poll_attributes)
@@ -197,8 +198,52 @@ function getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit = 'C') {
         $physicalType = 'hdd';
     }
 
-    // Determine age category (use 0 if no data)
-    $ageCategory = getAgeCategory($powerOnHours, $config);
+    // Build temporary array with data needed for risk assessment
+    $tempDriveInfo = array_merge(
+        ['physical_type' => $physicalType],
+        $smartData ?? []
+    );
+
+    // Determine age category based on drive type
+    // NVMe: Use wear-based risk assessment
+    // HDD/USB: Use age-based risk assessment
+    if ($physicalType === 'nvme') {
+        $nvmeRiskCategory = getNvmeRiskCategory($tempDriveInfo);
+        $ageCategory = $nvmeRiskCategory ?? getAgeCategory($powerOnHours, $config);
+    } else {
+        $ageCategory = getAgeCategory($powerOnHours, $config);
+    }
+
+    // Get health warnings for HDDs
+    $healthWarnings = [];
+    if ($physicalType === 'hdd' && $smartData) {
+        $healthWarnings = getHddHealthWarnings($tempDriveInfo);
+    }
+
+    // Check for NVMe critical conditions
+    if ($physicalType === 'nvme' && $smartData) {
+        if (($smartData['nvme_media_errors'] ?? 0) > 0) {
+            $healthWarnings[] = [
+                'level' => 'critical',
+                'attribute' => 'media_errors',
+                'value' => $smartData['nvme_media_errors'],
+                'message' => 'Media errors detected',
+                'action' => 'Replace ASAP',
+                'tooltip' => 'Uncorrectable data errors. Drive reliability compromised.'
+            ];
+        }
+
+        if (($smartData['nvme_critical_warning'] ?? 0) > 0) {
+            $healthWarnings[] = [
+                'level' => 'critical',
+                'attribute' => 'critical_warning',
+                'value' => $smartData['nvme_critical_warning'],
+                'message' => 'Critical warning active',
+                'action' => 'Check drive immediately',
+                'tooltip' => 'Drive has raised a critical warning flag.'
+            ];
+        }
+    }
 
     // Format device name and identification using Unraid's logic
     $formattedDeviceName = formatDeviceName($assignment['display_name']);
@@ -213,7 +258,8 @@ function getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit = 'C') {
         $identification = $processedModel . ' (' . $deviceName . ')';
     }
 
-    return [
+    // Build complete drive information array
+    $driveInfo = [
         'device_name' => $formattedDeviceName,
         'device_path' => $devicePath,
         'device_id' => $deviceName,
@@ -240,8 +286,97 @@ function getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit = 'C') {
         'is_oldest' => false, // Will be set later
         'is_standby' => $isStandby,
         'cache_age' => $cacheAge,
-        'is_stale' => $isStale
+        'is_stale' => $isStale,
+        // Health warnings array
+        'health_warnings' => $healthWarnings,
+        'has_warnings' => count($healthWarnings) > 0,
+        // NVMe health metrics (null for non-NVMe drives)
+        'nvme_percentage_used' => $smartData['nvme_percentage_used'] ?? null,
+        'nvme_available_spare' => $smartData['nvme_available_spare'] ?? null,
+        'nvme_available_spare_threshold' => $smartData['nvme_available_spare_threshold'] ?? null,
+        'nvme_data_units_written' => $smartData['nvme_data_units_written'] ?? null,
+        'nvme_data_units_read' => $smartData['nvme_data_units_read'] ?? null,
+        'nvme_media_errors' => $smartData['nvme_media_errors'] ?? null,
+        'nvme_critical_warning' => $smartData['nvme_critical_warning'] ?? null,
+        'nvme_tbw_calculated' => $smartData['nvme_tbw_calculated'] ?? null,
+        // HDD critical SMART attributes (null for non-HDD drives)
+        'hdd_reallocated_sectors' => $smartData['hdd_reallocated_sectors'] ?? null,
+        'hdd_pending_sectors' => $smartData['hdd_pending_sectors'] ?? null,
+        'hdd_uncorrectable_sectors' => $smartData['hdd_uncorrectable_sectors'] ?? null,
+        'hdd_reported_uncorrectable' => $smartData['hdd_reported_uncorrectable'] ?? null,
+        'hdd_command_timeout' => $smartData['hdd_command_timeout'] ?? null
     ];
+
+    // Calculate predictive replacement estimate
+    $prediction = getPredictiveReplacement($driveInfo, $config);
+
+    // Add prediction data to drive info
+    $driveInfo['replacement_prediction'] = $prediction;
+
+    return $driveInfo;
+}
+
+/**
+ * Detect HDD pre-failure conditions based on critical SMART attributes
+ *
+ * Analyzes reallocated sectors, pending sectors, and uncorrectable errors
+ * to provide early warning of drive failure
+ *
+ * @param array $driveInfo Drive information array with HDD SMART attributes
+ * @return array Health warnings [['level' => string, 'attribute' => string, 'value' => int, 'message' => string, 'action' => string, 'tooltip' => string]]
+ */
+function getHddHealthWarnings($driveInfo) {
+    $warnings = [];
+
+    // Only check if this is an HDD
+    if ($driveInfo['physical_type'] !== 'hdd') {
+        return $warnings;
+    }
+
+    $reallocated = $driveInfo['hdd_reallocated_sectors'] ?? 0;
+    $pending = $driveInfo['hdd_pending_sectors'] ?? 0;
+    $uncorrectable = $driveInfo['hdd_uncorrectable_sectors'] ?? 0;
+
+    // CRITICAL: Pending sectors = imminent reallocation
+    if ($pending > 0) {
+        $warnings[] = [
+            'level' => 'critical',
+            'attribute' => 'pending_sectors',
+            'value' => $pending,
+            'message' => $pending . ' pending sector' . ($pending > 1 ? 's' : ''),
+            'action' => 'Replace ASAP',
+            'tooltip' => 'Pending sectors are waiting to be reallocated. Drive is actively failing.'
+        ];
+    }
+
+    // CRITICAL: Uncorrectable sectors = data loss risk
+    if ($uncorrectable > 0) {
+        $warnings[] = [
+            'level' => 'critical',
+            'attribute' => 'uncorrectable_sectors',
+            'value' => $uncorrectable,
+            'message' => $uncorrectable . ' uncorrectable error' . ($uncorrectable > 1 ? 's' : ''),
+            'action' => 'Replace immediately',
+            'tooltip' => 'Uncorrectable errors indicate permanent data loss. Replace drive now.'
+        ];
+    }
+
+    // WARNING/CRITICAL: Reallocated sectors = physical damage
+    if ($reallocated > 0) {
+        $severity = $reallocated > 10 ? 'critical' : 'warning';
+        $action = $reallocated > 10 ? 'Replace immediately' : 'Backup data, monitor closely';
+
+        $warnings[] = [
+            'level' => $severity,
+            'attribute' => 'reallocated_sectors',
+            'value' => $reallocated,
+            'message' => $reallocated . ' reallocated sector' . ($reallocated > 1 ? 's' : ''),
+            'action' => $action,
+            'tooltip' => 'Reallocated sectors indicate physical damage. Drive may fail soon.'
+        ];
+    }
+
+    return $warnings;
 }
 
 /**
@@ -341,6 +476,15 @@ function parseSmartctlOutput($output) {
         $smartData['spin_status'] = 'standby';
     } elseif (stripos($fullOutput, 'ACTIVE') !== false || stripos($fullOutput, 'IDLE') !== false) {
         $smartData['spin_status'] = 'active';
+    }
+
+    // Parse HDD-specific critical SMART attributes (text mode)
+    // Check if this is an HDD (has ATA attributes)
+    if (stripos($output, 'ATA') !== false || stripos($output, 'SATA') !== false) {
+        $hddAttrs = parseHddSmartAttributes(null, $output);
+        if (!empty($hddAttrs)) {
+            $smartData = array_merge($smartData, $hddAttrs);
+        }
     }
 
     // Return null if we couldn't get critical data
@@ -463,7 +607,146 @@ function parseSmartctlJsonOutput($data) {
             : $smartData['power_on_hours'];
     }
 
+    // Parse NVMe-specific health attributes
+    $nvmeAttrs = parseNvmeSmartAttributes($data);
+    if (!empty($nvmeAttrs)) {
+        $smartData = array_merge($smartData, $nvmeAttrs);
+    }
+
+    // Parse HDD-specific critical SMART attributes
+    $hddAttrs = parseHddSmartAttributes($data, null);
+    if (!empty($hddAttrs)) {
+        $smartData = array_merge($smartData, $hddAttrs);
+    }
+
     return $smartData['power_on_hours'] !== null ? $smartData : null;
+}
+
+/**
+ * Parse NVMe-specific SMART attributes from smartctl JSON
+ *
+ * Extracts health metrics for wear-based risk assessment
+ *
+ * @param array $data Parsed JSON data from smartctl -j
+ * @return array NVMe health metrics or empty array if not NVMe
+ */
+function parseNvmeSmartAttributes($data) {
+    $nvme = [];
+
+    // Check if this is an NVMe drive
+    if (!isset($data['nvme_smart_health_information_log'])) {
+        return $nvme;
+    }
+
+    $health = $data['nvme_smart_health_information_log'];
+
+    // Extract percentage used (0-255, can exceed 100%)
+    $nvme['nvme_percentage_used'] = $health['percentage_used'] ?? null;
+
+    // Extract available spare (0-100%)
+    $nvme['nvme_available_spare'] = $health['available_spare'] ?? null;
+
+    // Extract available spare threshold (0-100%)
+    $nvme['nvme_available_spare_threshold'] = $health['available_spare_threshold'] ?? 10;
+
+    // Extract data units written (512-byte units × 1000)
+    $nvme['nvme_data_units_written'] = $health['data_units_written'] ?? null;
+
+    // Extract data units read (512-byte units × 1000)
+    $nvme['nvme_data_units_read'] = $health['data_units_read'] ?? null;
+
+    // Extract media errors (uncorrectable errors)
+    $nvme['nvme_media_errors'] = $health['media_errors'] ?? 0;
+
+    // Extract critical warning bitmap
+    $nvme['nvme_critical_warning'] = $health['critical_warning'] ?? 0;
+
+    // Calculate actual TBW from data units written
+    // Formula: data_units × 512 bytes × 1000 ÷ 1,000,000,000,000
+    if ($nvme['nvme_data_units_written'] !== null && $nvme['nvme_data_units_written'] > 0) {
+        $bytes = $nvme['nvme_data_units_written'] * 512000;
+        $nvme['nvme_tbw_calculated'] = round($bytes / 1000000000000, 2);
+    } else {
+        $nvme['nvme_tbw_calculated'] = null;
+    }
+
+    return $nvme;
+}
+
+/**
+ * Parse HDD-specific critical SMART attributes
+ *
+ * Extracts attributes that predict imminent drive failure
+ *
+ * @param array $data Parsed JSON data from smartctl -j (null if text mode)
+ * @param string $textOutput Raw smartctl text output (null if JSON mode)
+ * @return array HDD critical attributes or empty array if not HDD
+ */
+function parseHddSmartAttributes($data = null, $textOutput = null) {
+    $hdd = [
+        'hdd_reallocated_sectors' => null,
+        'hdd_pending_sectors' => null,
+        'hdd_uncorrectable_sectors' => null,
+        'hdd_reported_uncorrectable' => null,
+        'hdd_command_timeout' => null
+    ];
+
+    // Try JSON first (more reliable)
+    if ($data !== null && isset($data['ata_smart_attributes']['table'])) {
+        foreach ($data['ata_smart_attributes']['table'] as $attr) {
+            switch ($attr['id']) {
+                case 5:  // Reallocated_Sector_Ct
+                    $hdd['hdd_reallocated_sectors'] = $attr['raw']['value'] ?? 0;
+                    break;
+                case 197: // Current_Pending_Sector
+                    $hdd['hdd_pending_sectors'] = $attr['raw']['value'] ?? 0;
+                    break;
+                case 198: // Offline_Uncorrectable
+                    $hdd['hdd_uncorrectable_sectors'] = $attr['raw']['value'] ?? 0;
+                    break;
+                case 187: // Reported_Uncorrect
+                    $hdd['hdd_reported_uncorrectable'] = $attr['raw']['value'] ?? 0;
+                    break;
+                case 188: // Command_Timeout
+                    $hdd['hdd_command_timeout'] = $attr['raw']['value'] ?? 0;
+                    break;
+            }
+        }
+        return $hdd;
+    }
+
+    // Fallback: parse text output
+    if ($textOutput !== null) {
+        // Format: ID# ATTRIBUTE_NAME FLAG VALUE WORST THRESH TYPE UPDATED WHEN_FAILED RAW_VALUE
+        $lines = explode("\n", $textOutput);
+        foreach ($lines as $line) {
+            // Match SMART attribute lines
+            if (preg_match('/^\s*(\d+)\s+\S+.*\s+(\d+)\s*$/', $line, $matches)) {
+                $attrId = intval($matches[1]);
+                $rawValue = intval($matches[2]);
+
+                switch ($attrId) {
+                    case 5:
+                        $hdd['hdd_reallocated_sectors'] = $rawValue;
+                        break;
+                    case 197:
+                        $hdd['hdd_pending_sectors'] = $rawValue;
+                        break;
+                    case 198:
+                        $hdd['hdd_uncorrectable_sectors'] = $rawValue;
+                        break;
+                    case 187:
+                        $hdd['hdd_reported_uncorrectable'] = $rawValue;
+                        break;
+                    case 188:
+                        $hdd['hdd_command_timeout'] = $rawValue;
+                        break;
+                }
+            }
+        }
+    }
+
+    return $hdd;
 }
 
 
