@@ -320,29 +320,30 @@
 .health-status-cell {
     font-size: 13px;
     line-height: 1.6;
+    /* Colors inherit from row's age category */
 }
 
 .warning-critical {
-    color: #c62828;
     font-weight: 600;
     display: inline-block;
+    /* Color inherits from row */
 }
 
 .warning-caution {
-    color: #f57c00;
     font-weight: 600;
     display: inline-block;
+    /* Color inherits from row */
 }
 
 .health-ok {
-    color: #2e7d32;
     font-weight: 500;
+    /* Color inherits from row */
 }
 
 .health-unknown {
-    color: #666;
     font-weight: 400;
     font-style: italic;
+    /* Color inherits from row */
 }
 
 /* ========================================
@@ -350,51 +351,45 @@
    ======================================== */
 
 .timeline-critical {
-    background-color: #f44336 !important;
-    color: #ffffff !important;
     font-weight: 700;
     padding: 6px 10px;
     text-align: center;
+    /* Colors inherit from row's age category */
 }
 
 .timeline-warning {
-    background-color: #ff9800 !important;
-    color: #000000 !important;
     font-weight: 600;
     padding: 6px 10px;
     text-align: center;
+    /* Colors inherit from row's age category */
 }
 
 .timeline-caution {
-    background-color: #ffc107 !important;
-    color: #000000 !important;
     font-weight: 600;
     padding: 6px 10px;
     text-align: center;
+    /* Colors inherit from row's age category */
 }
 
 .timeline-normal {
-    background-color: #8bc34a !important;
-    color: #000000 !important;
     font-weight: 500;
     padding: 6px 10px;
     text-align: center;
+    /* Colors inherit from row's age category */
 }
 
 .timeline-healthy {
-    background-color: #4caf50 !important;
-    color: #ffffff !important;
     font-weight: 500;
     padding: 6px 10px;
     text-align: center;
+    /* Colors inherit from row's age category */
 }
 
 .timeline-unknown {
-    background-color: #9e9e9e !important;
-    color: #ffffff !important;
     font-weight: 400;
     padding: 6px 10px;
     text-align: center;
+    /* Colors inherit from row's age category */
 }
 
 /* Loading Spinner */
