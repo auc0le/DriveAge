@@ -228,7 +228,9 @@ function renderTableView() {
                 html += `<td>${escapeHtml(drive.power_on_human)}</td>`;
 
                 if (driveData.config.show_temperature) {
-                    html += `<td class="${escapeHtml(getTemperatureClass(drive.temperature))}">${escapeHtml(drive.temperature_formatted)}</td>`;
+                    // Use pre-calculated temperature_class from server (includes drive type awareness)
+                    const tempClass = drive.temperature_class || getTemperatureClass(drive.temperature, drive.physical_type);
+                    html += `<td class="${escapeHtml(tempClass)}">${escapeHtml(drive.temperature_formatted)}</td>`;
                 }
 
                 if (driveData.config.show_smart_status) {
@@ -345,16 +347,30 @@ function toggleGroup(headerRow) {
 
 /**
  * Get temperature CSS class
+ *
+ * @param {number} temp Temperature in Celsius
+ * @param {string} physicalType Physical drive type ('hdd' or 'nvme')
+ * @return {string} CSS class name
  */
-function getTemperatureClass(temp) {
+function getTemperatureClass(temp, physicalType = 'hdd') {
     if (temp === null || temp === '') return 'temp-unknown';
 
     temp = parseInt(temp);
 
-    if (temp >= 60) return 'temp-critical';
-    if (temp >= 50) return 'temp-high';
-    if (temp >= 40) return 'temp-elevated';
-    return 'temp-normal';
+    // NVMe drives run hotter - use different thresholds
+    if (physicalType === 'nvme') {
+        // NVMe thresholds: < 50°C, 50-64°C, 65-74°C, ≥ 75°C
+        if (temp >= 75) return 'temp-critical';  // Red - Critical
+        if (temp >= 65) return 'temp-high';      // Orange - High
+        if (temp >= 50) return 'temp-elevated';  // Yellow - Elevated
+        return 'temp-normal';                     // Green - Normal
+    } else {
+        // HDD thresholds: < 40°C, 40-49°C, 50-59°C, ≥ 60°C
+        if (temp >= 60) return 'temp-critical';  // Red - Critical
+        if (temp >= 50) return 'temp-high';      // Orange - High
+        if (temp >= 40) return 'temp-elevated';  // Yellow - Elevated
+        return 'temp-normal';                     // Green - Normal
+    }
 }
 
 /**

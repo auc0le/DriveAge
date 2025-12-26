@@ -173,6 +173,9 @@ function getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit = 'C') {
     $cacheAge = $cacheTimestamp ? (time() - $cacheTimestamp) : 0;
     $isStale = $isStandby && $cacheTimestamp && isCacheStale($cacheTimestamp);
 
+    // Detect physical drive type (HDD vs NVMe) from device path
+    $physicalType = (strpos($devicePath, 'nvme') !== false) ? 'nvme' : 'hdd';
+
     // Determine age category (use 0 if no data)
     $ageCategory = getAgeCategory($powerOnHours, $config);
 
@@ -200,10 +203,12 @@ function getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit = 'C') {
         'size_human' => formatBytes($size),
         'array_name' => $assignment['array_name'],
         'drive_type' => $assignment['drive_type'],
+        'physical_type' => $physicalType,
         'power_on_hours' => $powerOnHours,
         'power_on_human' => formatPowerOnHours($powerOnHours),
         'temperature' => $temperature,
         'temperature_formatted' => formatTemperature($temperature, $tempUnit),
+        'temperature_class' => getTemperatureClass($temperature, $physicalType),
         'smart_status' => $smartStatus,
         'smart_status_formatted' => formatSmartStatus($smartStatus),
         'spin_status' => $spinStatus,

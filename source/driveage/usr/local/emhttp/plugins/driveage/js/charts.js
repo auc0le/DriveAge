@@ -163,41 +163,71 @@ function renderRiskChart(driveData) {
 }
 
 /**
- * Aggregate drives by temperature range
+ * Aggregate drives by temperature range, separated by drive type (HDD vs NVMe)
  *
  * @param {Array} drives - Array of drive objects
- * @return {Object} Temperature bin counts
+ * @return {Object} Temperature bin counts for HDD and NVMe
  */
 function aggregateTemperatureData(drives) {
-    const bins = {
-        'under_40': 0,    // < 40°C
-        '40_to_49': 0,    // 40-49°C
-        '50_to_59': 0,    // 50-59°C
-        '60_plus': 0,     // ≥ 60°C
+    const hddBins = {
+        'normal': 0,      // < 40°C
+        'elevated': 0,    // 40-49°C
+        'high': 0,        // 50-59°C
+        'critical': 0,    // ≥ 60°C
+        'unknown': 0      // null/unavailable
+    };
+
+    const nvmeBins = {
+        'normal': 0,      // < 50°C
+        'elevated': 0,    // 50-64°C
+        'high': 0,        // 65-74°C
+        'critical': 0,    // ≥ 75°C
         'unknown': 0      // null/unavailable
     };
 
     drives.forEach(drive => {
         const temp = drive.temperature;
+        const isNvme = drive.physical_type === 'nvme';
 
         if (temp === null || temp === undefined || temp === '') {
-            bins.unknown++;
-        } else if (temp < 40) {
-            bins.under_40++;
-        } else if (temp < 50) {
-            bins['40_to_49']++;
-        } else if (temp < 60) {
-            bins['50_to_59']++;
+            if (isNvme) {
+                nvmeBins.unknown++;
+            } else {
+                hddBins.unknown++;
+            }
+        } else if (isNvme) {
+            // NVMe thresholds: < 50°C, 50-64°C, 65-74°C, ≥ 75°C
+            if (temp < 50) {
+                nvmeBins.normal++;
+            } else if (temp < 65) {
+                nvmeBins.elevated++;
+            } else if (temp < 75) {
+                nvmeBins.high++;
+            } else {
+                nvmeBins.critical++;
+            }
         } else {
-            bins['60_plus']++;
+            // HDD thresholds: < 40°C, 40-49°C, 50-59°C, ≥ 60°C
+            if (temp < 40) {
+                hddBins.normal++;
+            } else if (temp < 50) {
+                hddBins.elevated++;
+            } else if (temp < 60) {
+                hddBins.high++;
+            } else {
+                hddBins.critical++;
+            }
         }
     });
 
-    return bins;
+    return {
+        hdd: hddBins,
+        nvme: nvmeBins
+    };
 }
 
 /**
- * Render temperature distribution chart (bar)
+ * Render temperature distribution chart (grouped bar)
  *
  * @param {Object} driveData - Full data object from API
  */
@@ -210,37 +240,25 @@ function renderTemperatureChart(driveData) {
     // Get temperature unit from config (default to Celsius)
     const tempUnit = driveData.config && driveData.config.temperature_unit ? driveData.config.temperature_unit : 'C';
 
-    // Generate labels based on temperature unit
-    // Note: Binning is always done in Celsius (drive.temperature is always in C)
-    // but labels show the user's preferred unit
-    let labels;
-    if (tempUnit === 'F') {
-        // Fahrenheit labels (converted from Celsius thresholds)
-        // < 40°C = < 104°F
-        // 40-49°C = 104-120°F
-        // 50-59°C = 122-138°F
-        // ≥ 60°C = ≥ 140°F
-        labels = ['< 104°F', '104-120°F', '122-138°F', '≥ 140°F', 'Unknown'];
-    } else {
-        // Celsius labels
-        labels = ['< 40°C', '40-49°C', '50-59°C', '≥ 60°C', 'Unknown'];
-    }
+    // Labels represent temperature severity levels
+    const labels = ['Normal', 'Elevated', 'High', 'Critical', 'Unknown'];
 
-    const data = [
-        tempData.under_40,
-        tempData['40_to_49'],
-        tempData['50_to_59'],
-        tempData['60_plus'],
-        tempData.unknown
+    // HDD data (binned at different thresholds than NVMe)
+    const hddData = [
+        tempData.hdd.normal,
+        tempData.hdd.elevated,
+        tempData.hdd.high,
+        tempData.hdd.critical,
+        tempData.hdd.unknown
     ];
 
-    // Color gradient: cool to hot
-    const colors = [
-        '#4CAF50',  // Green - cool
-        '#8BC34A',  // Light green
-        '#FFC107',  // Amber
-        '#F44336',  // Red - hot
-        '#9E9E9E'   // Grey - unknown
+    // NVMe data (binned at different thresholds than HDD)
+    const nvmeData = [
+        tempData.nvme.normal,
+        tempData.nvme.elevated,
+        tempData.nvme.high,
+        tempData.nvme.critical,
+        tempData.nvme.unknown
     ];
 
     temperatureChart = new Chart(ctx, {
@@ -248,9 +266,15 @@ function renderTemperatureChart(driveData) {
         data: {
             labels: labels,
             datasets: [{
-                label: 'Drive Count',
-                data: data,
-                backgroundColor: colors,
+                label: 'HDD',
+                data: hddData,
+                backgroundColor: '#2196F3',  // Blue
+                borderWidth: 1,
+                borderColor: '#fff'
+            }, {
+                label: 'NVMe',
+                data: nvmeData,
+                backgroundColor: '#FF9800',  // Orange
                 borderWidth: 1,
                 borderColor: '#fff'
             }]
@@ -274,12 +298,42 @@ function renderTemperatureChart(driveData) {
             },
             plugins: {
                 legend: {
-                    display: false
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        boxWidth: 15,
+                        padding: 10,
+                        font: { size: 11 }
+                    }
                 },
                 tooltip: {
                     callbacks: {
+                        title: function(context) {
+                            return context[0].label;
+                        },
                         label: function(context) {
-                            return context.parsed.y + ' drives';
+                            const label = context.dataset.label || '';
+                            const value = context.parsed.y;
+
+                            // Show temperature ranges in tooltip
+                            let range = '';
+                            const category = context.label;
+
+                            if (context.datasetIndex === 0) {
+                                // HDD ranges
+                                if (category === 'Normal') range = tempUnit === 'F' ? '(<104°F)' : '(<40°C)';
+                                else if (category === 'Elevated') range = tempUnit === 'F' ? '(104-120°F)' : '(40-49°C)';
+                                else if (category === 'High') range = tempUnit === 'F' ? '(122-138°F)' : '(50-59°C)';
+                                else if (category === 'Critical') range = tempUnit === 'F' ? '(≥140°F)' : '(≥60°C)';
+                            } else {
+                                // NVMe ranges
+                                if (category === 'Normal') range = tempUnit === 'F' ? '(<122°F)' : '(<50°C)';
+                                else if (category === 'Elevated') range = tempUnit === 'F' ? '(122-149°F)' : '(50-64°C)';
+                                else if (category === 'High') range = tempUnit === 'F' ? '(149-167°F)' : '(65-74°C)';
+                                else if (category === 'Critical') range = tempUnit === 'F' ? '(≥167°F)' : '(≥75°C)';
+                            }
+
+                            return label + ' ' + range + ': ' + value + ' drives';
                         }
                     }
                 }

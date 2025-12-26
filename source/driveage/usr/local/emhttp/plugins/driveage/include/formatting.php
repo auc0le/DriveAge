@@ -285,23 +285,39 @@ function formatTimestamp($timestamp = null, $format = 'Y-m-d H:i:s') {
  * Get color-coded temperature class
  *
  * @param int $temp Temperature in Celsius
+ * @param string $physicalType Physical drive type ('hdd' or 'nvme')
  * @return string CSS class name
  */
-function getTemperatureClass($temp) {
+function getTemperatureClass($temp, $physicalType = 'hdd') {
     if ($temp === null || $temp === '') {
         return 'temp-unknown';
     }
 
     $temp = intval($temp);
 
-    if ($temp >= 60) {
-        return 'temp-critical';  // Red - Critical
-    } elseif ($temp >= 50) {
-        return 'temp-high';      // Orange - High
-    } elseif ($temp >= 40) {
-        return 'temp-elevated';  // Yellow - Elevated
+    // NVMe drives run hotter - use different thresholds
+    if ($physicalType === 'nvme') {
+        // NVMe thresholds: < 50°C, 50-64°C, 65-74°C, ≥ 75°C
+        if ($temp >= 75) {
+            return 'temp-critical';  // Red - Critical (at throttling threshold)
+        } elseif ($temp >= 65) {
+            return 'temp-high';      // Orange - High
+        } elseif ($temp >= 50) {
+            return 'temp-elevated';  // Yellow - Elevated
+        } else {
+            return 'temp-normal';    // Green - Normal
+        }
     } else {
-        return 'temp-normal';    // Green - Normal
+        // HDD thresholds: < 40°C, 40-49°C, 50-59°C, ≥ 60°C
+        if ($temp >= 60) {
+            return 'temp-critical';  // Red - Critical (at spec limit)
+        } elseif ($temp >= 50) {
+            return 'temp-high';      // Orange - High
+        } elseif ($temp >= 40) {
+            return 'temp-elevated';  // Yellow - Elevated
+        } else {
+            return 'temp-normal';    // Green - Normal
+        }
     }
 }
 
