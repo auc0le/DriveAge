@@ -324,7 +324,7 @@ function getReplacementTimelineText($monthsRemaining) {
         ];
     } else {
         return [
-            'text' => '5+ years',
+            'text' => round($monthsRemaining / 12, 1) . ' years',
             'class' => 'timeline-healthy'
         ];
     }
