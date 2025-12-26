@@ -159,13 +159,27 @@ function getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit = 'C') {
         return null;
     }
 
-    // Use SMART data if available, otherwise use defaults
+    // For USB/Flash drives without SMART data, use N/A values instead of defaults
+    $isFlashDrive = ($assignment['drive_type'] === 'flash');
+    $hasSmartData = ($smartData !== null && isset($smartData['power_on_hours']));
+
+    // Use SMART data if available, otherwise use appropriate defaults
     $model = $smartData['model'] ?? 'Unknown';
     $serial = $smartData['serial'] ?? 'Unknown';
-    $powerOnHours = $smartData['power_on_hours'] ?? 0;
-    $temperature = $smartData['temperature'] ?? null;
-    $smartStatus = $smartData['smart_status'] ?? 'UNKNOWN';
-    $spinStatus = $smartData['spin_status'] ?? 'unknown';
+
+    // USB drives without SMART: use null for power_on_hours (displays as "N/A")
+    // Other drives without SMART: use 0 (may have been unable to read temporarily)
+    if (!$hasSmartData && $isFlashDrive) {
+        $powerOnHours = null;
+        $temperature = null;
+        $smartStatus = 'N/A';
+        $spinStatus = 'N/A';
+    } else {
+        $powerOnHours = $smartData['power_on_hours'] ?? 0;
+        $temperature = $smartData['temperature'] ?? null;
+        $smartStatus = $smartData['smart_status'] ?? 'UNKNOWN';
+        $spinStatus = $smartData['spin_status'] ?? 'unknown';
+    }
 
     // Standby state and cache metadata
     $isStandby = $smartData['is_standby'] ?? false;
@@ -173,8 +187,15 @@ function getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit = 'C') {
     $cacheAge = $cacheTimestamp ? (time() - $cacheTimestamp) : 0;
     $isStale = $isStandby && $cacheTimestamp && isCacheStale($cacheTimestamp);
 
-    // Detect physical drive type (HDD vs NVMe) from device path
-    $physicalType = (strpos($devicePath, 'nvme') !== false) ? 'nvme' : 'hdd';
+    // Detect physical drive type (HDD vs NVMe vs USB) from device path and assignment
+    // Check assignment first for Flash type (USB boot drive)
+    if ($assignment['drive_type'] === 'flash') {
+        $physicalType = 'usb';
+    } elseif (strpos($devicePath, 'nvme') !== false) {
+        $physicalType = 'nvme';
+    } else {
+        $physicalType = 'hdd';
+    }
 
     // Determine age category (use 0 if no data)
     $ageCategory = getAgeCategory($powerOnHours, $config);
@@ -535,8 +556,11 @@ function getUnraidAssignment($deviceName, $diskAssignments) {
                     break;
 
                 case 'Flash':
-                    // Skip flash drive
-                    return $assignment;
+                    // USB boot drive
+                    $assignment['display_name'] = 'Flash (USB Boot)';
+                    $assignment['array_name'] = 'USB Boot';
+                    $assignment['drive_type'] = 'flash';
+                    break;
 
                 default:
                     $assignment['display_name'] = ucfirst($diskName);

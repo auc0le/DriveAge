@@ -209,6 +209,9 @@ function formatSmartStatus($status) {
         case 'FAILING':
             return '<span class="smart-failed">FAILED</span>';
 
+        case 'N/A':
+            return '<span class="smart-na">N/A</span>';
+
         default:
             return '<span class="smart-unknown">UNKNOWN</span>';
     }
@@ -232,6 +235,9 @@ function formatSpinStatus($status) {
         case 'standby':
         case 'spun_down':
             return '<span class="spin-standby">Standby</span>';
+
+        case 'n/a':
+            return '<span class="spin-na">N/A</span>';
 
         default:
             return '<span class="spin-unknown">Unknown</span>';

@@ -343,45 +343,59 @@ function renderTemperatureChart(driveData) {
 }
 
 /**
- * Aggregate drives by actual unique sizes
+ * Aggregate drives by actual unique sizes, separated by drive type (HDD vs NVMe vs USB)
  *
  * @param {Array} drives - Array of drive objects
- * @return {Object} Object with labels and counts arrays, sorted by size
+ * @return {Object} Size labels and counts for HDD, NVMe, and USB
  */
 function aggregateSizeData(drives) {
-    // Group drives by size_human (e.g., "12TB", "8TB", "500GB")
+    // Group drives by size_human, tracking each drive type separately
     const sizeMap = new Map();
 
     drives.forEach(drive => {
         const sizeHuman = drive.size_human || 'Unknown';
         const sizeBytes = drive.size_bytes || 0;
+        const driveType = drive.physical_type || 'hdd';
 
         if (!sizeMap.has(sizeHuman)) {
             sizeMap.set(sizeHuman, {
-                count: 0,
-                bytes: sizeBytes
+                bytes: sizeBytes,
+                hdd: 0,
+                nvme: 0,
+                usb: 0
             });
         }
 
-        sizeMap.get(sizeHuman).count++;
+        const sizeEntry = sizeMap.get(sizeHuman);
+        if (driveType === 'nvme') {
+            sizeEntry.nvme++;
+        } else if (driveType === 'usb') {
+            sizeEntry.usb++;
+        } else {
+            sizeEntry.hdd++;
+        }
     });
 
     // Convert to array and sort by size (bytes)
     const sortedSizes = Array.from(sizeMap.entries())
         .sort((a, b) => a[1].bytes - b[1].bytes);
 
-    // Extract labels and counts
+    // Extract labels and counts for each drive type
     const labels = sortedSizes.map(entry => entry[0]);
-    const counts = sortedSizes.map(entry => entry[1].count);
+    const hddCounts = sortedSizes.map(entry => entry[1].hdd);
+    const nvmeCounts = sortedSizes.map(entry => entry[1].nvme);
+    const usbCounts = sortedSizes.map(entry => entry[1].usb);
 
     return {
         labels: labels,
-        counts: counts
+        hdd: hddCounts,
+        nvme: nvmeCounts,
+        usb: usbCounts
     };
 }
 
 /**
- * Render drive size distribution chart (bar)
+ * Render drive size distribution chart (grouped bar)
  *
  * @param {Object} driveData - Full data object from API
  */
@@ -393,19 +407,36 @@ function renderSizeChart(driveData) {
 
     // Use actual drive sizes from the data
     const labels = sizeData.labels;
-    const data = sizeData.counts;
 
-    // Consistent color scheme
-    const color = '#2196F3';  // Blue
+    // HDD data
+    const hddData = sizeData.hdd;
+
+    // NVMe data
+    const nvmeData = sizeData.nvme;
+
+    // USB data
+    const usbData = sizeData.usb;
 
     sizeChart = new Chart(ctx, {
         type: 'bar',
         data: {
             labels: labels,
             datasets: [{
-                label: 'Drive Count',
-                data: data,
-                backgroundColor: color,
+                label: 'HDD',
+                data: hddData,
+                backgroundColor: '#2196F3',  // Blue
+                borderWidth: 1,
+                borderColor: '#fff'
+            }, {
+                label: 'NVMe',
+                data: nvmeData,
+                backgroundColor: '#FF9800',  // Orange
+                borderWidth: 1,
+                borderColor: '#fff'
+            }, {
+                label: 'USB',
+                data: usbData,
+                backgroundColor: '#4CAF50',  // Green
                 borderWidth: 1,
                 borderColor: '#fff'
             }]
@@ -429,12 +460,20 @@ function renderSizeChart(driveData) {
             },
             plugins: {
                 legend: {
-                    display: false
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        boxWidth: 15,
+                        padding: 10,
+                        font: { size: 11 }
+                    }
                 },
                 tooltip: {
                     callbacks: {
                         label: function(context) {
-                            return context.parsed.y + ' drives';
+                            const label = context.dataset.label || '';
+                            const value = context.parsed.y;
+                            return label + ': ' + value + ' drives';
                         }
                     }
                 }
