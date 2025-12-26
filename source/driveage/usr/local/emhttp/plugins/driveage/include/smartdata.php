@@ -8,6 +8,7 @@
 require_once 'formatting.php';
 require_once 'config.php';
 require_once 'helpers.php';
+require_once 'cache.php';
 
 // DriveAge now relies entirely on Unraid's SMART cache at /var/local/emhttp/smart/
 // This cache is updated by emhttpd every 30 seconds (configurable via poll_attributes)
@@ -166,6 +167,12 @@ function getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit = 'C') {
     $smartStatus = $smartData['smart_status'] ?? 'UNKNOWN';
     $spinStatus = $smartData['spin_status'] ?? 'unknown';
 
+    // Standby state and cache metadata
+    $isStandby = $smartData['is_standby'] ?? false;
+    $cacheTimestamp = $smartData['cache_timestamp'] ?? null;
+    $cacheAge = $cacheTimestamp ? (time() - $cacheTimestamp) : 0;
+    $isStale = $isStandby && $cacheTimestamp && isCacheStale($cacheTimestamp);
+
     // Determine age category (use 0 if no data)
     $ageCategory = getAgeCategory($powerOnHours, $config);
 
@@ -204,7 +211,10 @@ function getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit = 'C') {
         'age_category' => $ageCategory,
         'color_class' => getAgeColorClass($ageCategory),
         'age_label' => getAgeLabel($ageCategory, $config),
-        'is_oldest' => false // Will be set later
+        'is_oldest' => false, // Will be set later
+        'is_standby' => $isStandby,
+        'cache_age' => $cacheAge,
+        'is_stale' => $isStale
     ];
 }
 
@@ -229,9 +239,17 @@ function getSmartDataFromUnraidCache($deviceName) {
 
     // Check if cache file indicates drive is in standby
     // smartctl -n standby outputs "Device is in STANDBY mode" if drive is sleeping
-    // In this case, return null to trigger fallback query
+    // Return special array indicating standby state (will be filled with cached data)
     if (stripos($output, 'STANDBY') !== false || stripos($output, 'SLEEP') !== false) {
-        return null; // Will fallback to direct query
+        return [
+            'model' => 'Unknown',
+            'serial' => 'Unknown',
+            'smart_status' => 'UNKNOWN',
+            'temperature' => null,
+            'power_on_hours' => null, // Will be filled from cache
+            'spin_status' => 'standby',
+            'is_standby' => true
+        ];
     }
 
     // Parse the cached smartctl output (same format as smartctl -A)
@@ -320,6 +338,27 @@ function getSmartData($devicePath) {
     $cachedData = getSmartDataFromUnraidCache($deviceName);
 
     if ($cachedData !== null) {
+        // If drive is active and has valid data, save to our persistent cache
+        if (isset($cachedData['power_on_hours']) &&
+            $cachedData['power_on_hours'] > 0 &&
+            (!isset($cachedData['is_standby']) || !$cachedData['is_standby'])) {
+
+            $model = $cachedData['model'] ?? 'Unknown';
+            $serial = $cachedData['serial'] ?? 'Unknown';
+            saveDriveCache($deviceName, $cachedData['power_on_hours'], $model, $serial);
+        }
+
+        // If drive is in standby, load cached power-on hours
+        if (isset($cachedData['is_standby']) && $cachedData['is_standby']) {
+            $cache = loadDriveCache($deviceName);
+            if ($cache) {
+                $cachedData['power_on_hours'] = $cache['power_on_hours'];
+                $cachedData['cache_timestamp'] = $cache['timestamp'];
+                $cachedData['model'] = $cache['model'];
+                $cachedData['serial'] = $cache['serial'];
+            }
+        }
+
         return $cachedData;
     }
 

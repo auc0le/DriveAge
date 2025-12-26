@@ -273,11 +273,34 @@
     font-weight: 600;
 }
 
+.spin-standby::before {
+    content: "💤 ";
+}
+
 .spin-unknown {
     /* Color inherits from row */
 }
 
 /* Spin status inherits text color from row */
+
+/* Standby Drive Styling (Option B - Visual Distinction) */
+.drive-standby {
+    opacity: 0.65;
+    background-color: #f8f9fa !important;
+}
+
+.drive-standby td {
+    color: #6c757d !important;
+}
+
+/* Stale cache warning (> 24 hours) */
+.drive-stale {
+    background-color: #fff3cd !important;
+}
+
+.drive-stale td {
+    color: #856404 !important;
+}
 
 /* Temperature Classes */
 .temp-normal,

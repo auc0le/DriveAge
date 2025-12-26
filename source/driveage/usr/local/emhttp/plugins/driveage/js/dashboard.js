@@ -210,7 +210,16 @@ function renderTableView() {
 
             // Add drives in this group
             drives.forEach(drive => {
-                const rowClass = escapeHtml(drive.color_class) + (drive.is_oldest ? ' oldest-drive' : '');
+                let rowClass = escapeHtml(drive.color_class) + (drive.is_oldest ? ' oldest-drive' : '');
+
+                // Add standby and stale classes for visual distinction
+                if (drive.is_standby) {
+                    rowClass += ' drive-standby';
+                    if (drive.is_stale) {
+                        rowClass += ' drive-stale';
+                    }
+                }
+
                 html += `<tr class="${rowClass} group-row">`;
                 html += `<td>${escapeHtml(drive.device_name)}</td>`;
                 html += `<td title="${escapeHtml(drive.identification)}">${escapeHtml(truncate(drive.identification, 50))}</td>`;
