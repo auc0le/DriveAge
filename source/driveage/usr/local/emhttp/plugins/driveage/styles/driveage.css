@@ -124,6 +124,40 @@
     font-weight: bold !important;
 }
 
+/* ========================================
+   Charts Section
+   ======================================== */
+
+.driveage-charts-container {
+    margin-bottom: 30px;
+}
+
+.chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.chart-card {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.chart-card h3 {
+    margin: 0 0 15px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+    text-align: center;
+}
+
+.chart-card canvas {
+    max-height: 300px;
+}
+
 /* Table View */
 .driveage-table-container {
     overflow-x: auto;
@@ -330,6 +364,15 @@
     .driveage-table th,
     .driveage-table td {
         padding: 8px 5px;
+    }
+
+    /* Charts mobile layout */
+    .chart-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .chart-card canvas {
+        max-height: 250px;
     }
 }
 

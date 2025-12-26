@@ -21,7 +21,7 @@ function formatYears($hours) {
 }
 
 // Cache busting version - use simple incrementing version number
-$cacheVersion = '2025.12.25-24';
+$cacheVersion = '2025.12.26-1';
 ?>
 <link rel="stylesheet" href="/plugins/driveage/styles/driveage.css?v=<?= $cacheVersion; ?>">
 
@@ -31,6 +31,8 @@ $cacheVersion = '2025.12.25-24';
 </style>
 
 <script src="/plugins/driveage/js/dashboard.js?v=<?= $cacheVersion; ?>"></script>
+<script src="/plugins/driveage/js/vendor/chart.min.js?v=<?= $cacheVersion; ?>"></script>
+<script src="/plugins/driveage/js/charts.js?v=<?= $cacheVersion; ?>"></script>
 
 <div class="driveage-container">
     <div class="driveage-header">
@@ -70,6 +72,24 @@ $cacheVersion = '2025.12.25-24';
             <div class="legend-color age-high_risk"></div>
             <span class="legend-label"><?= e(getAgeLabel('high_risk', $config)); ?></span>
             <span class="legend-hours">(≥ <?= e(formatYears($config['THRESHOLD_ELEVATED_RISK'])); ?> years)</span>
+        </div>
+    </div>
+
+    <!-- Charts Section -->
+    <div id="charts-container" class="driveage-charts-container">
+        <div class="chart-grid">
+            <div class="chart-card">
+                <h3>Risk Category Distribution</h3>
+                <canvas id="risk-chart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Temperature Distribution</h3>
+                <canvas id="temperature-chart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Drive Size Distribution</h3>
+                <canvas id="size-chart"></canvas>
+            </div>
         </div>
     </div>
 

@@ -5,6 +5,7 @@
 let driveData = null;
 let sortColumn = 'power_on_hours';
 let sortDirection = 'desc';
+let chartInstances = null;
 
 /**
  * Escape HTML to prevent XSS
@@ -153,6 +154,7 @@ function renderDashboard() {
 
     hideLoading();
     renderTableView();
+    renderCharts(driveData);
     updateDriveCount(driveData.drive_count);
     applyDynamicColors();
 }
@@ -399,6 +401,11 @@ function showLoading() {
     if (container) {
         container.innerHTML = '<div class="driveage-loading"><div class="spinner"></div> Loading drive data...</div>';
     }
+
+    // Destroy charts when refreshing
+    if (window.destroyCharts) {
+        destroyCharts();
+    }
 }
 
 /**
@@ -415,5 +422,10 @@ function showError(message) {
     const container = document.getElementById('drive-container');
     if (container) {
         container.innerHTML = `<div class="driveage-error">Error: ${message}</div>`;
+    }
+
+    // Destroy charts on error
+    if (window.destroyCharts) {
+        destroyCharts();
     }
 }
