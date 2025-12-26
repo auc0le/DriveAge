@@ -91,8 +91,9 @@ function estimateNvmeRemainingLife($driveInfo, $predictionMode = 'conservative')
             $yearsRemaining = $remainingTBW / $assumedWriteRate;
             $monthsRemaining = round($yearsRemaining * 12);
 
-            // Cap at 10 years maximum (NVMe drives don't last forever even with low writes)
-            $monthsRemaining = min($monthsRemaining, 120);
+            // Cap at target age (same as HDD: 6 years conservative, 8 years aggressive)
+            $maxMonths = ($predictionMode === 'conservative') ? 72 : 96;
+            $monthsRemaining = min($monthsRemaining, $maxMonths);
 
             $timeline = getReplacementTimelineText($monthsRemaining);
 
@@ -124,8 +125,9 @@ function estimateNvmeRemainingLife($driveInfo, $predictionMode = 'conservative')
         // Very rough: assume 1 year per 20% used (5 year expected life)
         $monthsRemaining = round(($percentRemaining / 20) * 12 / $wearMultiplier);
 
-        // Cap at 10 years maximum
-        $monthsRemaining = min($monthsRemaining, 120);
+        // Cap at target age (same as HDD: 6 years conservative, 8 years aggressive)
+        $maxMonths = ($predictionMode === 'conservative') ? 72 : 96;
+        $monthsRemaining = min($monthsRemaining, $maxMonths);
 
         $timeline = getReplacementTimelineText($monthsRemaining);
 
@@ -154,8 +156,9 @@ function estimateNvmeRemainingLife($driveInfo, $predictionMode = 'conservative')
 
             $monthsRemaining = round(($spareRemaining / $spareConsumed) * 24 / $wearMultiplier);
 
-            // Cap at 10 years maximum
-            $monthsRemaining = min($monthsRemaining, 120);
+            // Cap at target age (same as HDD: 6 years conservative, 8 years aggressive)
+            $maxMonths = ($predictionMode === 'conservative') ? 72 : 96;
+            $monthsRemaining = min($monthsRemaining, $maxMonths);
 
             $timeline = getReplacementTimelineText($monthsRemaining);
 
