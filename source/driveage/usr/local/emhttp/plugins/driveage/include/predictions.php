@@ -186,9 +186,12 @@ function estimateNvmeRemainingLife($driveInfo, $predictionMode = 'conservative')
 function estimateHddRemainingLife($driveInfo, $predictionMode = 'conservative') {
     $powerOnHours = $driveInfo['power_on_hours'] ?? null;
     $healthWarnings = $driveInfo['health_warnings'] ?? [];
+    $smartStatus = $driveInfo['smart_status'] ?? 'UNKNOWN';
 
     // No SMART data available - cannot make prediction
-    if ($powerOnHours === null) {
+    // Check for: null power_on_hours, 0 hours, or UNKNOWN/N/A SMART status
+    if ($powerOnHours === null || $powerOnHours === 0 ||
+        in_array(strtoupper($smartStatus), ['UNKNOWN', 'N/A'], true)) {
         return [
             'months_remaining' => null,
             'confidence' => 'none',

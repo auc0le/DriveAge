@@ -255,7 +255,8 @@ function renderTableView() {
                         html += `${icon} ${escapeHtml(warning.message)}`;
                         html += '</span><br>';
                     });
-                } else if (drive.power_on_hours === null) {
+                } else if (drive.power_on_hours === null || drive.power_on_hours === 0 ||
+                           drive.smart_status === 'UNKNOWN' || drive.smart_status === 'N/A') {
                     // No SMART data available
                     html += '<span class="health-unknown" title="No SMART data available">N/A</span>';
                 } else {

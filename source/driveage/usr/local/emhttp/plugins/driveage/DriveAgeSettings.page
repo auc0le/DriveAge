@@ -629,6 +629,23 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
                     </div>
                 </div>
 
+                <!-- Prediction Settings Section -->
+                <div class="settings-section">
+                    <h3>Prediction Settings</h3>
+
+                    <div class="form-group">
+                        <label>Replacement Prediction Mode</label>
+                        <select name="PREDICTION_MODE">
+                            <option value="conservative" <?= selected($config['PREDICTION_MODE'], 'conservative'); ?>>Conservative (6-year target, safer estimates)</option>
+                            <option value="aggressive" <?= selected($config['PREDICTION_MODE'], 'aggressive'); ?>>Aggressive (8-year target, maximize drive life)</option>
+                        </select>
+                        <div class="help-text">
+                            <strong>Conservative:</strong> Targets replacement at 6 years (AFR ~10%). Better for critical data.<br>
+                            <strong>Aggressive:</strong> Targets replacement at 8 years. Accepts higher failure risk to maximize drive lifespan.
+                        </div>
+                    </div>
+                </div>
+
                 <!-- JSON API Settings Section -->
                 <div class="settings-section">
                     <h3>JSON API Settings</h3>
