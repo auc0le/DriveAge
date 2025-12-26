@@ -206,7 +206,25 @@ function renderTemperatureChart(driveData) {
 
     const tempData = aggregateTemperatureData(driveData.drives);
 
-    const labels = ['< 40°C', '40-49°C', '50-59°C', '≥ 60°C', 'Unknown'];
+    // Get temperature unit from config (default to Celsius)
+    const tempUnit = driveData.config && driveData.config.temperature_unit ? driveData.config.temperature_unit : 'C';
+
+    // Generate labels based on temperature unit
+    // Note: Binning is always done in Celsius (drive.temperature is always in C)
+    // but labels show the user's preferred unit
+    let labels;
+    if (tempUnit === 'F') {
+        // Fahrenheit labels (converted from Celsius thresholds)
+        // < 40°C = < 104°F
+        // 40-49°C = 104-120°F
+        // 50-59°C = 122-138°F
+        // ≥ 60°C = ≥ 140°F
+        labels = ['< 104°F', '104-120°F', '122-138°F', '≥ 140°F', 'Unknown'];
+    } else {
+        // Celsius labels
+        labels = ['< 40°C', '40-49°C', '50-59°C', '≥ 60°C', 'Unknown'];
+    }
+
     const data = [
         tempData.under_40,
         tempData['40_to_49'],

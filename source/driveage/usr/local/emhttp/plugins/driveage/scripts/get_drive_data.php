@@ -13,6 +13,7 @@ require_once '/usr/local/emhttp/plugins/driveage/include/config.php';
 require_once '/usr/local/emhttp/plugins/driveage/include/smartdata.php';
 require_once '/usr/local/emhttp/plugins/driveage/include/formatting.php';
 require_once '/usr/local/emhttp/plugins/driveage/include/security.php';
+require_once '/usr/local/emhttp/plugins/driveage/include/helpers.php';
 
 try {
     // Load configuration
@@ -73,7 +74,8 @@ try {
         'config' => [
             'show_temperature' => $config['SHOW_TEMPERATURE'] === 'true',
             'show_smart_status' => $config['SHOW_SMART_STATUS'] === 'true',
-            'show_spin_status' => $config['SHOW_SPIN_STATUS'] === 'true'
+            'show_spin_status' => $config['SHOW_SPIN_STATUS'] === 'true',
+            'temperature_unit' => getTemperatureUnit()
         ]
     ];
 
