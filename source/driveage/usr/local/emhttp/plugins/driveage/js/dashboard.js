@@ -226,7 +226,7 @@ function renderTableView() {
                 html += `<td>${escapeHtml(drive.device_name)}</td>`;
                 html += `<td title="${escapeHtml(drive.identification)}">${escapeHtml(truncate(drive.identification, 50))}</td>`;
                 html += `<td class="text-right">${escapeHtml(drive.size_human)}</td>`;
-                html += `<td class="text-right">${escapeHtml(drive.power_on_hours.toLocaleString())}</td>`;
+                html += `<td class="text-right">${drive.power_on_hours !== null ? escapeHtml(drive.power_on_hours.toLocaleString()) : 'N/A'}</td>`;
                 html += `<td>${escapeHtml(drive.power_on_human)}</td>`;
 
                 if (driveData.config.show_temperature) {
