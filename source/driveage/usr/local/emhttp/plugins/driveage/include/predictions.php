@@ -230,66 +230,59 @@ function estimateHddRemainingLife($driveInfo, $predictionMode = 'conservative') 
         ];
     }
 
-    // Age-based estimates using Backblaze AFR curves
-    // AFR increases significantly after 4-5 years
-    // Conservative mode: reduce estimates by 30%
-    // Aggressive mode: use standard estimates
+    // Linear age-based estimates using Backblaze AFR curves
+    // Conservative: Target replacement at 4 years (AFR increases significantly after 4-5 years)
+    // Aggressive: Target replacement at 5.5 years (more optimistic)
 
-    $multiplier = ($predictionMode === 'conservative') ? 0.7 : 1.0;
+    $targetAge = ($predictionMode === 'conservative') ? 4.0 : 5.5;
 
-    if ($ageYears < 2) {
-        // Young drive: 5+ years remaining
-        $months = round(60 * $multiplier);
-        $timeline = getReplacementTimelineText($months);
+    // Calculate remaining years until target age
+    $remainingYears = $targetAge - $ageYears;
 
-        return [
-            'months_remaining' => $months,
-            'confidence' => 'medium',
-            'reason' => 'Drive is relatively new (< 2 years)',
-            'action' => 'No action needed',
-            'timeline_text' => $timeline['text'],
-            'timeline_class' => $timeline['class']
-        ];
-    } elseif ($ageYears < 4) {
-        // Mid-life: 2-4 years remaining
-        $months = round(36 * $multiplier);
-        $timeline = getReplacementTimelineText($months);
+    // Convert to months
+    $monthsRemaining = round($remainingYears * 12);
 
-        return [
-            'months_remaining' => $months,
-            'confidence' => 'medium',
-            'reason' => 'Drive is in normal operating range (2-4 years old)',
-            'action' => 'Monitor regularly',
-            'timeline_text' => $timeline['text'],
-            'timeline_class' => $timeline['class']
-        ];
-    } elseif ($ageYears < 6) {
-        // Aging: 1-2 years remaining
-        $months = round(18 * $multiplier);
-        $timeline = getReplacementTimelineText($months);
-
-        return [
-            'months_remaining' => $months,
-            'confidence' => 'low',
-            'reason' => 'Drive is aging (4-6 years old), AFR increasing',
-            'action' => 'Plan replacement within 1-2 years',
-            'timeline_text' => $timeline['text'],
-            'timeline_class' => $timeline['class']
-        ];
+    // Apply bounds and determine confidence
+    if ($monthsRemaining > 60) {
+        // Very new drive - cap at 5 years max estimate
+        $monthsRemaining = 60;
+        $confidence = 'medium';
+        $reason = sprintf('Drive is relatively new (%.1f years old)', $ageYears);
+        $action = 'No action needed';
+    } elseif ($monthsRemaining > 24) {
+        // Plenty of life remaining
+        $confidence = 'medium';
+        $reason = sprintf('Drive is %.1f years old, well within normal lifespan', $ageYears);
+        $action = 'Monitor regularly';
+    } elseif ($monthsRemaining > 12) {
+        // Moderate time remaining
+        $confidence = 'medium';
+        $reason = sprintf('Drive is %.1f years old, approaching target replacement age', $ageYears);
+        $action = 'Plan replacement within 1-2 years';
+    } elseif ($monthsRemaining > 0) {
+        // Less than 1 year remaining
+        $confidence = 'low';
+        $reason = sprintf('Drive is %.1f years old, near or past recommended replacement age', $ageYears);
+        $action = 'Plan replacement within the year';
     } else {
-        // Old: <1 year remaining
-        $months = round(6 * $multiplier);
-        $timeline = getReplacementTimelineText($months);
-
-        return [
-            'months_remaining' => $months,
-            'confidence' => 'low',
-            'reason' => 'Drive exceeds typical lifespan (>6 years)',
-            'action' => 'Replace within 6-12 months',
-            'timeline_text' => $timeline['text'],
-            'timeline_class' => $timeline['class']
-        ];
+        // Past target age - critical
+        // Gracefully degrade: give 0-6 months based on how far past
+        $monthsRemaining = max(0, round(6 + ($remainingYears * 12)));
+        $confidence = 'low';
+        $reason = sprintf('Drive is %.1f years old, exceeds recommended replacement age', $ageYears);
+        $action = 'Replace soon';
     }
+
+    $timeline = getReplacementTimelineText($monthsRemaining);
+
+    return [
+        'months_remaining' => $monthsRemaining,
+        'confidence' => $confidence,
+        'reason' => $reason,
+        'action' => $action,
+        'timeline_text' => $timeline['text'],
+        'timeline_class' => $timeline['class']
+    ];
 }
 
 /**
