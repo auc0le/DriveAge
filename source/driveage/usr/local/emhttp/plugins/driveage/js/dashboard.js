@@ -255,6 +255,9 @@ function renderTableView() {
                         html += `${icon} ${escapeHtml(warning.message)}`;
                         html += '</span><br>';
                     });
+                } else if (drive.power_on_hours === null) {
+                    // No SMART data available
+                    html += '<span class="health-unknown" title="No SMART data available">N/A</span>';
                 } else {
                     html += '<span class="health-ok" title="No warnings detected">✓ Healthy</span>';
                 }

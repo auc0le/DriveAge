@@ -339,6 +339,12 @@
     font-weight: 500;
 }
 
+.health-unknown {
+    color: #666;
+    font-weight: 400;
+    font-style: italic;
+}
+
 /* ========================================
    Replacement Timeline Column
    ======================================== */

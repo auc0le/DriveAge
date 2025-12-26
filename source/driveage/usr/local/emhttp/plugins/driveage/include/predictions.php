@@ -184,8 +184,21 @@ function estimateNvmeRemainingLife($driveInfo, $predictionMode = 'conservative')
  * @return array ['months_remaining' => int|null, 'confidence' => string, 'reason' => string, ...]
  */
 function estimateHddRemainingLife($driveInfo, $predictionMode = 'conservative') {
-    $powerOnHours = $driveInfo['power_on_hours'] ?? 0;
+    $powerOnHours = $driveInfo['power_on_hours'] ?? null;
     $healthWarnings = $driveInfo['health_warnings'] ?? [];
+
+    // No SMART data available - cannot make prediction
+    if ($powerOnHours === null) {
+        return [
+            'months_remaining' => null,
+            'confidence' => 'none',
+            'reason' => 'No SMART data available',
+            'action' => 'Cannot estimate without power-on hours',
+            'timeline_text' => 'Unknown',
+            'timeline_class' => 'timeline-unknown'
+        ];
+    }
+
     $ageYears = $powerOnHours / 8760;
 
     // CRITICAL: If drive has critical warnings, estimate very short remaining life
