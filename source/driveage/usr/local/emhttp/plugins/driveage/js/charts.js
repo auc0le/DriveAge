@@ -98,12 +98,13 @@ function renderRiskChart(driveData) {
     if (!ctx) return;
 
     const riskData = aggregateRiskData(driveData.drives);
+    // Note: No HTML escaping needed - Chart.js renders to canvas, not HTML
     const labels = [
-        escapeHtml(getAgeLabel('minimal_risk', driveData)),
-        escapeHtml(getAgeLabel('low_risk', driveData)),
-        escapeHtml(getAgeLabel('moderate_risk', driveData)),
-        escapeHtml(getAgeLabel('elevated_risk', driveData)),
-        escapeHtml(getAgeLabel('high_risk', driveData))
+        getAgeLabel('minimal_risk', driveData),
+        getAgeLabel('low_risk', driveData),
+        getAgeLabel('moderate_risk', driveData),
+        getAgeLabel('elevated_risk', driveData),
+        getAgeLabel('high_risk', driveData)
     ];
 
     const data = [
