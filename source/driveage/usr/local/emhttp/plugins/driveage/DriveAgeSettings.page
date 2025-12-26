@@ -641,7 +641,10 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
                         </select>
                         <div class="help-text">
                             <strong>Conservative:</strong> Targets replacement at 6 years (AFR ~10%). Better for critical data.<br>
-                            <strong>Aggressive:</strong> Targets replacement at 8 years. Accepts higher failure risk to maximize drive lifespan.
+                            <strong>Aggressive:</strong> Targets replacement at 8 years. Accepts higher failure risk to maximize drive lifespan.<br><br>
+                            <strong>How it works:</strong><br>
+                            • <strong>HDDs:</strong> Age-based estimates using Backblaze AFR data. Target age is the replacement recommendation.<br>
+                            • <strong>NVMe:</strong> TBW (Total Bytes Written) calculations predict wear-based replacement. The target age is the <em>maximum calendar limit</em> — heavily-written drives may show earlier replacement dates based on write wear.
                         </div>
                     </div>
                 </div>
