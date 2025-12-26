@@ -298,6 +298,12 @@ function validateConfig($config) {
     $validated['API_ENABLED'] = ($config['API_ENABLED'] ?? 'false') === 'true' ? 'true' : 'false';
     $validated['API_RATE_LIMIT'] = max(10, min(1000, intval($config['API_RATE_LIMIT'] ?? 100)));
 
+    // Prediction mode - strict whitelist
+    $validPredictionModes = ['conservative', 'aggressive'];
+    $validated['PREDICTION_MODE'] = in_array($config['PREDICTION_MODE'] ?? '', $validPredictionModes, true)
+        ? $config['PREDICTION_MODE']
+        : $defaults['PREDICTION_MODE'];
+
     // Category colors validation
     $colorFields = [
         'COLOR_MINIMAL_RISK',
