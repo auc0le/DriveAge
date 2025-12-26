@@ -289,43 +289,41 @@ function renderTemperatureChart(driveData) {
 }
 
 /**
- * Aggregate drives by size range
+ * Aggregate drives by actual unique sizes
  *
  * @param {Array} drives - Array of drive objects
- * @return {Object} Size bin counts
+ * @return {Object} Object with labels and counts arrays, sorted by size
  */
 function aggregateSizeData(drives) {
-    const bins = {
-        'under_1tb': 0,      // < 1TB
-        '1_to_4tb': 0,       // 1-4TB
-        '4_to_8tb': 0,       // 4-8TB
-        '8_to_12tb': 0,      // 8-12TB
-        '12_to_16tb': 0,     // 12-16TB
-        '16_plus_tb': 0      // ≥ 16TB
-    };
-
-    const TB = 1024 * 1024 * 1024 * 1024; // 1TB in bytes
+    // Group drives by size_human (e.g., "12TB", "8TB", "500GB")
+    const sizeMap = new Map();
 
     drives.forEach(drive => {
+        const sizeHuman = drive.size_human || 'Unknown';
         const sizeBytes = drive.size_bytes || 0;
-        const sizeTB = sizeBytes / TB;
 
-        if (sizeTB < 1) {
-            bins.under_1tb++;
-        } else if (sizeTB < 4) {
-            bins['1_to_4tb']++;
-        } else if (sizeTB < 8) {
-            bins['4_to_8tb']++;
-        } else if (sizeTB < 12) {
-            bins['8_to_12tb']++;
-        } else if (sizeTB < 16) {
-            bins['12_to_16tb']++;
-        } else {
-            bins['16_plus_tb']++;
+        if (!sizeMap.has(sizeHuman)) {
+            sizeMap.set(sizeHuman, {
+                count: 0,
+                bytes: sizeBytes
+            });
         }
+
+        sizeMap.get(sizeHuman).count++;
     });
 
-    return bins;
+    // Convert to array and sort by size (bytes)
+    const sortedSizes = Array.from(sizeMap.entries())
+        .sort((a, b) => a[1].bytes - b[1].bytes);
+
+    // Extract labels and counts
+    const labels = sortedSizes.map(entry => entry[0]);
+    const counts = sortedSizes.map(entry => entry[1].count);
+
+    return {
+        labels: labels,
+        counts: counts
+    };
 }
 
 /**
@@ -339,15 +337,9 @@ function renderSizeChart(driveData) {
 
     const sizeData = aggregateSizeData(driveData.drives);
 
-    const labels = ['< 1TB', '1-4TB', '4-8TB', '8-12TB', '12-16TB', '≥ 16TB'];
-    const data = [
-        sizeData.under_1tb,
-        sizeData['1_to_4tb'],
-        sizeData['4_to_8tb'],
-        sizeData['8_to_12tb'],
-        sizeData['12_to_16tb'],
-        sizeData['16_plus_tb']
-    ];
+    // Use actual drive sizes from the data
+    const labels = sizeData.labels;
+    const data = sizeData.counts;
 
     // Consistent color scheme
     const color = '#2196F3';  // Blue
