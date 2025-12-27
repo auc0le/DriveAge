@@ -251,9 +251,24 @@ function renderTableView() {
                     drive.health_warnings.forEach(warning => {
                         const iconClass = warning.level === 'critical' ? 'warning-critical' : 'warning-caution';
                         const icon = warning.level === 'critical' ? '⚠️' : '⚡';
-                        html += `<span class="${iconClass}" title="${escapeHtml(warning.tooltip)}">`;
+
+                        // Map warning attributes to help page anchors
+                        const helpAnchors = {
+                            'reallocated_sectors': 'reallocated-sectors',
+                            'pending_sectors': 'other-smart-warnings',
+                            'uncorrectable_sectors': 'other-smart-warnings',
+                            'reported_uncorrectable': 'other-smart-warnings',
+                            'command_timeout': 'other-smart-warnings',
+                            'media_errors': 'nvme-warnings',
+                            'critical_warning': 'nvme-warnings'
+                        };
+
+                        const anchor = helpAnchors[warning.attribute] || 'other-smart-warnings';
+                        const helpUrl = `/Settings/DriveAgeHelp#${anchor}`;
+
+                        html += `<a href="${helpUrl}" class="${iconClass}" title="${escapeHtml(warning.tooltip)}" style="text-decoration: none; color: inherit;">`;
                         html += `${icon} ${escapeHtml(warning.message)}`;
-                        html += '</span><br>';
+                        html += '</a><br>';
                     });
                 } else if (drive.power_on_hours === null || drive.power_on_hours === 0 ||
                            drive.smart_status === 'UNKNOWN' || drive.smart_status === 'N/A') {

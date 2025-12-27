@@ -1,0 +1,363 @@
+Menu="DriveAge:3"
+Title="Help"
+---
+<?PHP
+/* DriveAge Plugin - Help & Documentation */
+require_once '/usr/local/emhttp/plugins/driveage/include/config.php';
+require_once '/usr/local/emhttp/plugins/driveage/include/helpers.php';
+
+$config = loadConfig();
+$cacheVersion = '2025.12.26-2';
+?>
+<link rel="stylesheet" href="/plugins/driveage/styles/driveage.css?v=<?= $cacheVersion; ?>">
+
+<style>
+.help-container {
+    max-width: 900px;
+    margin: 20px auto;
+    padding: 20px;
+    background: #1c1c1c;
+    border-radius: 8px;
+}
+
+.help-section {
+    margin-bottom: 30px;
+    padding: 20px;
+    background: #2a2a2a;
+    border-radius: 6px;
+}
+
+.help-section h2 {
+    color: #ff8c00;
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-size: 1.5em;
+    border-bottom: 2px solid #444;
+    padding-bottom: 10px;
+}
+
+.help-section h3 {
+    color: #ffa500;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    font-size: 1.2em;
+}
+
+.help-section p {
+    line-height: 1.6;
+    margin-bottom: 12px;
+}
+
+.help-section ul {
+    margin-left: 20px;
+    margin-bottom: 15px;
+}
+
+.help-section li {
+    margin-bottom: 8px;
+    line-height: 1.6;
+}
+
+.help-section code {
+    background: #1a1a1a;
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: #4af;
+    font-family: monospace;
+}
+
+.severity-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 0.9em;
+    margin-right: 10px;
+}
+
+.severity-critical {
+    background: #dc3545;
+    color: white;
+}
+
+.severity-warning {
+    background: #ffc107;
+    color: black;
+}
+
+.info-box {
+    background: #1a3a4a;
+    border-left: 4px solid #4a90e2;
+    padding: 15px;
+    margin: 15px 0;
+    border-radius: 4px;
+}
+
+.warning-box {
+    background: #4a3a1a;
+    border-left: 4px solid #ffa500;
+    padding: 15px;
+    margin: 15px 0;
+    border-radius: 4px;
+}
+
+.critical-box {
+    background: #4a1a1a;
+    border-left: 4px solid #dc3545;
+    padding: 15px;
+    margin: 15px 0;
+    border-radius: 4px;
+}
+</style>
+
+<div class="help-container">
+    <h1 style="color: #ff8c00; text-align: center; margin-bottom: 30px;">DriveAge Help & Documentation</h1>
+
+    <!-- Reallocated Sectors Section -->
+    <div class="help-section" id="reallocated-sectors">
+        <h2>⚠️ Reallocated Sectors (SMART Attribute ID 5)</h2>
+
+        <h3>What are Reallocated Sectors?</h3>
+        <p>
+            <strong>Reallocated sectors</strong> are bad sectors on your hard drive that the drive has detected and automatically
+            remapped to spare sectors. This indicates <strong>physical damage</strong> to the disk platter.
+        </p>
+
+        <p>
+            When a hard drive reads a sector and detects errors, it moves that sector's data to a reserved spare area
+            and marks the bad sector as unusable. This is the drive's built-in self-repair mechanism, but it's a
+            <strong>warning sign</strong> that the drive is deteriorating.
+        </p>
+
+        <h3>Severity Levels</h3>
+        <div class="warning-box">
+            <span class="severity-badge severity-warning">WARNING</span>
+            <strong>1-10 Reallocated Sectors</strong><br>
+            <strong>Action:</strong> Backup data immediately, monitor closely<br>
+            <strong>Estimated Replacement:</strong>
+            <ul>
+                <li>Conservative Mode: 3 months</li>
+                <li>Aggressive Mode: 6 months</li>
+            </ul>
+            The drive has physical damage but may continue working. Some drives with a few reallocated sectors
+            continue running for years, but the risk of failure is significantly elevated.
+        </div>
+
+        <div class="critical-box">
+            <span class="severity-badge severity-critical">CRITICAL</span>
+            <strong>>10 Reallocated Sectors</strong><br>
+            <strong>Action:</strong> Replace immediately<br>
+            <strong>Estimated Replacement:</strong> Now (0 months)<br><br>
+            The drive has extensive physical damage and is at high risk of imminent failure. Replace as soon as possible.
+        </div>
+
+        <h3>Why These Time Estimates?</h3>
+        <p>
+            The replacement estimates are based on research from <strong>Google's drive reliability study</strong>, which analyzed
+            100,000+ drives in data centers. Their research found that SMART attribute 5 (Reallocated Sectors) is one of the
+            <strong>strongest predictors of imminent drive failure</strong>.
+        </p>
+
+        <p>
+            According to their data, <strong>ANY</strong> reallocated sectors significantly increase failure risk. The 3-month
+            (conservative) or 6-month (aggressive) estimates provide a planning guideline for drives with 1-10 reallocated sectors.
+        </p>
+
+        <div class="info-box">
+            <strong>Important:</strong> These estimates are <em>probabilistic guidance</em>, not guarantees. Some drives with
+            reallocated sectors continue working for years, while others fail quickly. The plugin uses conservative estimates
+            to give you time to plan replacement during a maintenance window.
+        </div>
+
+        <h3>What Should You Do?</h3>
+        <ol>
+            <li><strong>Back up your data immediately</strong> if you haven't already</li>
+            <li><strong>Monitor the drive</strong> - if the reallocated sector count increases, failure is imminent</li>
+            <li><strong>Plan to replace</strong> the drive within the estimated timeframe</li>
+            <li><strong>Don't panic</strong> - drives don't always fail immediately, but planning is essential</li>
+        </ol>
+
+        <p>
+            If you want a longer estimate, you can switch to "Aggressive Mode" in <a href="/Settings/DriveAgeSettings">DriveAge Settings</a>,
+            which gives 6 months instead of 3 months for warning-level reallocations.
+        </p>
+    </div>
+
+    <!-- Other SMART Warnings Section -->
+    <div class="help-section" id="other-smart-warnings">
+        <h2>Other HDD SMART Warnings</h2>
+
+        <h3>Pending Sectors (SMART Attribute ID 197)</h3>
+        <div class="critical-box">
+            <span class="severity-badge severity-critical">CRITICAL</span>
+            <strong>ANY value > 0</strong><br>
+            <strong>Action:</strong> Replace ASAP<br><br>
+            Pending sectors are waiting to be reallocated. The drive is actively failing and attempting to remap bad sectors.
+            This indicates imminent failure risk.
+        </div>
+
+        <h3>Uncorrectable Sectors (SMART Attribute ID 198)</h3>
+        <div class="critical-box">
+            <span class="severity-badge severity-critical">CRITICAL</span>
+            <strong>ANY value > 0</strong><br>
+            <strong>Action:</strong> Replace immediately<br><br>
+            Uncorrectable errors indicate permanent data loss. Sectors cannot be read or written, and data may already be lost.
+            Replace the drive immediately and restore from backups.
+        </div>
+
+        <h3>Reported Uncorrectable Errors (SMART Attribute ID 187)</h3>
+        <div class="warning-box">
+            <span class="severity-badge severity-warning">WARNING</span>
+            <strong>ANY value > 0</strong><br>
+            <strong>Action:</strong> Monitor closely, plan replacement<br><br>
+            Read errors during normal operation. The drive is having difficulty reading data but has not yet failed completely.
+        </div>
+
+        <h3>Command Timeout (SMART Attribute ID 188)</h3>
+        <div class="warning-box">
+            <span class="severity-badge severity-warning">WARNING</span>
+            <strong>1-100 timeouts:</strong> Monitor closely<br>
+            <span class="severity-badge severity-critical">CRITICAL</span>
+            <strong>>100 timeouts:</strong> Replace ASAP<br><br>
+            Commands that timed out indicate communication failures between the drive and system. High timeout counts
+            suggest the drive is becoming unresponsive.
+        </div>
+    </div>
+
+    <!-- NVMe Warnings Section -->
+    <div class="help-section" id="nvme-warnings">
+        <h2>NVMe SSD Health Warnings</h2>
+
+        <h3>Media Errors</h3>
+        <div class="critical-box">
+            <span class="severity-badge severity-critical">CRITICAL</span>
+            <strong>ANY value > 0</strong><br>
+            <strong>Action:</strong> Replace ASAP<br><br>
+            NAND chip read/write errors indicate uncorrectable data errors. The SSD's reliability is compromised.
+        </div>
+
+        <h3>Critical Warning Flag</h3>
+        <div class="critical-box">
+            <span class="severity-badge severity-critical">CRITICAL</span>
+            <strong>Active warning</strong><br>
+            <strong>Action:</strong> Check drive immediately<br><br>
+            The drive has raised a vendor-specific critical warning flag. This could indicate temperature issues,
+            spare capacity depletion, or other critical conditions.
+        </div>
+
+        <h3>Available Spare Below Threshold</h3>
+        <div class="critical-box">
+            <span class="severity-badge severity-critical">CRITICAL</span>
+            <strong>Spare < Threshold (typically 10%)</strong><br>
+            <strong>Action:</strong> Replace within 1 month<br><br>
+            The SSD has consumed most of its spare NAND blocks. When spare capacity is fully depleted, the drive will fail.
+        </div>
+
+        <h3>High Percentage Used</h3>
+        <div class="warning-box">
+            <span class="severity-badge severity-warning">WARNING</span>
+            <strong>80-99% used:</strong> Monitor closely<br>
+            <span class="severity-badge severity-critical">CRITICAL</span>
+            <strong>≥100% used:</strong> Replace soon<br><br>
+            Vendor-specific wear indicator showing how much of the drive's rated lifespan has been consumed.
+            Values over 100% indicate the drive has exceeded its rated endurance.
+        </div>
+    </div>
+
+    <!-- Prediction Modes Section -->
+    <div class="help-section" id="prediction-modes">
+        <h2>Conservative vs Aggressive Prediction Modes</h2>
+
+        <p>
+            DriveAge offers two prediction modes that affect how replacement estimates are calculated:
+        </p>
+
+        <h3>Conservative Mode (Default)</h3>
+        <p><strong>Philosophy:</strong> Assume faster wear and shorter lifespan to be safe</p>
+        <ul>
+            <li>HDD SMART warnings: <strong>3 months</strong> replacement estimate</li>
+            <li>NVMe write rate: <strong>30 TB/year</strong> (higher workload assumption)</li>
+            <li>Target HDD age: <strong>6 years</strong> (10% AFR threshold)</li>
+        </ul>
+        <p><strong>Best for:</strong> Production systems, mission-critical data, risk-averse users</p>
+
+        <h3>Aggressive Mode</h3>
+        <p><strong>Philosophy:</strong> Assume slower wear and longer lifespan based on typical usage</p>
+        <ul>
+            <li>HDD SMART warnings: <strong>6 months</strong> replacement estimate</li>
+            <li>NVMe write rate: <strong>15 TB/year</strong> (lower workload assumption)</li>
+            <li>Target HDD age: <strong>8 years</strong> (higher AFR acceptable)</li>
+        </ul>
+        <p><strong>Best for:</strong> Home labs, non-critical storage, budget-conscious users</p>
+
+        <div class="info-box">
+            You can change the prediction mode in <a href="/Settings/DriveAgeSettings">DriveAge Settings</a>.
+        </div>
+    </div>
+
+    <!-- Research Sources Section -->
+    <div class="help-section" id="research">
+        <h2>Research Sources</h2>
+
+        <p>DriveAge's predictions are based on peer-reviewed research and industry data:</p>
+
+        <ul>
+            <li>
+                <strong>Backblaze Hard Drive Stats (2013-2024)</strong><br>
+                250,000+ drives in production, showing AFR increases significantly after 4-5 years<br>
+                <a href="https://www.backblaze.com/blog/backblaze-drive-stats/" target="_blank">https://www.backblaze.com/blog/backblaze-drive-stats/</a>
+            </li>
+            <li>
+                <strong>Google Drive Reliability Study (2007)</strong><br>
+                100,000+ drives analyzed, identified SMART attributes 5, 187, 188, 197, 198 as strongest failure predictors<br>
+                <a href="https://research.google/pubs/pub32774/" target="_blank">https://research.google/pubs/pub32774/</a>
+            </li>
+            <li>
+                <strong>Consumer SSD Endurance Research (2020-2024)</strong><br>
+                Tom's Hardware and AnandTech testing showing modern TLC SSDs average 500 TBW per TB capacity
+            </li>
+        </ul>
+
+        <p>
+            For detailed methodology, see <code>METHODOLOGY.md</code> in the plugin repository.
+        </p>
+    </div>
+
+    <!-- FAQ Section -->
+    <div class="help-section" id="faq">
+        <h2>Frequently Asked Questions</h2>
+
+        <h3>Q: My drive shows red/high risk but has been working fine for months. Is it really going to fail?</h3>
+        <p>
+            <strong>A:</strong> Not necessarily. Red/high-risk categorization indicates <em>elevated probability</em> of failure,
+            not certainty. Some drives run for years beyond their expected lifespan. However, the risk increases with age and
+            SMART warnings, so planning proactive replacement is recommended.
+        </p>
+
+        <h3>Q: Should I replace a drive immediately if it has reallocated sectors?</h3>
+        <p>
+            <strong>A:</strong> For 1-10 reallocated sectors, you have time to plan (3-6 months depending on mode).
+            Back up your data immediately and monitor the drive. If the count increases rapidly or exceeds 10, replace as soon as possible.
+        </p>
+
+        <h3>Q: Why doesn't my NVMe drive show a replacement estimate?</h3>
+        <p>
+            <strong>A:</strong> NVMe estimates require either: (1) Percentage Used data, (2) Data Units Written, or (3) Available Spare
+            consumption. Very new drives with 0% wear may show "Unknown" until enough data is collected. This is normal.
+        </p>
+
+        <h3>Q: Can I trust these predictions?</h3>
+        <p>
+            <strong>A:</strong> DriveAge's predictions are based on industry research and real-world data from millions of drives.
+            However, they are <em>probabilistic estimates</em>, not guarantees. Individual drives may vary. Always maintain backups
+            of critical data regardless of predictions.
+        </p>
+
+        <h3>Q: Why is my old drive showing as green/low risk?</h3>
+        <p>
+            <strong>A:</strong> This was a bug in earlier versions! As of Build 21, drives with replacement estimates less than
+            6 months are automatically upgraded to high risk (red) regardless of age. If you're seeing this, please update to the
+            latest version.
+        </p>
+    </div>
+</div>

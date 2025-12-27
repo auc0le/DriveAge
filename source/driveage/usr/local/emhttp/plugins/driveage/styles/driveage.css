@@ -346,6 +346,20 @@
     /* Color inherits from row */
 }
 
+/* Clickable warning links */
+a.warning-critical,
+a.warning-caution {
+    cursor: pointer;
+    text-decoration: none;
+    transition: opacity 0.2s ease, text-decoration 0.2s ease;
+}
+
+a.warning-critical:hover,
+a.warning-caution:hover {
+    opacity: 0.8;
+    text-decoration: underline;
+}
+
 /* ========================================
    Replacement Timeline Column
    ======================================== */

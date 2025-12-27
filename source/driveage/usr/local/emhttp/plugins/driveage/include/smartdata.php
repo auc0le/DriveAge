@@ -313,6 +313,15 @@ function getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit = 'C') {
     // Add prediction data to drive info
     $driveInfo['replacement_prediction'] = $prediction;
 
+    // CRITICAL: Override age category to high_risk if replacement estimate is < 6 months
+    // This ensures drives with imminent failure warnings show as red regardless of age
+    if (isset($prediction['months_remaining']) &&
+        $prediction['months_remaining'] !== null &&
+        $prediction['months_remaining'] < 6) {
+        $driveInfo['age_category'] = 'high_risk';
+        $driveInfo['color_class'] = getAgeColorClass('high_risk');
+    }
+
     return $driveInfo;
 }
 
