@@ -166,9 +166,6 @@ function renderTableView() {
     const container = document.getElementById('drive-container');
     if (!container) return;
 
-    // Sort drives
-    const sortedDrives = sortDrives([...driveData.drives], sortColumn, sortDirection);
-
     let html = '<div class="driveage-table-container">';
     html += '<table class="driveage-table">';
     html += '<thead><tr>';
@@ -201,7 +198,8 @@ function renderTableView() {
 
     for (const arrayName in grouped) {
         for (const driveType in grouped[arrayName]) {
-            const drives = grouped[arrayName][driveType];
+            // Sort drives within this group
+            const drives = sortDrives([...grouped[arrayName][driveType]], sortColumn, sortDirection);
 
             // Add group header
             html += `<tr class="group-header" onclick="toggleGroup(this)">`;
