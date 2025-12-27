@@ -3,8 +3,8 @@
  */
 
 let driveData = null;
-let sortColumn = 'power_on_hours';
-let sortDirection = 'desc';
+let sortColumn = 'replacement_months';
+let sortDirection = 'asc';
 let chartInstances = null;
 
 /**
@@ -192,7 +192,7 @@ function renderTableView() {
 
     html += '<th>Age</th>';
     html += '<th>Health Status</th>';
-    html += '<th title="Estimated time until recommended replacement">Est. Replacement</th>';
+    html += '<th class="sortable" data-column="replacement_months" title="Estimated time until recommended replacement">Est. Replacement</th>';
     html += '</tr></thead>';
     html += '<tbody>';
 
@@ -317,7 +317,8 @@ function handleSort(column) {
     } else {
         // New column
         sortColumn = column;
-        sortDirection = 'desc';
+        // Default to ascending for replacement_months (soonest first), descending for others
+        sortDirection = (column === 'replacement_months') ? 'asc' : 'desc';
     }
 
     renderDashboard();
@@ -328,10 +329,18 @@ function handleSort(column) {
  */
 function sortDrives(drives, column, direction) {
     return drives.sort((a, b) => {
-        let aVal = a[column];
-        let bVal = b[column];
+        let aVal, bVal;
 
-        // Handle nulls
+        // Special handling for replacement_months (nested in replacement_prediction)
+        if (column === 'replacement_months') {
+            aVal = a.replacement_prediction?.months_remaining;
+            bVal = b.replacement_prediction?.months_remaining;
+        } else {
+            aVal = a[column];
+            bVal = b[column];
+        }
+
+        // Handle nulls - for replacement months, null means unknown (should go to end)
         if (aVal === null || aVal === undefined) return 1;
         if (bVal === null || bVal === undefined) return -1;
 
