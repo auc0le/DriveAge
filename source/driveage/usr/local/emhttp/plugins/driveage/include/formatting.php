@@ -2,19 +2,16 @@
 /**
  * DriveAge Plugin - Formatting Utilities
  *
- * Handles conversion of raw values to human-readable formats
+ * Converts raw values to human-readable formats. Returns PLAIN TEXT and
+ * CSS class names only - no HTML - so the JSON API stays presentation-free.
  */
 
 /**
  * Convert power-on hours to human-readable format
  *
  * Format: Xy Ym Xd Xh
- * - y = years (365.25 days)
- * - m = months (30.44 days average)
- * - d = days
- * - h = remaining hours
  *
- * @param int $hours Power-on hours
+ * @param int|null $hours Power-on hours
  * @return string Human-readable format (e.g., "2y 10m 5d 20h")
  */
 function formatPowerOnHours($hours) {
@@ -27,43 +24,33 @@ function formatPowerOnHours($hours) {
     $days = 0;
     $remainingHours = $hours;
 
-    // Calculate years (365.25 days = 8766 hours)
-    $hoursPerYear = 8766;
+    // 8760 hours/year - consistent with the prediction and threshold math
+    $hoursPerYear = 8760;
     if ($remainingHours >= $hoursPerYear) {
         $years = floor($remainingHours / $hoursPerYear);
         $remainingHours = $remainingHours % $hoursPerYear;
     }
 
-    // Calculate months (30.44 days = 730.5 hours average)
+    // 30.44 days = 730.5 hours average per month
     $hoursPerMonth = 730.5;
     if ($remainingHours >= $hoursPerMonth) {
         $months = floor($remainingHours / $hoursPerMonth);
-        $remainingHours = $remainingHours % $hoursPerMonth;
+        $remainingHours = fmod($remainingHours, $hoursPerMonth);
     }
 
-    // Calculate days
     $hoursPerDay = 24;
     if ($remainingHours >= $hoursPerDay) {
         $days = floor($remainingHours / $hoursPerDay);
-        $remainingHours = $remainingHours % $hoursPerDay;
+        $remainingHours = fmod($remainingHours, $hoursPerDay);
     }
 
-    // Round remaining hours
     $remainingHours = round($remainingHours);
 
-    // Build formatted string
-    $parts = [];
-
     if ($years > 0 || $months > 0 || $days > 0 || $remainingHours > 0) {
-        $parts[] = $years . 'y';
-        $parts[] = $months . 'm';
-        $parts[] = $days . 'd';
-        $parts[] = $remainingHours . 'h';
-    } else {
-        return '0h';
+        return $years . 'y ' . $months . 'm ' . $days . 'd ' . $remainingHours . 'h';
     }
 
-    return implode(' ', $parts);
+    return '0h';
 }
 
 /**
@@ -71,7 +58,7 @@ function formatPowerOnHours($hours) {
  * Uses Unraid's adaptive decimal precision logic for consistency with Main page
  *
  * @param int $bytes Size in bytes
- * @param int $precision Decimal precision (null for adaptive)
+ * @param int|null $precision Decimal precision (null for adaptive)
  * @param int $kilo Base unit (1000 for SI/decimal, 1024 for binary) - default 1000 to match Unraid
  * @return string Human-readable size (e.g., "20TB", "500GB")
  */
@@ -94,7 +81,6 @@ function formatBytes($bytes, $precision = null, $kilo = 1000) {
         } elseif ($value >= 10) {
             $decimals = 1;
         } else {
-            // Check if it's a round number when multiplied by 100
             $decimals = (round($value * 100) % 100 === 0) ? 0 : 2;
         }
     } else {
@@ -108,7 +94,6 @@ function formatBytes($bytes, $precision = null, $kilo = 1000) {
         $decimals = 0;
     }
 
-    // Format with appropriate thousand separators for values > 9999
     $formattedValue = number_format($value, $decimals, '.', $value > 9999 ? ',' : '');
 
     return $formattedValue . $units[$base];
@@ -117,7 +102,6 @@ function formatBytes($bytes, $precision = null, $kilo = 1000) {
 /**
  * Process disk identification string (WWN processing)
  * Matches Unraid's my_id() function logic
- * Strips WWN suffix (last 18 characters) unless it appears to be part of the actual ID
  *
  * @param string $id Disk identification string
  * @return string Processed identification
@@ -129,16 +113,12 @@ function processDeviceId($id) {
 
     $len = strlen($id);
     if ($len <= 18) {
-        return $id; // Too short to have WWN suffix
+        return $id;
     }
 
     $wwn = substr($id, -18);
 
-    // Strip WWN suffix unless:
-    // - WWN doesn't start with '_3' pattern
-    // - WWN contains dashes or underscores in positions other than start
     if (substr($wwn, 0, 2) === '_3' && !preg_match('/.[_-]/', $wwn)) {
-        // This looks like a WWN suffix, strip it
         return substr($id, 0, $len - 18);
     }
 
@@ -148,7 +128,6 @@ function processDeviceId($id) {
 /**
  * Format device/disk name for display
  * Matches Unraid's my_disk() function logic
- * Converts names like "disk1" to "Disk 1", "parity2" to "Parity 2"
  *
  * @param string $name Device name
  * @param bool $raw Return raw name without formatting
@@ -159,16 +138,14 @@ function formatDeviceName($name, $raw = false) {
         return $name;
     }
 
-    // Capitalize first letter and add space before numbers
-    // "disk1" → "Disk 1", "parity2" → "Parity 2", "cache" → "Cache"
+    // "disk1" -> "Disk 1", "parity2" -> "Parity 2", "cache" -> "Cache"
     return ucfirst(preg_replace('/(\d+)$/', ' $1', $name));
 }
 
 /**
  * Format temperature for display
- * Matches Unraid's temperature display logic from Helpers.php
  *
- * @param mixed $temp Temperature value in Celsius (can be int or null)
+ * @param mixed $temp Temperature value in Celsius (int or null)
  * @param string $unit Temperature unit ('C' or 'F')
  * @return string Formatted temperature (e.g., "34 °C" or "93 °F")
  */
@@ -177,105 +154,62 @@ function formatTemperature($temp, $unit = 'C') {
         return 'N/A';
     }
 
-    // Convert to integer (matching raw SMART data format)
     $temp = intval($temp);
 
-    // Convert to Fahrenheit if needed (matching Unraid's fahrenheit() function)
-    // Formula: round(9/5 * celsius) + 32
     if ($unit === 'F') {
         $temp = round(9/5 * $temp) + 32;
     }
 
-    // Return with thin space (U+2009) and degree symbol (U+00B0) matching Unraid's format
-    // Using Unicode characters directly instead of HTML entities for JSON compatibility
     return $temp . ' °' . $unit;
 }
 
 /**
- * Format SMART status for display
+ * CSS class for a SMART overall-health status.
  *
  * @param string $status SMART status string
- * @return string HTML formatted status with color coding
+ * @return string CSS class name
  */
-function formatSmartStatus($status) {
-    $status = strtoupper(trim($status));
-
-    switch ($status) {
+function getSmartStatusClass($status) {
+    switch (strtoupper(trim((string)$status))) {
         case 'PASSED':
         case 'OK':
-            return '<span class="smart-passed">PASSED</span>';
-
+            return 'smart-passed';
         case 'FAILED':
         case 'FAILING':
-            return '<span class="smart-failed">FAILED</span>';
-
+            return 'smart-failed';
         case 'N/A':
-            return '<span class="smart-na">N/A</span>';
-
+            return 'smart-na';
         default:
-            return '<span class="smart-unknown">UNKNOWN</span>';
+            return 'smart-unknown';
     }
 }
 
 /**
- * Format spin status for display
+ * CSS class for a spin status.
  *
  * @param string $status Spin status
- * @return string HTML formatted spin status
+ * @return string CSS class name
  */
-function formatSpinStatus($status) {
-    $status = strtolower(trim($status));
-
-    switch ($status) {
+function getSpinStatusClass($status) {
+    switch (strtolower(trim((string)$status))) {
         case 'active':
         case 'spun_up':
         case 'active/idle':
-            return '<span class="spin-active">Active</span>';
-
+            return 'spin-active';
         case 'standby':
         case 'spun_down':
-            return '<span class="spin-standby">Standby</span>';
-
+            return 'spin-standby';
         case 'n/a':
-            return '<span class="spin-na">N/A</span>';
-
+            return 'spin-na';
         default:
-            return '<span class="spin-unknown">Unknown</span>';
+            return 'spin-unknown';
     }
-}
-
-/**
- * Sanitize string for HTML output
- *
- * @param string $str String to sanitize
- * @return string Sanitized string
- */
-function sanitizeHtml($str) {
-    return htmlspecialchars($str, ENT_QUOTES, 'UTF-8');
-}
-
-/**
- * Format device identification for display
- * Truncates long identifications with ellipsis
- *
- * @param string $id Device identification
- * @param int $maxLength Maximum length before truncation
- * @return string Formatted identification
- */
-function formatDeviceId($id, $maxLength = 60) {
-    $id = sanitizeHtml($id);
-
-    if (strlen($id) > $maxLength) {
-        return substr($id, 0, $maxLength - 3) . '...';
-    }
-
-    return $id;
 }
 
 /**
  * Format timestamp for display
  *
- * @param int $timestamp Unix timestamp
+ * @param int|null $timestamp Unix timestamp
  * @param string $format Date format string
  * @return string Formatted date/time
  */
@@ -288,10 +222,11 @@ function formatTimestamp($timestamp = null, $format = 'Y-m-d H:i:s') {
 }
 
 /**
- * Get color-coded temperature class
+ * Get color-coded temperature class.
+ * Single source of truth - the JSON API ships this class to the frontend.
  *
- * @param int $temp Temperature in Celsius
- * @param string $physicalType Physical drive type ('hdd' or 'nvme')
+ * @param int|null $temp Temperature in Celsius
+ * @param string $physicalType Physical drive type ('hdd', 'nvme' or 'usb')
  * @return string CSS class name
  */
 function getTemperatureClass($temp, $physicalType = 'hdd') {
@@ -301,43 +236,25 @@ function getTemperatureClass($temp, $physicalType = 'hdd') {
 
     $temp = intval($temp);
 
-    // NVMe drives run hotter - use different thresholds
     if ($physicalType === 'nvme') {
-        // NVMe thresholds: < 50°C, 50-64°C, 65-74°C, ≥ 75°C
+        // NVMe thresholds: < 50°C, 50-64°C, 65-74°C, >= 75°C
         if ($temp >= 75) {
-            return 'temp-critical';  // Red - Critical (at throttling threshold)
+            return 'temp-critical';
         } elseif ($temp >= 65) {
-            return 'temp-high';      // Orange - High
+            return 'temp-high';
         } elseif ($temp >= 50) {
-            return 'temp-elevated';  // Yellow - Elevated
-        } else {
-            return 'temp-normal';    // Green - Normal
+            return 'temp-elevated';
         }
-    } else {
-        // HDD thresholds: < 40°C, 40-49°C, 50-59°C, ≥ 60°C
-        if ($temp >= 60) {
-            return 'temp-critical';  // Red - Critical (at spec limit)
-        } elseif ($temp >= 50) {
-            return 'temp-high';      // Orange - High
-        } elseif ($temp >= 40) {
-            return 'temp-elevated';  // Yellow - Elevated
-        } else {
-            return 'temp-normal';    // Green - Normal
-        }
-    }
-}
-
-/**
- * Format number with thousands separator
- *
- * @param mixed $number Number to format
- * @param int $decimals Number of decimal places
- * @return string Formatted number
- */
-function formatNumber($number, $decimals = 0) {
-    if ($number === null || $number === '') {
-        return 'N/A';
+        return 'temp-normal';
     }
 
-    return number_format($number, $decimals, '.', ',');
+    // HDD thresholds: < 40°C, 40-49°C, 50-59°C, >= 60°C
+    if ($temp >= 60) {
+        return 'temp-critical';
+    } elseif ($temp >= 50) {
+        return 'temp-high';
+    } elseif ($temp >= 40) {
+        return 'temp-elevated';
+    }
+    return 'temp-normal';
 }

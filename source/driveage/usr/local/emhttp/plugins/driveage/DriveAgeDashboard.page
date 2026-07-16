@@ -3,75 +3,74 @@ Title="Dashboard"
 ---
 <?PHP
 /* DriveAge Plugin - Dashboard */
+require_once '/usr/local/emhttp/plugins/driveage/include/version.php';
 require_once '/usr/local/emhttp/plugins/driveage/include/config.php';
+require_once '/usr/local/emhttp/plugins/driveage/include/risk.php';
 require_once '/usr/local/emhttp/plugins/driveage/include/helpers.php';
 
 $config = loadConfig();
-$timestamp = date('Y-m-d H:i:s');
 
 // Helper function to format years without .0 for whole numbers
 function formatYears($hours) {
     $years = $hours / 8760;
-    // If it's a whole number, return without decimal
     if (floor($years) == $years) {
         return number_format($years, 0);
     }
-    // Otherwise return with 1 decimal place
     return number_format($years, 1);
 }
 
-// Cache busting version - use simple incrementing version number
-$cacheVersion = '2025.12.27-3';
+// Cache busting tied to the plugin version (single source: version.php)
+$cacheVersion = DRIVEAGE_VERSION;
 ?>
-<link rel="stylesheet" href="/plugins/driveage/styles/driveage.css?v=<?= $cacheVersion; ?>">
+<link rel="stylesheet" href="/plugins/driveage/styles/driveage.css?v=<?= e($cacheVersion); ?>">
 
-<!-- Dynamic category color styles -->
-<style id="driveage-dynamic-colors">
-/* Dynamic colors are now applied via JavaScript from JSON API response */
-</style>
-
-<script src="/plugins/driveage/js/dashboard.js?v=<?= $cacheVersion; ?>"></script>
-<script src="/plugins/driveage/js/vendor/chart.min.js?v=<?= $cacheVersion; ?>"></script>
-<script src="/plugins/driveage/js/charts.js?v=<?= $cacheVersion; ?>"></script>
+<script src="/plugins/driveage/js/dashboard.js?v=<?= e($cacheVersion); ?>"></script>
+<script src="/plugins/driveage/js/vendor/chart.min.js?v=<?= e($cacheVersion); ?>"></script>
+<script src="/plugins/driveage/js/charts.js?v=<?= e($cacheVersion); ?>"></script>
 
 <div class="driveage-container">
     <div class="driveage-header">
         <div>
             <span id="last-updated" class="last-updated">Loading...</span>
+            <span id="data-age" class="data-age"></span>
         </div>
         <div class="driveage-controls">
             <button id="refresh-btn" title="Refresh drive data">
-                <span>↻</span> Refresh
+                <span>&#8635;</span> Refresh
             </button>
         </div>
     </div>
 
-    <!-- Legend Section -->
+    <!-- Legend Section (colors rendered server-side; kept in sync client-side) -->
     <div class="driveage-legend">
         <div class="legend-item">
-            <div class="legend-color age-minimal_risk"></div>
+            <div class="legend-color age-minimal_risk" style="background-color: <?= e($config['COLOR_MINIMAL_RISK']); ?>;"></div>
             <span class="legend-label"><?= e(getAgeLabel('minimal_risk', $config)); ?></span>
-            <span class="legend-hours">(< <?= e(formatYears($config['THRESHOLD_MINIMAL_RISK'])); ?> years)</span>
+            <span class="legend-hours">(&lt; <?= e(formatYears($config['THRESHOLD_MINIMAL_RISK'])); ?> years)</span>
         </div>
         <div class="legend-item">
-            <div class="legend-color age-low_risk"></div>
+            <div class="legend-color age-low_risk" style="background-color: <?= e($config['COLOR_LOW_RISK']); ?>;"></div>
             <span class="legend-label"><?= e(getAgeLabel('low_risk', $config)); ?></span>
             <span class="legend-hours">(<?= e(formatYears($config['THRESHOLD_MINIMAL_RISK'])); ?>-<?= e(formatYears($config['THRESHOLD_LOW_RISK'])); ?> years)</span>
         </div>
         <div class="legend-item">
-            <div class="legend-color age-moderate_risk"></div>
+            <div class="legend-color age-moderate_risk" style="background-color: <?= e($config['COLOR_MODERATE_RISK']); ?>;"></div>
             <span class="legend-label"><?= e(getAgeLabel('moderate_risk', $config)); ?></span>
             <span class="legend-hours">(<?= e(formatYears($config['THRESHOLD_LOW_RISK'])); ?>-<?= e(formatYears($config['THRESHOLD_MODERATE_RISK'])); ?> years)</span>
         </div>
         <div class="legend-item">
-            <div class="legend-color age-elevated_risk"></div>
+            <div class="legend-color age-elevated_risk" style="background-color: <?= e($config['COLOR_ELEVATED_RISK']); ?>;"></div>
             <span class="legend-label"><?= e(getAgeLabel('elevated_risk', $config)); ?></span>
             <span class="legend-hours">(<?= e(formatYears($config['THRESHOLD_MODERATE_RISK'])); ?>-<?= e(formatYears($config['THRESHOLD_ELEVATED_RISK'])); ?> years)</span>
         </div>
         <div class="legend-item">
-            <div class="legend-color age-high_risk"></div>
+            <div class="legend-color age-high_risk" style="background-color: <?= e($config['COLOR_HIGH_RISK']); ?>;"></div>
             <span class="legend-label"><?= e(getAgeLabel('high_risk', $config)); ?></span>
-            <span class="legend-hours">(≥ <?= e(formatYears($config['THRESHOLD_ELEVATED_RISK'])); ?> years)</span>
+            <span class="legend-hours">(&ge; <?= e(formatYears($config['THRESHOLD_ELEVATED_RISK'])); ?> years)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color age-unknown"></div>
+            <span class="legend-label"><?= e(getAgeLabel('unknown')); ?></span>
         </div>
     </div>
 
@@ -93,13 +92,12 @@ $cacheVersion = '2025.12.27-3';
         </div>
     </div>
 
-    <!-- Drive data container (will be populated by JavaScript) -->
+    <!-- Drive data container (populated by JavaScript) -->
     <div id="drive-container"></div>
 
     <!-- Footer Section -->
     <div class="driveage-footer">
         <span id="drive-count">Total Drives: 0</span> |
-        DriveAge v2025.11.27
+        DriveAge v<?= e(DRIVEAGE_VERSION); ?>
     </div>
 </div>
-

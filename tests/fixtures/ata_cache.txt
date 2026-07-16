@@ -1,0 +1,22 @@
+smartctl 7.4 2023-08-01 r5530 [x86_64-linux-6.1.74-Unraid] (local build)
+Copyright (C) 2002-23, Bruce Allen, Christian Franke, www.smartmontools.org
+
+=== START OF READ SMART DATA SECTION ===
+SMART Attributes Data Structure revision number: 16
+Vendor Specific SMART Attributes with Thresholds:
+ID# ATTRIBUTE_NAME          FLAG     VALUE WORST THRESH TYPE      UPDATED  WHEN_FAILED RAW_VALUE
+  1 Raw_Read_Error_Rate     0x002f   100   100   051    Pre-fail  Always       -       0
+  3 Spin_Up_Time            0x0027   180   170   021    Pre-fail  Always       -       5975
+  4 Start_Stop_Count        0x0032   100   100   000    Old_age   Always       -       44
+  5 Reallocated_Sector_Ct   0x0033   200   200   140    Pre-fail  Always       -       0
+  7 Seek_Error_Rate         0x002e   200   200   000    Old_age   Always       -       0
+  9 Power_On_Hours          0x0032   054   054   000    Old_age   Always       -       33477h+12m+30.271s
+ 10 Spin_Retry_Count        0x0032   100   100   000    Old_age   Always       -       0
+ 12 Power_Cycle_Count       0x0032   100   100   000    Old_age   Always       -       42
+187 Reported_Uncorrect      0x0032   100   100   000    Old_age   Always       -       0
+188 Command_Timeout         0x0032   100   100   000    Old_age   Always       -       0
+190 Airflow_Temperature_Cel 0x0022   065   050   040    Old_age   Always       -       35 (Min/Max 21/49)
+194 Temperature_Celsius     0x0022   112   095   000    Old_age   Always       -       36 (Min/Max 20/50)
+197 Current_Pending_Sector  0x0032   200   200   000    Old_age   Always       -       0
+198 Offline_Uncorrectable   0x0030   100   253   000    Old_age   Offline      -       0
+199 UDMA_CRC_Error_Count    0x0032   200   200   000    Old_age   Always       -       0

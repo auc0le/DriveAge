@@ -8,9 +8,18 @@ let riskChart = null;
 let temperatureChart = null;
 let sizeChart = null;
 
+// Neutral color for drives with no SMART data
+const UNKNOWN_COLOR = '#9E9E9E';
+
+// Temperature bin thresholds (°C) - single source for binning AND tooltips.
+// Kept in sync with getTemperatureClass() on the server.
+const TEMP_THRESHOLDS = {
+    hdd:  { elevated: 40, high: 50, critical: 60 },
+    nvme: { elevated: 50, high: 65, critical: 75 }
+};
+
 /**
  * Main entry point - renders all charts
- * Called from dashboard.js after data loads
  *
  * @param {Object} driveData - Full data object from API
  */
@@ -20,47 +29,35 @@ function renderCharts(driveData) {
         return;
     }
 
-    // Show charts container
     const container = document.getElementById('charts-container');
     if (container) {
         container.style.display = 'block';
     }
 
-    // Destroy existing charts before re-rendering
+    // Follow the active Unraid theme: chart text inherits the page color
+    if (typeof Chart !== 'undefined' && Chart.defaults) {
+        Chart.defaults.color = getComputedStyle(document.body).color;
+    }
+
     destroyCharts();
 
-    // Render each chart
     renderRiskChart(driveData);
     renderTemperatureChart(driveData);
     renderSizeChart(driveData);
 }
 
 /**
- * Get age label for risk category
+ * Category label - always from the server (single source of truth).
  *
- * @param {string} category - Risk category
+ * @param {string} category - Risk category key
  * @param {Object} driveData - Full data object from API
  * @return {string} Human-readable label
  */
-function getAgeLabel(category, driveData) {
-    // Try to get label from first drive with this category
-    if (driveData && driveData.drives) {
-        const drive = driveData.drives.find(d => d.age_category === category);
-        if (drive && drive.age_label) {
-            return drive.age_label;
-        }
+function getCategoryLabel(category, driveData) {
+    if (driveData && driveData.labels && driveData.labels[category]) {
+        return driveData.labels[category];
     }
-
-    // Fallback labels
-    const labels = {
-        'minimal_risk': 'Minimal Risk (AFR <1%)',
-        'low_risk': 'Low Risk (AFR 1-2%)',
-        'moderate_risk': 'Moderate Risk (AFR 2-5%)',
-        'elevated_risk': 'Elevated Risk (AFR 5-10%)',
-        'high_risk': 'High Risk (AFR >10%)'
-    };
-
-    return labels[category] || 'Unknown';
+    return category === 'unknown' ? 'N/A (no SMART data)' : category;
 }
 
 /**
@@ -75,13 +72,16 @@ function aggregateRiskData(drives) {
         'low_risk': 0,
         'moderate_risk': 0,
         'elevated_risk': 0,
-        'high_risk': 0
+        'high_risk': 0,
+        'unknown': 0
     };
 
     drives.forEach(drive => {
         const category = drive.age_category;
-        if (categories.hasOwnProperty(category)) {
+        if (Object.prototype.hasOwnProperty.call(categories, category)) {
             categories[category]++;
+        } else {
+            categories.unknown++;
         }
     });
 
@@ -98,30 +98,18 @@ function renderRiskChart(driveData) {
     if (!ctx) return;
 
     const riskData = aggregateRiskData(driveData.drives);
-    // Note: No HTML escaping needed - Chart.js renders to canvas, not HTML
-    const labels = [
-        getAgeLabel('minimal_risk', driveData),
-        getAgeLabel('low_risk', driveData),
-        getAgeLabel('moderate_risk', driveData),
-        getAgeLabel('elevated_risk', driveData),
-        getAgeLabel('high_risk', driveData)
-    ];
 
-    const data = [
-        riskData.minimal_risk,
-        riskData.low_risk,
-        riskData.moderate_risk,
-        riskData.elevated_risk,
-        riskData.high_risk
-    ];
+    const keys = ['minimal_risk', 'low_risk', 'moderate_risk', 'elevated_risk', 'high_risk'];
+    const labels = keys.map(k => getCategoryLabel(k, driveData));
+    const data = keys.map(k => riskData[k]);
+    const colors = keys.map(k => driveData.colors[k]);
 
-    const colors = [
-        driveData.colors.minimal_risk,
-        driveData.colors.low_risk,
-        driveData.colors.moderate_risk,
-        driveData.colors.elevated_risk,
-        driveData.colors.high_risk
-    ];
+    // Only show the Unknown slice when it exists
+    if (riskData.unknown > 0) {
+        labels.push(getCategoryLabel('unknown', driveData));
+        data.push(riskData.unknown);
+        colors.push(UNKNOWN_COLOR);
+    }
 
     riskChart = new Chart(ctx, {
         type: 'doughnut',
@@ -163,67 +151,61 @@ function renderRiskChart(driveData) {
 }
 
 /**
- * Aggregate drives by temperature range, separated by drive type (HDD vs NVMe)
+ * Bin a temperature into a severity bucket for a drive class.
+ *
+ * @param {number|null} temp - Temperature in °C
+ * @param {string} kind - 'hdd' or 'nvme'
+ * @return {string} Bucket name
+ */
+function binTemperature(temp, kind) {
+    if (temp === null || temp === undefined || temp === '') {
+        return 'unknown';
+    }
+    const t = TEMP_THRESHOLDS[kind];
+    if (temp >= t.critical) return 'critical';
+    if (temp >= t.high) return 'high';
+    if (temp >= t.elevated) return 'elevated';
+    return 'normal';
+}
+
+/**
+ * Human-readable range text for a temperature bucket.
+ *
+ * @param {string} bucket - Bucket name
+ * @param {string} kind - 'hdd' or 'nvme'
+ * @param {string} unit - 'C' or 'F'
+ * @return {string} Range text like "(40-49°C)"
+ */
+function tempRangeText(bucket, kind, unit) {
+    const t = TEMP_THRESHOLDS[kind];
+    const conv = c => unit === 'F' ? Math.round(c * 9 / 5) + 32 : c;
+    const u = '°' + unit;
+
+    switch (bucket) {
+        case 'Normal':   return `(<${conv(t.elevated)}${u})`;
+        case 'Elevated': return `(${conv(t.elevated)}-${conv(t.high) - 1}${u})`;
+        case 'High':     return `(${conv(t.high)}-${conv(t.critical) - 1}${u})`;
+        case 'Critical': return `(≥${conv(t.critical)}${u})`;
+        default:         return '';
+    }
+}
+
+/**
+ * Aggregate drives by temperature bucket, separated by drive type
  *
  * @param {Array} drives - Array of drive objects
- * @return {Object} Temperature bin counts for HDD and NVMe
+ * @return {Object} Bucket counts for HDD and NVMe
  */
 function aggregateTemperatureData(drives) {
-    const hddBins = {
-        'normal': 0,      // < 40°C
-        'elevated': 0,    // 40-49°C
-        'high': 0,        // 50-59°C
-        'critical': 0,    // ≥ 60°C
-        'unknown': 0      // null/unavailable
-    };
-
-    const nvmeBins = {
-        'normal': 0,      // < 50°C
-        'elevated': 0,    // 50-64°C
-        'high': 0,        // 65-74°C
-        'critical': 0,    // ≥ 75°C
-        'unknown': 0      // null/unavailable
-    };
+    const empty = () => ({ normal: 0, elevated: 0, high: 0, critical: 0, unknown: 0 });
+    const bins = { hdd: empty(), nvme: empty() };
 
     drives.forEach(drive => {
-        const temp = drive.temperature;
-        const isNvme = drive.physical_type === 'nvme';
-
-        if (temp === null || temp === undefined || temp === '') {
-            if (isNvme) {
-                nvmeBins.unknown++;
-            } else {
-                hddBins.unknown++;
-            }
-        } else if (isNvme) {
-            // NVMe thresholds: < 50°C, 50-64°C, 65-74°C, ≥ 75°C
-            if (temp < 50) {
-                nvmeBins.normal++;
-            } else if (temp < 65) {
-                nvmeBins.elevated++;
-            } else if (temp < 75) {
-                nvmeBins.high++;
-            } else {
-                nvmeBins.critical++;
-            }
-        } else {
-            // HDD thresholds: < 40°C, 40-49°C, 50-59°C, ≥ 60°C
-            if (temp < 40) {
-                hddBins.normal++;
-            } else if (temp < 50) {
-                hddBins.elevated++;
-            } else if (temp < 60) {
-                hddBins.high++;
-            } else {
-                hddBins.critical++;
-            }
-        }
+        const kind = drive.physical_type === 'nvme' ? 'nvme' : 'hdd';
+        bins[kind][binTemperature(drive.temperature, kind)]++;
     });
 
-    return {
-        hdd: hddBins,
-        nvme: nvmeBins
-    };
+    return bins;
 }
 
 /**
@@ -236,30 +218,10 @@ function renderTemperatureChart(driveData) {
     if (!ctx) return;
 
     const tempData = aggregateTemperatureData(driveData.drives);
-
-    // Get temperature unit from config (default to Celsius)
     const tempUnit = driveData.config && driveData.config.temperature_unit ? driveData.config.temperature_unit : 'C';
 
-    // Labels represent temperature severity levels
     const labels = ['Normal', 'Elevated', 'High', 'Critical', 'Unknown'];
-
-    // HDD data (binned at different thresholds than NVMe)
-    const hddData = [
-        tempData.hdd.normal,
-        tempData.hdd.elevated,
-        tempData.hdd.high,
-        tempData.hdd.critical,
-        tempData.hdd.unknown
-    ];
-
-    // NVMe data (binned at different thresholds than HDD)
-    const nvmeData = [
-        tempData.nvme.normal,
-        tempData.nvme.elevated,
-        tempData.nvme.high,
-        tempData.nvme.critical,
-        tempData.nvme.unknown
-    ];
+    const order = ['normal', 'elevated', 'high', 'critical', 'unknown'];
 
     temperatureChart = new Chart(ctx, {
         type: 'bar',
@@ -267,14 +229,14 @@ function renderTemperatureChart(driveData) {
             labels: labels,
             datasets: [{
                 label: 'HDD',
-                data: hddData,
-                backgroundColor: '#2196F3',  // Blue
+                data: order.map(k => tempData.hdd[k]),
+                backgroundColor: '#2196F3',
                 borderWidth: 1,
                 borderColor: '#fff'
             }, {
                 label: 'NVMe',
-                data: nvmeData,
-                backgroundColor: '#FF9800',  // Orange
+                data: order.map(k => tempData.nvme[k]),
+                backgroundColor: '#FF9800',
                 borderWidth: 1,
                 borderColor: '#fff'
             }]
@@ -312,28 +274,9 @@ function renderTemperatureChart(driveData) {
                             return context[0].label;
                         },
                         label: function(context) {
-                            const label = context.dataset.label || '';
-                            const value = context.parsed.y;
-
-                            // Show temperature ranges in tooltip
-                            let range = '';
-                            const category = context.label;
-
-                            if (context.datasetIndex === 0) {
-                                // HDD ranges
-                                if (category === 'Normal') range = tempUnit === 'F' ? '(<104°F)' : '(<40°C)';
-                                else if (category === 'Elevated') range = tempUnit === 'F' ? '(104-120°F)' : '(40-49°C)';
-                                else if (category === 'High') range = tempUnit === 'F' ? '(122-138°F)' : '(50-59°C)';
-                                else if (category === 'Critical') range = tempUnit === 'F' ? '(≥140°F)' : '(≥60°C)';
-                            } else {
-                                // NVMe ranges
-                                if (category === 'Normal') range = tempUnit === 'F' ? '(<122°F)' : '(<50°C)';
-                                else if (category === 'Elevated') range = tempUnit === 'F' ? '(122-149°F)' : '(50-64°C)';
-                                else if (category === 'High') range = tempUnit === 'F' ? '(149-167°F)' : '(65-74°C)';
-                                else if (category === 'Critical') range = tempUnit === 'F' ? '(≥167°F)' : '(≥75°C)';
-                            }
-
-                            return label + ' ' + range + ': ' + value + ' drives';
+                            const kind = context.datasetIndex === 0 ? 'hdd' : 'nvme';
+                            const range = tempRangeText(context.label, kind, tempUnit);
+                            return context.dataset.label + ' ' + range + ': ' + context.parsed.y + ' drives';
                         }
                     }
                 }
@@ -343,13 +286,12 @@ function renderTemperatureChart(driveData) {
 }
 
 /**
- * Aggregate drives by actual unique sizes, separated by drive type (HDD vs NVMe vs USB)
+ * Aggregate drives by actual unique sizes, separated by drive type
  *
  * @param {Array} drives - Array of drive objects
  * @return {Object} Size labels and counts for HDD, NVMe, and USB
  */
 function aggregateSizeData(drives) {
-    // Group drives by size_human, tracking each drive type separately
     const sizeMap = new Map();
 
     drives.forEach(drive => {
@@ -376,21 +318,14 @@ function aggregateSizeData(drives) {
         }
     });
 
-    // Convert to array and sort by size (bytes)
     const sortedSizes = Array.from(sizeMap.entries())
         .sort((a, b) => a[1].bytes - b[1].bytes);
 
-    // Extract labels and counts for each drive type
-    const labels = sortedSizes.map(entry => entry[0]);
-    const hddCounts = sortedSizes.map(entry => entry[1].hdd);
-    const nvmeCounts = sortedSizes.map(entry => entry[1].nvme);
-    const usbCounts = sortedSizes.map(entry => entry[1].usb);
-
     return {
-        labels: labels,
-        hdd: hddCounts,
-        nvme: nvmeCounts,
-        usb: usbCounts
+        labels: sortedSizes.map(entry => entry[0]),
+        hdd: sortedSizes.map(entry => entry[1].hdd),
+        nvme: sortedSizes.map(entry => entry[1].nvme),
+        usb: sortedSizes.map(entry => entry[1].usb)
     };
 }
 
@@ -405,38 +340,26 @@ function renderSizeChart(driveData) {
 
     const sizeData = aggregateSizeData(driveData.drives);
 
-    // Use actual drive sizes from the data
-    const labels = sizeData.labels;
-
-    // HDD data
-    const hddData = sizeData.hdd;
-
-    // NVMe data
-    const nvmeData = sizeData.nvme;
-
-    // USB data
-    const usbData = sizeData.usb;
-
     sizeChart = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: labels,
+            labels: sizeData.labels,
             datasets: [{
                 label: 'HDD',
-                data: hddData,
-                backgroundColor: '#2196F3',  // Blue
+                data: sizeData.hdd,
+                backgroundColor: '#2196F3',
                 borderWidth: 1,
                 borderColor: '#fff'
             }, {
                 label: 'NVMe',
-                data: nvmeData,
-                backgroundColor: '#FF9800',  // Orange
+                data: sizeData.nvme,
+                backgroundColor: '#FF9800',
                 borderWidth: 1,
                 borderColor: '#fff'
             }, {
                 label: 'USB',
-                data: usbData,
-                backgroundColor: '#4CAF50',  // Green
+                data: sizeData.usb,
+                backgroundColor: '#4CAF50',
                 borderWidth: 1,
                 borderColor: '#fff'
             }]
@@ -471,9 +394,7 @@ function renderSizeChart(driveData) {
                 tooltip: {
                     callbacks: {
                         label: function(context) {
-                            const label = context.dataset.label || '';
-                            const value = context.parsed.y;
-                            return label + ': ' + value + ' drives';
+                            return (context.dataset.label || '') + ': ' + context.parsed.y + ' drives';
                         }
                     }
                 }

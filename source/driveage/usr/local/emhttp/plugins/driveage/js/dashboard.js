@@ -3,14 +3,15 @@
  */
 
 let driveData = null;
-let sortColumn = 'replacement_months';
-let sortDirection = 'asc';
-let chartInstances = null;
+let sortColumn = null;        // set from server config on first load
+let sortDirection = null;
+let userSorted = false;       // user clicks override the configured default
+let autoRefreshTimer = null;
 
 /**
  * Escape HTML to prevent XSS
  *
- * @param {string} str String to escape
+ * @param {*} str Value to escape
  * @return {string} Escaped string
  */
 function escapeHtml(str) {
@@ -25,78 +26,38 @@ function escapeHtml(str) {
 
 // Initialize dashboard when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
-    initializeDashboard();
-});
-
-/**
- * Initialize the dashboard
- */
-function initializeDashboard() {
-    console.log('DriveAge: initializeDashboard() started');
-
-    // Check if settings were just changed
-    const settingsChanged = localStorage.getItem('driveage_settings_changed');
-
-    if (settingsChanged) {
-        console.log('DriveAge: Settings were changed, will reload data');
-        // Clear the flag
-        localStorage.removeItem('driveage_settings_changed');
-    }
-
-    // Load drive data
-    // No force refresh needed - we always read from Unraid's current cache
-    console.log('DriveAge: About to call loadDriveData()');
     loadDriveData();
-    console.log('DriveAge: loadDriveData() called');
 
-    // Set up event listeners
-    console.log('DriveAge: About to setup event listeners');
-    setupEventListeners();
-    console.log('DriveAge: Event listeners setup complete');
-}
-
-/**
- * Set up event listeners
- */
-function setupEventListeners() {
-    // Refresh button
     const refreshBtn = document.getElementById('refresh-btn');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', function() {
             loadDriveData();
         });
     }
-}
+});
 
 /**
  * Load drive data from server
- *
- * Fetches drive data from Unraid's SMART cache (updated every 30s by emhttpd)
  */
 function loadDriveData() {
-    console.log('DriveAge: loadDriveData called');
     showLoading();
 
-    const url = '/plugins/driveage/scripts/get_drive_data.php';
-    console.log('DriveAge: Fetching from:', url);
-
-    fetch(url)
+    fetch('/plugins/driveage/scripts/get_drive_data.php')
         .then(response => {
-            console.log('DriveAge: Fetch response received, status:', response.status, 'ok:', response.ok);
             if (!response.ok) {
                 throw new Error('Failed to fetch drive data (status: ' + response.status + ')');
             }
             return response.json();
         })
         .then(data => {
-            console.log('DriveAge: Data parsed, success:', data.success, 'drive_count:', data.drive_count);
             if (data.success) {
                 driveData = data;
-                console.log('DriveAge: Calling renderDashboard()');
+                applyConfigDefaults();
                 renderDashboard();
                 updateLastUpdated(data.timestamp);
+                updateDataAge(data);
+                setupAutoRefresh();
             } else {
-                console.log('DriveAge: Data success=false, message:', data.message);
                 showError(data.message || 'Failed to load drive data');
             }
         })
@@ -107,11 +68,36 @@ function loadDriveData() {
 }
 
 /**
- * Apply dynamic colors from JSON response to all elements
+ * Apply configured default sort (unless the user has already sorted).
+ */
+function applyConfigDefaults() {
+    if (userSorted || !driveData || !driveData.config) {
+        return;
+    }
+    sortColumn = driveData.config.default_sort || 'replacement_months';
+    sortDirection = driveData.config.default_sort_dir || (sortColumn === 'replacement_months' ? 'asc' : 'desc');
+}
+
+/**
+ * Start/refresh the auto-refresh timer from server config.
+ */
+function setupAutoRefresh() {
+    if (autoRefreshTimer !== null) {
+        clearInterval(autoRefreshTimer);
+        autoRefreshTimer = null;
+    }
+
+    if (driveData && driveData.config && driveData.config.auto_refresh) {
+        const seconds = Math.max(30, parseInt(driveData.config.refresh_interval, 10) || 300);
+        autoRefreshTimer = setInterval(loadDriveData, seconds * 1000);
+    }
+}
+
+/**
+ * Apply dynamic colors from JSON response to all category-classed elements
  */
 function applyDynamicColors() {
     if (!driveData || !driveData.colors || !driveData.text_colors) {
-        console.warn('DriveAge: No color data available');
         return;
     }
 
@@ -122,37 +108,26 @@ function applyDynamicColors() {
         const textColor = driveData.text_colors[category];
 
         if (!bgColor || !textColor) {
-            console.warn(`DriveAge: Missing colors for category ${category}`);
             return;
         }
 
-        // Apply to all elements with this category class
-        // Handle both underscore and hyphen versions
-        const selectors = [
-            `.age-${category}`,
-            `.age-${category.replace('_', '-')}`
-        ];
-
-        selectors.forEach(selector => {
+        [`.age-${category}`, `.age-${category.replace('_', '-')}`].forEach(selector => {
             document.querySelectorAll(selector).forEach(element => {
                 element.style.backgroundColor = bgColor;
                 element.style.color = textColor;
             });
         });
     });
-
-    console.log('DriveAge: Dynamic colors applied');
 }
 
 /**
- * Render the dashboard in table view
+ * Render the dashboard
  */
 function renderDashboard() {
     if (!driveData) {
         return;
     }
 
-    hideLoading();
     renderTableView();
     renderCharts(driveData);
     updateDriveCount(driveData.drive_count);
@@ -193,98 +168,20 @@ function renderTableView() {
     html += '</tr></thead>';
     html += '<tbody>';
 
-    // Group drives
     const grouped = driveData.grouped;
 
     for (const arrayName in grouped) {
         for (const driveType in grouped[arrayName]) {
-            // Sort drives within this group
             const drives = sortDrives([...grouped[arrayName][driveType]], sortColumn, sortDirection);
 
-            // Add group header
             html += `<tr class="group-header" onclick="toggleGroup(this)">`;
             html += `<td colspan="20">`;
             html += `<span class="group-toggle">▼</span>`;
-            html += `${arrayName} - ${formatDriveType(driveType)} (${drives.length})`;
+            html += `${escapeHtml(arrayName)} - ${escapeHtml(formatDriveType(driveType))} (${drives.length})`;
             html += `</td></tr>`;
 
-            // Add drives in this group
             drives.forEach(drive => {
-                let rowClass = escapeHtml(drive.color_class) + (drive.is_oldest ? ' oldest-drive' : '');
-
-                // Add standby and stale classes for visual distinction
-                if (drive.is_standby) {
-                    rowClass += ' drive-standby';
-                    if (drive.is_stale) {
-                        rowClass += ' drive-stale';
-                    }
-                }
-
-                html += `<tr class="${rowClass} group-row">`;
-                html += `<td>${escapeHtml(drive.device_name)}</td>`;
-                html += `<td title="${escapeHtml(drive.identification)}">${escapeHtml(truncate(drive.identification, 50))}</td>`;
-                html += `<td class="text-right">${escapeHtml(drive.size_human)}</td>`;
-                html += `<td class="text-right">${drive.power_on_hours !== null ? escapeHtml(drive.power_on_hours.toLocaleString()) : 'N/A'}</td>`;
-                html += `<td>${escapeHtml(drive.power_on_human)}</td>`;
-
-                if (driveData.config.show_temperature) {
-                    // Use pre-calculated temperature_class from server (includes drive type awareness)
-                    const tempClass = drive.temperature_class || getTemperatureClass(drive.temperature, drive.physical_type);
-                    html += `<td class="${escapeHtml(tempClass)}">${escapeHtml(drive.temperature_formatted)}</td>`;
-                }
-
-                if (driveData.config.show_smart_status) {
-                    html += `<td>${drive.smart_status_formatted}</td>`;
-                }
-
-                if (driveData.config.show_spin_status) {
-                    html += `<td>${drive.spin_status_formatted}</td>`;
-                }
-
-                html += `<td>${escapeHtml(drive.age_label)}</td>`;
-
-                // Health Status column
-                html += '<td class="health-status-cell">';
-                if (drive.has_warnings) {
-                    drive.health_warnings.forEach(warning => {
-                        const iconClass = warning.level === 'critical' ? 'warning-critical' : 'warning-caution';
-                        const icon = warning.level === 'critical' ? '⚠️' : '⚡';
-
-                        // Map warning attributes to help page anchors
-                        const helpAnchors = {
-                            'reallocated_sectors': 'reallocated-sectors',
-                            'pending_sectors': 'other-smart-warnings',
-                            'uncorrectable_sectors': 'other-smart-warnings',
-                            'reported_uncorrectable': 'other-smart-warnings',
-                            'command_timeout': 'other-smart-warnings',
-                            'media_errors': 'nvme-warnings',
-                            'critical_warning': 'nvme-warnings'
-                        };
-
-                        const anchor = helpAnchors[warning.attribute] || 'other-smart-warnings';
-                        const helpUrl = `/Settings/DriveAgeHelp#${anchor}`;
-
-                        html += `<a href="${helpUrl}" class="${iconClass}" title="${escapeHtml(warning.tooltip)}" style="text-decoration: none; color: inherit;">`;
-                        html += `${icon} ${escapeHtml(warning.message)}`;
-                        html += '</a><br>';
-                    });
-                } else if (drive.power_on_hours === null || drive.power_on_hours === 0 ||
-                           drive.smart_status === 'UNKNOWN' || drive.smart_status === 'N/A') {
-                    // No SMART data available
-                    html += '<span class="health-unknown" title="No SMART data available">N/A</span>';
-                } else {
-                    html += '<span class="health-ok" title="No warnings detected">✓ Healthy</span>';
-                }
-                html += '</td>';
-
-                // Est. Replacement column
-                const prediction = drive.replacement_prediction || {};
-                const tooltipText = `Confidence: ${prediction.confidence || 'none'}. Method: ${prediction.method || 'unknown'}. ${prediction.notes || ''}`;
-                html += `<td class="${prediction.timeline_class || 'timeline-unknown'}" title="${escapeHtml(tooltipText)}">`;
-                html += escapeHtml(prediction.timeline_text || 'Unknown');
-                html += '</td>';
-
-                html += '</tr>';
+                html += renderDriveRow(drive);
             });
         }
     }
@@ -293,29 +190,104 @@ function renderTableView() {
 
     container.innerHTML = html;
 
-    // Add sort event listeners
+    // Sort listeners
     document.querySelectorAll('.driveage-table th.sortable').forEach(th => {
         th.addEventListener('click', function() {
-            const column = this.dataset.column;
-            handleSort(column);
+            handleSort(this.dataset.column);
         });
     });
 
-    // Update sort indicators
     updateSortIndicators();
+}
+
+/**
+ * Render a single drive row
+ */
+function renderDriveRow(drive) {
+    let rowClass = escapeHtml(drive.color_class) + (drive.is_oldest ? ' oldest-drive' : '');
+
+    if (drive.is_standby) {
+        rowClass += ' drive-standby';
+        if (drive.is_stale) {
+            rowClass += ' drive-stale';
+        }
+    }
+
+    let html = `<tr class="${rowClass} group-row">`;
+    html += `<td>${escapeHtml(drive.device_name)}</td>`;
+    html += `<td title="${escapeHtml(drive.identification)}">${escapeHtml(truncate(drive.identification, 50))}</td>`;
+    html += `<td class="text-right">${escapeHtml(drive.size_human)}</td>`;
+    html += `<td class="text-right">${drive.power_on_hours !== null ? escapeHtml(drive.power_on_hours.toLocaleString()) : 'N/A'}</td>`;
+    html += `<td>${escapeHtml(drive.power_on_human)}</td>`;
+
+    if (driveData.config.show_temperature) {
+        html += `<td class="${escapeHtml(drive.temperature_class || 'temp-unknown')}">${escapeHtml(drive.temperature_formatted)}</td>`;
+    }
+
+    if (driveData.config.show_smart_status) {
+        html += `<td><span class="${escapeHtml(drive.smart_status_class || 'smart-unknown')}">${escapeHtml(drive.smart_status)}</span></td>`;
+    }
+
+    if (driveData.config.show_spin_status) {
+        html += `<td><span class="${escapeHtml(drive.spin_status_class || 'spin-unknown')}">${escapeHtml(formatSpinStatus(drive.spin_status))}</span></td>`;
+    }
+
+    html += `<td>${escapeHtml(drive.age_label)}</td>`;
+
+    // Health Status column
+    html += '<td class="health-status-cell">';
+    if (drive.has_warnings) {
+        const helpAnchors = {
+            'smart_overall_failed': 'other-smart-warnings',
+            'reallocated_sectors': 'reallocated-sectors',
+            'pending_sectors': 'other-smart-warnings',
+            'uncorrectable_sectors': 'other-smart-warnings',
+            'reported_uncorrectable': 'other-smart-warnings',
+            'command_timeout': 'other-smart-warnings',
+            'media_errors': 'nvme-warnings',
+            'critical_warning': 'nvme-warnings'
+        };
+
+        drive.health_warnings.forEach(warning => {
+            const iconClass = warning.level === 'critical' ? 'warning-critical' : 'warning-caution';
+            const icon = warning.level === 'critical' ? '⚠️' : '⚡';
+            const anchor = helpAnchors[warning.attribute] || 'other-smart-warnings';
+
+            html += `<a href="/Settings/DriveAgeHelp#${anchor}" class="${iconClass}" title="${escapeHtml(warning.tooltip)}" style="text-decoration: none; color: inherit;">`;
+            html += `${icon} ${escapeHtml(warning.message)}`;
+            html += '</a><br>';
+        });
+    } else if (drive.power_on_hours === null || drive.power_on_hours === 0 ||
+               drive.smart_status === 'UNKNOWN' || drive.smart_status === 'N/A') {
+        html += '<span class="health-unknown" title="No SMART data available">N/A</span>';
+    } else {
+        html += '<span class="health-ok" title="No warnings detected">✓ Healthy</span>';
+    }
+    html += '</td>';
+
+    // Est. Replacement column
+    const prediction = drive.replacement_prediction || {};
+    const detail = prediction.notes || prediction.reason || '';
+    const tooltipText = `Confidence: ${prediction.confidence || 'none'}. Method: ${prediction.method || 'unknown'}. ${detail}`;
+    html += `<td class="${escapeHtml(prediction.timeline_class || 'timeline-unknown')}" title="${escapeHtml(tooltipText)}">`;
+    html += escapeHtml(prediction.timeline_text || 'Unknown');
+    html += '</td>';
+
+    html += '</tr>';
+    return html;
 }
 
 /**
  * Handle column sorting
  */
 function handleSort(column) {
+    userSorted = true;
+
     if (sortColumn === column) {
-        // Toggle direction
         sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
     } else {
-        // New column
         sortColumn = column;
-        // Default to ascending for replacement_months (soonest first), descending for others
+        // Ascending for replacement (soonest first), descending otherwise
         sortDirection = (column === 'replacement_months') ? 'asc' : 'desc';
     }
 
@@ -329,7 +301,6 @@ function sortDrives(drives, column, direction) {
     return drives.sort((a, b) => {
         let aVal, bVal;
 
-        // Special handling for replacement_months (nested in replacement_prediction)
         if (column === 'replacement_months') {
             aVal = a.replacement_prediction?.months_remaining;
             bVal = b.replacement_prediction?.months_remaining;
@@ -338,16 +309,14 @@ function sortDrives(drives, column, direction) {
             bVal = b[column];
         }
 
-        // Handle nulls - for replacement months, null means unknown (should go to end)
+        // Nulls (unknown) always sink to the end
         if (aVal === null || aVal === undefined) return 1;
         if (bVal === null || bVal === undefined) return -1;
 
-        // Numeric comparison
         if (typeof aVal === 'number' && typeof bVal === 'number') {
             return direction === 'asc' ? aVal - bVal : bVal - aVal;
         }
 
-        // String comparison
         aVal = String(aVal).toLowerCase();
         bVal = String(bVal).toLowerCase();
 
@@ -397,31 +366,15 @@ function toggleGroup(headerRow) {
 }
 
 /**
- * Get temperature CSS class
- *
- * @param {number} temp Temperature in Celsius
- * @param {string} physicalType Physical drive type ('hdd' or 'nvme')
- * @return {string} CSS class name
+ * Display text for a spin status value
  */
-function getTemperatureClass(temp, physicalType = 'hdd') {
-    if (temp === null || temp === '') return 'temp-unknown';
-
-    temp = parseInt(temp);
-
-    // NVMe drives run hotter - use different thresholds
-    if (physicalType === 'nvme') {
-        // NVMe thresholds: < 50°C, 50-64°C, 65-74°C, ≥ 75°C
-        if (temp >= 75) return 'temp-critical';  // Red - Critical
-        if (temp >= 65) return 'temp-high';      // Orange - High
-        if (temp >= 50) return 'temp-elevated';  // Yellow - Elevated
-        return 'temp-normal';                     // Green - Normal
-    } else {
-        // HDD thresholds: < 40°C, 40-49°C, 50-59°C, ≥ 60°C
-        if (temp >= 60) return 'temp-critical';  // Red - Critical
-        if (temp >= 50) return 'temp-high';      // Orange - High
-        if (temp >= 40) return 'temp-elevated';  // Yellow - Elevated
-        return 'temp-normal';                     // Green - Normal
-    }
+function formatSpinStatus(status) {
+    const map = {
+        'active': 'Active',
+        'standby': 'Standby',
+        'n/a': 'N/A'
+    };
+    return map[String(status).toLowerCase()] || 'Unknown';
 }
 
 /**
@@ -433,6 +386,7 @@ function formatDriveType(type) {
         'array': 'Array Disks',
         'cache': 'Cache',
         'pool': 'Pool',
+        'flash': 'USB Boot',
         'unassigned': 'Unassigned'
     };
 
@@ -460,6 +414,27 @@ function updateLastUpdated(timestamp) {
 }
 
 /**
+ * Show how old the underlying SMART cache data is.
+ * Unraid refreshes its SMART cache on the Disk Settings poll interval
+ * (default 30 minutes) - the dashboard cannot be fresher than that.
+ */
+function updateDataAge(data) {
+    const element = document.getElementById('data-age');
+    if (!element) return;
+
+    const pollMin = Math.round((data.poll_interval || 1800) / 60);
+
+    if (data.data_age_seconds === null || data.data_age_seconds === undefined) {
+        element.textContent = `SMART data refreshed by Unraid every ${pollMin} min`;
+        return;
+    }
+
+    const ageMin = Math.round(data.data_age_seconds / 60);
+    const ageText = ageMin < 1 ? '<1 min' : `${ageMin} min`;
+    element.textContent = `SMART data: up to ${ageText} old (Unraid refreshes every ${pollMin} min)`;
+}
+
+/**
  * Update drive count display
  */
 function updateDriveCount(count) {
@@ -478,17 +453,9 @@ function showLoading() {
         container.innerHTML = '<div class="driveage-loading"><div class="spinner"></div> Loading drive data...</div>';
     }
 
-    // Destroy charts when refreshing
     if (window.destroyCharts) {
         destroyCharts();
     }
-}
-
-/**
- * Hide loading indicator
- */
-function hideLoading() {
-    // Loading is hidden when content is rendered
 }
 
 /**
@@ -497,10 +464,9 @@ function hideLoading() {
 function showError(message) {
     const container = document.getElementById('drive-container');
     if (container) {
-        container.innerHTML = `<div class="driveage-error">Error: ${message}</div>`;
+        container.innerHTML = `<div class="driveage-error">Error: ${escapeHtml(message)}</div>`;
     }
 
-    // Destroy charts on error
     if (window.destroyCharts) {
         destroyCharts();
     }

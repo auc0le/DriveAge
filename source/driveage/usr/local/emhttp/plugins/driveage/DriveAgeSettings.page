@@ -3,37 +3,30 @@ Title="Settings"
 ---
 <?PHP
 /* DriveAge Plugin - Settings Page */
+require_once '/usr/local/emhttp/plugins/driveage/include/version.php';
 require_once '/usr/local/emhttp/plugins/driveage/include/config.php';
 require_once '/usr/local/emhttp/plugins/driveage/include/helpers.php';
-require_once '/usr/local/emhttp/plugins/driveage/include/security.php';
 
-// Load configuration
+// Load configuration (validated on load; the form posts to Unraid's
+// /update.php, which supplies its own CSRF protection)
 $config = loadConfig();
-
-// Generate CSRF token
-$csrfToken = generateCsrfToken();
 
 // Convert hours to years for display
 function hoursToYears($hours) {
     return round($hours / 8760, 1);
 }
 
-// Cache busting version - use simple incrementing version number
-$cacheVersion = '2025.12.25-24';
+// Cache busting tied to the plugin version (single source: version.php)
+$cacheVersion = DRIVEAGE_VERSION;
 ?>
-<link rel="stylesheet" href="/plugins/driveage/styles/driveage.css?v=<?= $cacheVersion; ?>">
+<link rel="stylesheet" href="/plugins/driveage/styles/driveage.css?v=<?= e($cacheVersion); ?>">
 
-<!-- Dynamic category color styles -->
-<style id="driveage-dynamic-colors">
-/* Colors are applied client-side for real-time preview updates */
-</style>
-
-<!-- Inject default configuration for JavaScript -->
+<!-- Inject default configuration for JavaScript (reset-to-defaults) -->
 <script>
 const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
 </script>
 
-<script src="/plugins/driveage/js/settings.js?v=<?= $cacheVersion; ?>"></script>
+<script src="/plugins/driveage/js/settings.js?v=<?= e($cacheVersion); ?>"></script>
 <style>
         .settings-form {
             max-width: 900px;
@@ -41,17 +34,18 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
         }
 
         .settings-section {
-            background: white;
+            background: rgba(128, 128, 128, 0.08);
+            border: 1px solid rgba(128, 128, 128, 0.2);
             padding: 20px;
             margin-bottom: 20px;
             border-radius: 5px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.12);
         }
 
         .settings-section h3 {
             margin-top: 0;
             padding-bottom: 10px;
             border-bottom: 2px solid #4CAF50;
+            color: inherit;
         }
 
         .form-group {
@@ -62,7 +56,7 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
             display: block;
             font-weight: 600;
             margin-bottom: 5px;
-            color: #333;
+            color: inherit;
         }
 
         .form-group input[type="number"],
@@ -71,7 +65,7 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
             width: 100%;
             max-width: 300px;
             padding: 8px;
-            border: 1px solid #ddd;
+            border: 1px solid rgba(128, 128, 128, 0.5);
             border-radius: 4px;
             font-size: 14px;
         }
@@ -82,45 +76,8 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
 
         .form-group .help-text {
             font-size: 12px;
-            color: #666;
+            opacity: 0.75;
             margin-top: 3px;
-        }
-
-        .threshold-input {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 10px;
-            max-width: 600px;
-        }
-
-        .threshold-item {
-            padding: 10px;
-            border-radius: 4px;
-            border: 2px solid #ddd;
-        }
-
-        .threshold-item label {
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        .threshold-item input {
-            width: 100%;
-            margin-top: 5px;
-        }
-
-        .color-preview {
-            margin-top: 10px;
-            display: grid;
-            grid-template-columns: repeat(6, 1fr);
-            gap: 5px;
-        }
-
-        .color-block {
-            padding: 10px;
-            text-align: center;
-            font-size: 11px;
-            border-radius: 3px;
         }
 
         .buttons {
@@ -166,22 +123,22 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
             background: #da190b;
         }
 
-        .warning-box {
-            background: #fff3cd;
-            border: 1px solid #ffc107;
+        .info-note {
+            background: rgba(33, 150, 243, 0.12);
+            border-left: 4px solid #2196F3;
             border-radius: 4px;
             padding: 10px;
             margin: 10px 0;
-            color: #856404;
+            color: inherit;
         }
 
         .error-box {
-            background: #ffe6e6;
+            background: rgba(255, 0, 0, 0.12);
             border: 1px solid #ff0000;
             border-radius: 4px;
             padding: 10px;
             margin: 10px 0;
-            color: #cc0000;
+            color: #e53935;
             font-weight: bold;
         }
 
@@ -193,10 +150,10 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
         }
 
         .category-card {
-            border: 2px solid #ddd;
+            border: 1px solid rgba(128, 128, 128, 0.3);
             border-radius: 8px;
             padding: 15px;
-            background: #fafafa;
+            background: rgba(128, 128, 128, 0.06);
         }
 
         .category-card h4 {
@@ -204,7 +161,7 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
             padding-bottom: 10px;
             border-bottom: 2px solid #4CAF50;
             font-size: 16px;
-            color: #333;
+            color: inherit;
         }
 
         .category-card .form-row {
@@ -215,7 +172,8 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
             display: block;
             font-size: 12px;
             font-weight: 600;
-            color: #555;
+            color: inherit;
+            opacity: 0.85;
             margin-bottom: 4px;
         }
 
@@ -223,7 +181,7 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
         .category-card input[type="number"] {
             width: 100%;
             padding: 6px 8px;
-            border: 1px solid #ddd;
+            border: 1px solid rgba(128, 128, 128, 0.5);
             border-radius: 4px;
             font-size: 13px;
         }
@@ -246,7 +204,7 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
 
         .threshold-row .unit {
             font-size: 12px;
-            color: #666;
+            opacity: 0.75;
             white-space: nowrap;
         }
 
@@ -259,7 +217,7 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
         .color-row input[type="color"] {
             width: 50px;
             height: 35px;
-            border: 1px solid #ddd;
+            border: 1px solid rgba(128, 128, 128, 0.5);
             border-radius: 4px;
             cursor: pointer;
             padding: 2px;
@@ -282,17 +240,10 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
             font-weight: 600;
         }
 
-        .color-hex {
-            font-family: monospace;
-            font-size: 11px;
-            color: #666;
-            min-width: 65px;
-        }
-
         .help-text {
             display: block;
             font-size: 11px;
-            color: #888;
+            opacity: 0.75;
             margin-top: 3px;
         }
 
@@ -313,13 +264,16 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
 <div class="driveage-container">
         <form method="POST" action="/update.php" target="progressFrame">
             <input type="hidden" name="#file" value="/boot/config/plugins/driveage/driveage.cfg">
-            <input type="hidden" name="csrf_token" value="<?= e($csrfToken); ?>">
 
             <div class="settings-form">
                 <!-- Risk Categories Section -->
                 <div class="settings-section">
                     <h3>Risk Categories</h3>
-                    <p>Customize the label, maximum age threshold, and color for each risk category. Categories progress from lowest to highest failure risk based on Annual Failure Rate (AFR) data. Each category must have a unique color, and thresholds must be in ascending order.</p>
+                    <p>Customize the label, maximum age threshold, and color for each risk category.
+                    Default thresholds and AFR labels are calibrated to Backblaze's 2025 drive-stats analysis
+                    (~317k drives): failure rates hold roughly flat (~1-1.5% AFR) through most of a drive's life
+                    and peak at ~4.25% around 10 years. Each category must have a unique color, and thresholds
+                    must be in ascending order.</p>
 
                     <div id="color-error" style="display:none;" class="error-box"></div>
 
@@ -536,7 +490,7 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
                             <div class="form-row">
                                 <label>Max Age:</label>
                                 <div class="threshold-row">
-                                    <input type="text" value="No limit" disabled style="background: #f5f5f5;">
+                                    <input type="text" value="No limit" disabled style="opacity: 0.6;">
                                 </div>
                                 <small class="help-text">All drives above Category 4</small>
                             </div>
@@ -571,16 +525,19 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
                     <div class="form-group">
                         <label>Default Sorting</label>
                         <select name="DEFAULT_SORT">
+                            <option value="replacement_months" <?= selected($config['DEFAULT_SORT'], 'replacement_months'); ?>>Est. Replacement</option>
                             <option value="power_on_hours" <?= selected($config['DEFAULT_SORT'], 'power_on_hours'); ?>>Power On Hours</option>
                             <option value="device_name" <?= selected($config['DEFAULT_SORT'], 'device_name'); ?>>Device Name</option>
+                            <option value="identification" <?= selected($config['DEFAULT_SORT'], 'identification'); ?>>Identification</option>
                             <option value="size_bytes" <?= selected($config['DEFAULT_SORT'], 'size_bytes'); ?>>Size</option>
                             <option value="temperature" <?= selected($config['DEFAULT_SORT'], 'temperature'); ?>>Temperature</option>
+                            <option value="smart_status" <?= selected($config['DEFAULT_SORT'], 'smart_status'); ?>>SMART Status</option>
                         </select>
                         <select name="DEFAULT_SORT_DIR">
-                            <option value="desc" <?= selected($config['DEFAULT_SORT_DIR'], 'desc'); ?>>Descending</option>
                             <option value="asc" <?= selected($config['DEFAULT_SORT_DIR'], 'asc'); ?>>Ascending</option>
+                            <option value="desc" <?= selected($config['DEFAULT_SORT_DIR'], 'desc'); ?>>Descending</option>
                         </select>
-                        <div class="help-text">Default column and sort direction</div>
+                        <div class="help-text">Default column and sort direction for the dashboard table</div>
                     </div>
 
                     <div class="form-group">
@@ -591,12 +548,13 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
                             <input type="hidden" name="SHOW_ARRAY" value="false">
                             <label><input type="checkbox" name="SHOW_ARRAY" value="true" <?= checked($config['SHOW_ARRAY']); ?>> Array Disks</label><br>
                             <input type="hidden" name="SHOW_CACHE" value="false">
-                            <label><input type="checkbox" name="SHOW_CACHE" value="true" <?= checked($config['SHOW_CACHE']); ?>> Cache Disks</label><br>
+                            <label><input type="checkbox" name="SHOW_CACHE" value="true" <?= checked($config['SHOW_CACHE']); ?>> Cache / Pool Disks</label><br>
                             <input type="hidden" name="SHOW_POOL" value="false">
-                            <label><input type="checkbox" name="SHOW_POOL" value="true" <?= checked($config['SHOW_POOL']); ?>> Pool Disks</label><br>
+                            <label><input type="checkbox" name="SHOW_POOL" value="true" <?= checked($config['SHOW_POOL']); ?>> Other Pool Disks</label><br>
                             <input type="hidden" name="SHOW_UNASSIGNED" value="false">
                             <label><input type="checkbox" name="SHOW_UNASSIGNED" value="true" <?= checked($config['SHOW_UNASSIGNED']); ?>> Unassigned Devices</label>
                         </div>
+                        <div class="help-text">The USB boot drive is always shown</div>
                     </div>
 
                     <div class="form-group">
@@ -619,13 +577,15 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
                     <div class="form-group">
                         <input type="hidden" name="AUTO_REFRESH" value="false">
                         <label><input type="checkbox" name="AUTO_REFRESH" value="true" <?= checked($config['AUTO_REFRESH']); ?>> Enable Auto-Refresh</label>
-                        <div class="help-text">Automatically refresh drive data at specified interval</div>
+                        <div class="help-text">Automatically refresh drive data at the specified interval</div>
                     </div>
 
                     <div class="form-group">
                         <label>Refresh Interval (seconds)</label>
                         <input type="number" name="REFRESH_INTERVAL" value="<?= e($config['REFRESH_INTERVAL']); ?>" min="30" max="3600" step="30">
-                        <div class="help-text">How often to refresh data (30-3600 seconds)</div>
+                        <div class="help-text">How often to refresh the display (30-3600 seconds). Note: the underlying
+                        SMART data is refreshed by Unraid on its Disk Settings poll interval (default 30 minutes),
+                        so refreshing faster than that mainly updates spin state and staleness indicators.</div>
                     </div>
                 </div>
 
@@ -636,47 +596,32 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
                     <div class="form-group">
                         <label>Replacement Prediction Mode</label>
                         <select name="PREDICTION_MODE">
-                            <option value="conservative" <?= selected($config['PREDICTION_MODE'], 'conservative'); ?>>Conservative (6-year target, safer estimates)</option>
-                            <option value="aggressive" <?= selected($config['PREDICTION_MODE'], 'aggressive'); ?>>Aggressive (8-year target, maximize drive life)</option>
+                            <option value="conservative" <?= selected($config['PREDICTION_MODE'], 'conservative'); ?>>Conservative (8-year target, safety margins)</option>
+                            <option value="aggressive" <?= selected($config['PREDICTION_MODE'], 'aggressive'); ?>>Aggressive (10-year target, maximize drive life)</option>
                         </select>
                         <div class="help-text">
-                            <strong>Conservative:</strong> Targets replacement at 6 years (AFR ~10%). Better for critical data.<br>
-                            <strong>Aggressive:</strong> Targets replacement at 8 years. Accepts higher failure risk to maximize drive lifespan.<br><br>
+                            <strong>Conservative:</strong> Targets HDD replacement at 8 years - before the end-of-life failure ramp
+                            in Backblaze's 2025 data. Applies a +25% safety margin to measured NVMe wear rates. Better for critical data.<br>
+                            <strong>Aggressive:</strong> Targets HDD replacement at 10 years - the measured fleet AFR peak (~4.25%).
+                            Uses measured NVMe wear rates as-is. Maximizes drive lifespan.<br><br>
                             <strong>How it works:</strong><br>
-                            • <strong>HDDs:</strong> Age-based estimates using Backblaze AFR data. Target age is the replacement recommendation.<br>
-                            • <strong>NVMe:</strong> TBW (Total Bytes Written) calculations predict wear-based replacement. The target age is the <em>maximum calendar limit</em> — heavily-written drives may show earlier replacement dates based on write wear.
+                            &bull; <strong>HDDs:</strong> Critical SMART attributes override everything; otherwise a countdown to the target age.<br>
+                            &bull; <strong>NVMe:</strong> Wear projections from the drive's own history (TB written and wear% per power-on year).
+                            The target age acts as the <em>maximum calendar limit</em> - heavily-written drives show earlier dates.
                         </div>
                     </div>
                 </div>
 
-                <!-- JSON API Settings Section -->
+                <!-- JSON Endpoint Section -->
                 <div class="settings-section">
-                    <h3>JSON API Settings</h3>
-                    <div class="warning-box">
-                        <strong>Security Warning:</strong> The JSON API exposes drive information via HTTP endpoint.
-                        Only enable if you need to integrate with external monitoring tools.
-                        Rate limiting is enforced to prevent abuse.
+                    <h3>JSON Endpoint</h3>
+                    <div class="info-note">
+                        Drive data is available as JSON at
+                        <code>/plugins/driveage/scripts/get_drive_data.php</code>.
+                        The endpoint sits behind Unraid's webGUI authentication like every other
+                        webGUI page - requests must carry a valid Unraid session (or use an
+                        authenticated reverse proxy). It is not reachable anonymously.
                     </div>
-
-                    <div class="form-group">
-                        <input type="hidden" name="API_ENABLED" value="false">
-                        <label><input type="checkbox" name="API_ENABLED" value="true" <?= checked($config['API_ENABLED']); ?>> Enable JSON API</label>
-                        <div class="help-text">Enable external access to drive data via JSON endpoint</div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Rate Limit (requests per minute)</label>
-                        <input type="number" name="API_RATE_LIMIT" value="<?= e($config['API_RATE_LIMIT']); ?>" min="10" max="1000" step="10">
-                        <div class="help-text">Maximum API calls allowed per minute (10-1000)</div>
-                    </div>
-
-                    <?PHP if ($config['API_ENABLED'] === 'true'): ?>
-                    <div class="form-group">
-                        <label>API Endpoint</label>
-                        <input type="text" value="/plugins/driveage/scripts/get_drive_data.php" readonly onclick="this.select()">
-                        <div class="help-text">Click to select and copy the endpoint URL</div>
-                    </div>
-                    <?PHP endif; ?>
                 </div>
 
                 <!-- Action Buttons -->
@@ -690,90 +635,64 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
 
         <iframe name="progressFrame" style="display:none;"></iframe>
     </div>
-</div>
 
 <script>
-// Unified category settings real-time preview and validation
+// Real-time preview, duplicate-color validation and year->hour threshold sync
 document.addEventListener('DOMContentLoaded', function() {
     const colorInputs = document.querySelectorAll('.color-input');
-    const labelInputs = document.querySelectorAll('.label-input');
     const thresholdInputs = document.querySelectorAll('.threshold-years');
     const form = document.querySelector('form');
     const submitButton = form.querySelector('input[type="submit"]');
 
-    // Intercept form submission to set settings changed flag
-    form.addEventListener('submit', function(e) {
-        // Set flag in localStorage to trigger dashboard to reload data
-        // No cache clearing needed - we rely on Unraid's emhttpd cache
-        // Settings changes (labels, colors) are applied dynamically via JavaScript
-        localStorage.setItem('driveage_settings_changed', Date.now().toString());
-        console.log('DriveAge settings changed flag set');
-
-        // Let form submission continue to /update.php
-    });
-
     // Real-time preview updates for colors
     colorInputs.forEach(input => {
         input.addEventListener('input', function() {
-            const category = this.dataset.category;
             const colorRow = this.closest('.color-row');
             const preview = colorRow.querySelector('.color-preview-inline');
 
-            // Get both background and text colors for this category
             const bgColor = colorRow.querySelector('.bg-color').value.toUpperCase();
             const textColor = colorRow.querySelector('.text-color').value.toUpperCase();
 
-            // Update preview with both colors
             preview.style.backgroundColor = bgColor;
             preview.style.color = textColor;
 
-            // Check for duplicates (only for background colors)
             if (this.classList.contains('bg-color')) {
                 checkDuplicateColors();
             }
         });
     });
 
-    // Threshold year-to-hour conversion
+    // Threshold year-to-hour conversion (live sync into the hidden fields)
     thresholdInputs.forEach(input => {
         input.addEventListener('input', function() {
             const years = parseFloat(this.value) || 0;
             const hours = Math.round(years * 8760);
-            const field = this.dataset.field;
-            const hiddenInput = document.querySelector(`input[name="${field}"]`);
+            const hiddenInput = document.querySelector(`input[name="${this.dataset.field}"]`);
             if (hiddenInput) {
                 hiddenInput.value = hours;
             }
         });
     });
 
-    // Duplicate color validation (only for background colors)
+    // Duplicate color validation (background colors only)
     function checkDuplicateColors() {
         const bgColorInputs = document.querySelectorAll('.bg-color');
         const colors = Array.from(bgColorInputs).map(input => input.value.toUpperCase());
         const hasDuplicates = colors.length !== new Set(colors).size;
 
         if (hasDuplicates) {
-            // Highlight duplicates (only background color inputs)
-            bgColorInputs.forEach((input, index) => {
+            bgColorInputs.forEach(input => {
                 const color = input.value.toUpperCase();
                 const isDuplicate = colors.filter(c => c === color).length > 1;
-                if (isDuplicate) {
-                    input.classList.add('duplicate');
-                } else {
-                    input.classList.remove('duplicate');
-                }
+                input.classList.toggle('duplicate', isDuplicate);
             });
 
-            // Show error message
             showErrorMessage('Error: Each category must have a unique color. Please change the highlighted color pickers.');
 
-            // Disable submit
             submitButton.disabled = true;
             submitButton.style.opacity = '0.5';
             submitButton.style.cursor = 'not-allowed';
         } else {
-            // Clear highlights
             bgColorInputs.forEach(input => {
                 input.classList.remove('duplicate');
             });
@@ -789,7 +708,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const errorDiv = document.getElementById('color-error');
         errorDiv.textContent = msg;
         errorDiv.style.display = 'block';
-        // Scroll to error
         errorDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
@@ -801,16 +719,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initial duplicate check
     checkDuplicateColors();
 
-    // Initialize all previews with correct background and text colors
-    const allPreviews = document.querySelectorAll('.color-preview-inline');
-    allPreviews.forEach(preview => {
-        const category = preview.dataset.category;
+    // Initialize all previews with current colors
+    document.querySelectorAll('.color-preview-inline').forEach(preview => {
         const colorRow = preview.closest('.color-row');
-        const bgColor = colorRow.querySelector('.bg-color').value.toUpperCase();
-        const textColor = colorRow.querySelector('.text-color').value.toUpperCase();
-
-        preview.style.backgroundColor = bgColor;
-        preview.style.color = textColor;
+        preview.style.backgroundColor = colorRow.querySelector('.bg-color').value.toUpperCase();
+        preview.style.color = colorRow.querySelector('.text-color').value.toUpperCase();
     });
 });
 </script>

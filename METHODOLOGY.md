@@ -1,6 +1,6 @@
 # DriveAge Methodology & Research Documentation
 
-This document provides detailed technical information about the risk assessment and predictive replacement methodologies used in the DriveAge plugin.
+This document describes the risk assessment and predictive replacement methodologies implemented in the DriveAge plugin. It is kept in sync with the shipped code - the formulas below are the formulas that run (see `tests/run.php` for executable examples of each).
 
 ---
 
@@ -14,19 +14,20 @@ This document provides detailed technical information about the risk assessment 
 6. [NVMe Predictive Replacement Estimation](#nvme-predictive-replacement-estimation)
 7. [Conservative vs Aggressive Modes](#conservative-vs-aggressive-modes)
 8. [Critical SMART Attributes](#critical-smart-attributes)
-9. [Confidence Levels](#confidence-levels)
-10. [Limitations & Assumptions](#limitations--assumptions)
+9. [Data Sources & Freshness](#data-sources--freshness)
+10. [Confidence Levels](#confidence-levels)
+11. [Limitations & Assumptions](#limitations--assumptions)
 
 ---
 
 ## Overview
 
-DriveAge implements a **dual risk model** that uses different assessment strategies for different drive types:
+DriveAge implements a **dual risk model**:
 
-- **HDDs (Hard Disk Drives)**: Age-based risk using Annual Failure Rate (AFR) curves combined with critical SMART attribute monitoring
-- **NVMe SSDs**: Wear-based risk using Percentage Used and Available Spare metrics
+- **HDDs (and USB devices)**: Age-based risk calibrated to Backblaze's 2025 fleet data, combined with critical SMART attribute monitoring that overrides age when pre-failure indicators appear
+- **NVMe SSDs**: Wear-based risk using Percentage Used and Available Spare, with replacement projections computed from the drive's **own measured write history**
 
-Both models include **predictive replacement estimates** that forecast the recommended time until drive replacement based on current health status and historical data.
+Both models produce **predictive replacement estimates** carrying an explicit method and confidence level.
 
 ---
 
@@ -34,51 +35,34 @@ Both models include **predictive replacement estimates** that forecast the recom
 
 ### Annual Failure Rate (AFR) Data
 
-**Primary Source: Backblaze Hard Drive Stats (2013-2024)**
-- URL: https://www.backblaze.com/blog/backblaze-drive-stats/
-- Data: 250,000+ drives in production environments
-- Key Finding: AFR increases significantly after 4-5 years of operation
-- Typical AFR progression:
-  - Year 0-2: ~1.5% AFR (minimal risk)
-  - Year 2-3: ~2.0% AFR (low risk)
-  - Year 3-4: ~3.0% AFR (moderate risk)
-  - Year 4-5: ~6.0% AFR (elevated risk)
-  - Year 5-6: ~10.0% AFR (high risk)
-  - Year 6+: >10% AFR, increasing (high risk)
+**Primary Source: Backblaze "Let's Revisit the Bathtub Curve" (2025)**
+- URL: https://www.backblaze.com/blog/are-hard-drives-getting-better-lets-revisit-the-bathtub-curve/
+- Data: ~317,230 drives in production
+- Key findings the defaults are calibrated to:
+  - Drives aged 0-1 years: **~1.3% AFR**
+  - Failure rate stays **roughly flat through the majority of drive life**
+  - A steep ramp appears near end of life, peaking at **~4.25% AFR at ~10 years 3 months**
+  - The 2025 peak is roughly **one third** of the peaks measured in the 2013 (13.73%) and 2021 (14.24%) analyses - drives are lasting significantly longer than older studies suggested
+- Supporting: Backblaze quarterly Drive Stats reports (https://www.backblaze.com/blog/backblaze-drive-stats-for-2024/)
+
+**Implication**: earlier DriveAge versions (and most folk wisdom) assumed AFR explodes after year 4-5. The current data does not support that; the default bands and replacement targets were recalibrated accordingly in v2026.07.16.
 
 **Secondary Source: Google Drive Reliability Study (2007)**
 - URL: https://research.google/pubs/pub32774/
 - Data: 100,000+ drives in Google data centers
-- Key Finding: SMART attributes 5, 187, 188, 197, 198 are strong failure predictors
+- Key Finding: SMART attributes 5, 187, 188, 197, 198 are strong failure predictors. DriveAge evaluates **all five**.
 
 ### NVMe Endurance & TBW Data
 
-**Primary Source: Consumer SSD Endurance Research (2024)**
-- Tom's Hardware SSD Forums & Reviews (2023-2024)
-- AnandTech SSD Endurance Testing (2020-2024)
-- Key Finding: Modern TLC consumer SSDs average **500 TBW per TB of capacity**
+Vendor endurance ratings for consumer NVMe drives typically run **~220 TBW/TB (QLC budget) to ~600-750 TBW/TB (premium TLC)**. Since SMART does not expose the vendor rating, DriveAge uses **500 TBW per TB of capacity** as a mid-market estimate when projecting endurance.
 
-**TBW Estimates by Capacity** (Conservative estimates):
-- 250 GB: ~250 TBW
-- 500 GB: ~300 TBW
-- 1 TB: ~500 TBW
-- 2 TB: ~1,000 TBW
-- 4 TB: ~2,000 TBW
-
-**Write Rate Assumptions** (Home NAS workloads):
-- Conservative estimate: **30 TB/year** (82 GB/day)
-- Aggressive estimate: **15 TB/year** (41 GB/day)
-- Based on typical Unraid usage patterns: media server, file storage, backups
+Write rates are **measured per drive** from SMART data (see below); fixed write-rate assumptions (30/15 TB/year) are used only as a fallback for drives with less than ~3 months of history.
 
 ### SMART Attribute Thresholds
 
 **Source: smartmontools Documentation & Industry Standards**
 - URL: https://www.smartmontools.org/
-- SMART Attribute ID 5 (Reallocated Sectors): ANY reallocation = warning, >10 = critical
-- SMART Attribute ID 197 (Current Pending Sectors): ANY pending = critical (immediate failure risk)
-- SMART Attribute ID 198 (Uncorrectable Sectors): ANY uncorrectable = critical (data loss)
-- SMART Attribute ID 187 (Reported Uncorrectable): Indicates read errors during normal operation
-- SMART Attribute ID 188 (Command Timeout): Indicates communication failures with drive
+- See [Critical SMART Attributes](#critical-smart-attributes) for the exact thresholds.
 
 ---
 
@@ -86,35 +70,30 @@ Both models include **predictive replacement estimates** that forecast the recom
 
 ### Methodology
 
-HDDs are assessed using **power-on hours** converted to age in years (1 year = 8,760 hours). Risk categories are assigned based on AFR curves from Backblaze data.
+HDDs are assessed using **power-on hours** converted to age (1 year = 8,760 hours). Default risk categories follow the shape of the 2025 Backblaze curve: flat-ish AFR through mid-life, ramping toward the ~10.3-year peak.
 
-### Risk Categories
+### Default Risk Categories (all configurable)
 
-| Risk Category | Age Range | AFR Range | Color | Description |
-|--------------|-----------|-----------|-------|-------------|
-| **Minimal Risk** | < 2 years | < 1.5% | Green | Brand new drives, minimal failure risk |
-| **Low Risk** | 2-3 years | 1.5-2% | Light Green | Normal operation, low failure risk |
-| **Moderate Risk** | 3-4 years | 2-5% | Amber | Mid-life, moderate failure risk |
-| **Elevated Risk** | 4-5 years | 5-10% | Orange | Aging drives, elevated failure risk |
-| **High Risk** | 5-6 years | 10-15% | Red | Old drives, high failure risk |
-| **High Risk** | 6+ years | > 15% | Dark Red | Elderly drives, very high failure risk |
+| Risk Category | Age Range | Approx. AFR | Color |
+|--------------|-----------|-----------|-------|
+| **Minimal Risk** | < 4 years | ~1% | Green |
+| **Low Risk** | 4-6 years | ~1.5% | Light Green |
+| **Moderate Risk** | 6-8 years | ~2% | Amber |
+| **Elevated Risk** | 8-10 years | ~2.5-4% | Orange |
+| **High Risk** | ≥ 10 years | ~4%+ (measured peak: 4.25% @ 10.3y) | Red |
+| **N/A** | no SMART data | - | Gray |
 
-### Pre-Failure Detection
+The AFR figures are approximate interpolations of the 2025 fleet curve (Backblaze publishes year-1 and peak values precisely; mid-life values are read from the published curve). They describe fleet-average behavior, not any individual drive.
 
-HDDs with ANY of the following SMART attributes trigger immediate warnings:
+### Risk Overrides
 
-- **Critical Warning** (Replace ASAP):
-  - Current Pending Sectors > 0 (SMART 197)
-  - Uncorrectable Sectors > 0 (SMART 198)
-  - Reallocated Sectors > 10 (SMART 5)
-  - Command Timeouts > 100 (SMART 188)
+A drive is escalated to **High Risk regardless of age** when any of the following hold - and the category, row color, and label are updated together:
 
-- **Caution Warning** (Monitor closely):
-  - Reallocated Sectors 1-10 (SMART 5)
-  - Reported Uncorrectable > 0 (SMART 187)
-  - Command Timeouts 1-100 (SMART 188)
+- SMART overall-health self-assessment = **FAILED**
+- Any critical SMART attribute warning (see below)
+- Replacement estimate under 6 months
 
-**Risk Override**: If an HDD has critical SMART warnings, it is automatically categorized as **High Risk** regardless of age.
+Devices with no SMART data at all (typically the USB boot drive) are categorized **N/A**, not Minimal Risk.
 
 ---
 
@@ -122,312 +101,218 @@ HDDs with ANY of the following SMART attributes trigger immediate warnings:
 
 ### Methodology
 
-NVMe drives are assessed using two primary wear metrics:
-1. **Percentage Used**: Vendor-specific wear indicator (0-255%, typically 0-100%)
-2. **Available Spare**: Remaining spare blocks (100% = full spare, 0% = depleted)
-
-Risk is determined by the **higher (more severe) risk** of the two metrics (conservative approach).
+NVMe drives are assessed on two wear metrics; the **more severe of the two wins**:
+1. **Percentage Used** (0-255%, vendor wear indicator)
+2. **Available Spare** (100% = full spare)
 
 ### Risk Categories
 
-| Risk Category | Percentage Used | Available Spare | Description |
-|--------------|-----------------|-----------------|-------------|
-| **Minimal Risk** | < 50% | > 80% | Minimal wear, plenty of spare capacity |
-| **Low Risk** | 50-79% | 60-80% | Low wear, good spare capacity |
-| **Moderate Risk** | 80-99% | 40-60% | Moderate wear, spare capacity declining |
-| **Elevated Risk** | 100-120% | 20-40% | High wear, spare capacity low |
-| **High Risk** | > 120% OR Below Threshold | < 20% OR Below Threshold | Critical wear or spare depletion |
+| Risk Category | Percentage Used | Available Spare |
+|--------------|-----------------|-----------------|
+| **Minimal Risk** | < 50% | > 80% |
+| **Low Risk** | 50-79% | 60-80% |
+| **Moderate Risk** | 80-99% | 40-60% |
+| **Elevated Risk** | > 100% | within 10 pts of threshold |
+| **High Risk** | critical conditions below | < vendor threshold |
 
-### Critical Conditions
+### Critical Conditions (immediate High Risk)
 
-NVMe drives are immediately categorized as **High Risk** if ANY of:
-- Media Errors > 0 (indicates NAND chip failures)
-- Critical Warning > 0 (vendor-specific critical status)
+- SMART overall-health FAILED
+- Media Errors > 0
+- Critical Warning flag > 0
 - Available Spare < Available Spare Threshold (typically 10%)
 
 ---
 
 ## HDD Predictive Replacement Estimation
 
-### Estimation Algorithm
+Evaluated in order; the first match wins. Every result carries `method` and `confidence`.
 
-HDD lifespan estimates combine **age-based AFR curves** with **SMART health warnings**.
+#### Method 0: SMART FAILED (`smart_failed`)
+- **Trigger**: overall-health self-assessment FAILED
+- **Estimate**: 0 months (Replace Now) · **Confidence**: High
 
-#### Method 1: Critical SMART Warnings
-- **Trigger**: ANY critical SMART attributes detected
-- **Estimate**: 0 months (Replace immediately)
-- **Confidence**: High
-- **Action**: Replace ASAP
+#### Method 1: Critical SMART Warnings (`critical_smart`)
+- **Trigger**: any critical attribute warning (197>0, 198>0, 5>10, 187>10, 188>100)
+- **Estimate**: 0 months (Replace Now) · **Confidence**: High
 
-#### Method 2: Non-Critical SMART Warnings
-- **Trigger**: Caution-level SMART attributes detected
-- **Conservative Estimate**: 3 months
-- **Aggressive Estimate**: 6 months
-- **Confidence**: Medium
-- **Action**: Plan replacement soon
+#### Method 2: Non-Critical SMART Warnings (`smart_warnings`)
+- **Trigger**: caution-level warnings (5: 1-10, 187: 1-10, 188: 1-100)
+- **Estimate**: 3 months (conservative) / 6 months (aggressive) · **Confidence**: Medium
 
-#### Method 3: Age-Based Estimation
-Uses Backblaze AFR curve projections:
+#### Method 3: Age Countdown (`age_linear`)
+A linear countdown to the target replacement age:
 
-| Current Age | Conservative Estimate | Aggressive Estimate | Reasoning |
-|-------------|----------------------|---------------------|-----------|
-| < 2 years | 42 months (3.5 years) | 60 months (5 years) | Low AFR, long remaining life |
-| 2-4 years | 25 months (2 years) | 36 months (3 years) | Moderate AFR, mid-life |
-| 4-6 years | 13 months (1 year) | 18 months (1.5 years) | Elevated AFR, aging |
-| > 6 years | 4 months | 6 months | High AFR, replace soon |
+```
+months_remaining = (target_age_years − POH/8760) × 12
+```
 
-**Conservative Mode**: Reduces estimates by 30% (0.7x multiplier)
-**Aggressive Mode**: Uses standard estimates (1.0x multiplier)
+| Mode | Target age | Rationale (Backblaze 2025) |
+|------|-----------|----------------------------|
+| Conservative | **8 years** | Replace before the end-of-life AFR ramp begins in earnest |
+| Aggressive | **10 years** | Ride drives to the measured fleet AFR peak (~4.25% @ 10.3y) |
+
+Drives past the target age degrade gracefully from 6 months down to "Replace Now". This is deliberately a **replacement-planning countdown**, not a survival model - the AFR data informs *where the targets sit*, and the SMART overrides catch individual drives that deviate from fleet behavior.
+
+#### No data (`no_data`)
+Drives without power-on hours (and not FAILED) return Unknown / Confidence: None.
 
 ---
 
 ## NVMe Predictive Replacement Estimation
 
-NVMe drives use **three estimation methods** with automatic fallback if data is unavailable.
+All three methods prefer the drive's **own measured history**. A measured rate is used when the drive has at least **~3 months (0.25 years) of power-on time**; otherwise the legacy assumptions apply as a fallback. In conservative mode, measured rates get a **+25% safety margin**. All results are capped at the mode's target age (96/120 months).
 
-### Method 1: TBW Calculation (Most Accurate)
+### Method 1: TBW Projection (`tbw_measured_rate` / `tbw_assumed_rate`)
 
-**Requirements**: Data Units Written available, drive size known
+```
+tbw_written        = data_units_written × 512,000 bytes
+estimated_max_tbw  = capacity_TB × 500          (mid-market TLC estimate)
+measured_rate      = tbw_written / (POH / 8760)              [TB per year]
+write_rate         = measured_rate × 1.25 (conservative) or × 1.0 (aggressive)
+months_remaining   = (estimated_max_tbw − tbw_written) / write_rate × 12
+```
 
-**Algorithm**:
-1. Calculate TBW written: `(Data Units Written × 512,000) / 1 TB`
-2. Estimate maximum TBW: `Drive Size (TB) × 500 TBW/TB`
-3. Calculate remaining TBW: `Max TBW - Written TBW`
-4. Estimate years remaining: `Remaining TBW / Assumed Write Rate`
+Fallback (short history): assumed 30 TB/yr (conservative) or 15 TB/yr (aggressive).
+**Confidence**: Medium (measured) / Low (assumed).
 
-**Assumed Write Rates**:
-- Conservative: 30 TB/year (faster wear assumption)
-- Aggressive: 15 TB/year (slower wear assumption)
+**Example** (2 TB drive, 24.5 TB written over 24,845 hours ≈ 2.84 years):
+- measured rate = 24.5 / 2.84 ≈ 8.6 TB/yr → conservative rate ≈ 10.8 TB/yr
+- remaining ≈ 909 − 24.5 ≈ 884 TBW → ≈ 82 years of endurance
+- capped at the 8-year conservative target → "8 years"
 
-**Example** (1TB NVMe, 50 TBW written, Conservative mode):
-- Max TBW: 500 TBW
-- Remaining TBW: 450 TBW
-- Years remaining: 450 / 30 = 15 years
-- Months remaining: 180 months
+### Method 2: Percentage Used Slope (`percentage_used_measured` / `percentage_used_linear`)
 
-**Confidence**: Medium (depends on write rate assumption accuracy)
+```
+wear_per_year    = percentage_used / (POH / 8760)  [× 1.25 in conservative mode]
+months_remaining = (100 − percentage_used) / wear_per_year × 12
+```
 
-### Method 2: Percentage Used Linear Estimation
+Fallback (short history): assume a 5-year wear life (20%/year), reduced ×1.5 in conservative mode.
+**Confidence**: Medium (measured) / Low (assumed).
 
-**Requirements**: Percentage Used < 100%
+### Method 3: Available Spare Depletion (`spare_depletion`)
 
-**Algorithm**:
-1. Calculate percent remaining: `100% - Percentage Used`
-2. Assume 5-year expected life (1 year per 20% used)
-3. Apply wear multiplier:
-   - Conservative: 1.5x (faster wear going forward)
-   - Aggressive: 1.0x (same wear rate)
-4. Calculate months: `(Percent Remaining / 20) × 12 / Multiplier`
+```
+depletion_per_year = (100 − available_spare) / (POH / 8760)  [× 1.25 conservative]
+months_remaining   = (available_spare − spare_threshold) / depletion_per_year × 12
+```
 
-**Example** (60% used, Conservative mode):
-- Percent remaining: 40%
-- Base estimate: (40 / 20) × 12 = 24 months
-- With 1.5x multiplier: 24 / 1.5 = 16 months
+Fallback (short history): assume current consumption took 2 years.
+**Confidence**: Low (spare depletion is often non-linear).
 
-**Confidence**: Low (very rough linear approximation)
+### Critical overrides (before all methods)
+SMART FAILED, media errors, or an active critical warning → 0 months; spare below threshold → 1 month. All High confidence.
 
-### Method 3: Available Spare Depletion
-
-**Requirements**: Available Spare < 90% (some spare consumed)
-
-**Algorithm**:
-1. Calculate spare consumed: `100% - Available Spare`
-2. Calculate spare remaining: `Available Spare - Spare Threshold`
-3. Assume 2 years to consume current amount
-4. Apply wear multiplier (Conservative: 1.5x, Aggressive: 1.0x)
-5. Calculate months: `(Spare Remaining / Spare Consumed) × 24 / Multiplier`
-
-**Example** (80% spare available, 10% threshold, Conservative mode):
-- Spare consumed: 20%
-- Spare remaining: 70%
-- Base estimate: (70 / 20) × 24 = 84 months
-- With 1.5x multiplier: 84 / 1.5 = 56 months
-
-**Confidence**: Low (assumes steady depletion rate)
-
-### Fallback: Insufficient Data
-- **Estimate**: Unknown
-- **Confidence**: None
-- **Display**: "Insufficient data for lifespan estimate"
+### Fallback: Insufficient Data (`insufficient_data`)
+New drives with 0% wear, no write data and full spare show "Unknown" until history accumulates.
 
 ---
 
 ## Conservative vs Aggressive Modes
 
-Users can select their preferred prediction mode in plugin settings.
-
-### Conservative Mode (Default)
-**Philosophy**: Assume faster wear and shorter lifespan to be safe
-
-**Settings**:
-- NVMe write rate: **30 TB/year** (higher workload assumption)
-- NVMe wear multiplier: **1.5x** (assume accelerating wear)
-- HDD time multiplier: **0.7x** (reduce time estimates by 30%)
-
-**Use Case**: Production systems, mission-critical data, risk-averse users
-
-### Aggressive Mode
-**Philosophy**: Assume slower wear and longer lifespan based on typical usage
-
-**Settings**:
-- NVMe write rate: **15 TB/year** (lower workload assumption)
-- NVMe wear multiplier: **1.0x** (assume steady wear)
-- HDD time multiplier: **1.0x** (standard time estimates)
-
-**Use Case**: Home labs, non-critical storage, budget-conscious users
+| | Conservative (default) | Aggressive |
+|---|---|---|
+| HDD target age | **8 years** | **10 years** |
+| HDD caution-warning estimate | 3 months | 6 months |
+| NVMe measured-rate margin | **+25%** | none |
+| NVMe fallback write rate | 30 TB/yr | 15 TB/yr |
+| NVMe estimate cap | 96 months | 120 months |
+| Best for | production / critical data | home labs / maximize drive life |
 
 ---
 
 ## Critical SMART Attributes
 
-### HDD SMART Attributes
+### HDD SMART Attributes (all five Google-study predictors evaluated)
 
-| ID | Name | Meaning | Warning Threshold | Critical Threshold |
-|----|------|---------|-------------------|-------------------|
-| **5** | Reallocated Sector Count | Sectors remapped due to read errors | > 0 | > 10 |
-| **197** | Current Pending Sectors | Sectors waiting to be reallocated | > 0 | > 0 |
-| **198** | Uncorrectable Sector Count | Sectors that cannot be read/written | > 0 | > 0 |
-| **187** | Reported Uncorrectable Errors | Read errors during normal operation | > 0 | > 10 |
-| **188** | Command Timeout | Commands that timed out | > 0 | > 100 |
+| ID | Name | Caution | Critical |
+|----|------|-------------------|-------------------|
+| **5** | Reallocated Sector Count | 1-10 | > 10 |
+| **187** | Reported Uncorrectable Errors | 1-10 | > 10 |
+| **188** | Command Timeout | 1-100 | > 100 |
+| **197** | Current Pending Sectors | - | > 0 |
+| **198** | Uncorrectable Sector Count | - | > 0 |
+| - | SMART overall-health | - | FAILED |
 
-**Note**: Google's research found attributes 5, 187, 188, 197, 198 had the strongest correlation with imminent drive failure.
+**Attribute 188 note**: many drives pack three 16-bit counters into the 48-bit raw value. DriveAge masks to the low 16 bits when the raw value exceeds 65,535, so composite encodings don't produce false criticals.
+
+**Raw-value parsing note**: vendor raw formats such as `34 (Min/Max 21/49)` and `33477h+12m+30.271s` are handled by extracting the leading integer (matching smartmontools' normalized display).
 
 ### NVMe SMART Attributes
 
-| Attribute | Meaning | Warning Threshold | Critical Threshold |
-|-----------|---------|-------------------|-------------------|
-| **Percentage Used** | Vendor-specific wear indicator | > 80% | > 100% |
-| **Available Spare** | Remaining spare NAND blocks | < 60% | < Spare Threshold (typically 10%) |
-| **Available Spare Threshold** | Vendor-defined critical threshold | - | Spare < Threshold |
-| **Media Errors** | NAND chip read/write errors | > 0 | > 0 |
-| **Critical Warning** | Vendor critical status flags | > 0 | > 0 |
-| **Data Units Written** | Total writes (512-byte units × 1000) | Used for TBW calculation | - |
+| Attribute | Caution | Critical |
+|-----------|-------------------|-------------------|
+| **Percentage Used** | ≥ 80% | > 100% |
+| **Available Spare** | ≤ 60% | < Spare Threshold |
+| **Media Errors** | - | > 0 |
+| **Critical Warning** | - | > 0 |
+| **SMART overall-health** | - | FAILED |
+
+---
+
+## Data Sources & Freshness
+
+DriveAge does not poll drives itself. Sources, in order of authority:
+
+1. **`/var/local/emhttp/disks.ini` / `devs.ini`** - device enumeration, ids, sizes (sectors × sector size), live temperatures and spin state. Enumerating from Unraid's state (not `/dev` globs) supports >26 SATA devices, multi-digit NVMe names and keeps values identical to the Main page.
+2. **`/var/local/emhttp/smart/<dev>`** - Unraid's cached smartctl output (ATA attribute tables, NVMe health logs, SCSI/SAS text are all parsed). Unraid refreshes these on the **Disk Settings `poll_attributes` interval - default 1800 s (30 minutes)**. The dashboard displays the actual data age.
+3. **`/var/local/emhttp/smart/<dev>.ssa`** - Unraid's cached overall-health verdict.
+4. **Direct `smartctl -a -j`** - last resort only, when no cache file exists and the drive is not spun down (e.g. first run). The JSON parse uses smartctl's universal `power_on_time`/`temperature`/`smart_status` fields, so SAS drives work too.
+
+Spun-down drives are **never woken**. Their last-known power-on hours persist in `/boot/config/plugins/driveage/drivecache.json` (single file, rewritten only when a value changes), so they survive reboots.
 
 ---
 
 ## Confidence Levels
 
-Prediction confidence indicates how reliable the estimate is based on available data and method used.
-
-### High Confidence
-- **Triggers**: Critical SMART warnings detected, media errors, spare below threshold
-- **Meaning**: Strong evidence of imminent failure or critical condition
-- **Action**: Replace immediately or within 1 month
-- **Examples**:
-  - HDD with pending sectors > 0
-  - NVMe with media errors > 0
-  - Available spare below threshold
-
-### Medium Confidence
-- **Triggers**: TBW calculation method, age-based estimates with SMART data
-- **Meaning**: Reasonable estimate based on industry data and current metrics
-- **Action**: Plan replacement within estimated timeframe
-- **Examples**:
-  - NVMe with TBW calculation available
-  - HDD age-based AFR estimates
-  - Non-critical SMART warnings
-
-### Low Confidence
-- **Triggers**: Linear wear estimates, spare depletion estimates
-- **Meaning**: Rough approximation based on assumptions, actual lifespan may vary significantly
-- **Action**: Monitor regularly, use estimate as general guidance
-- **Examples**:
-  - NVMe percentage used linear estimation
-  - NVMe spare depletion estimation
-
-### None (Unknown)
-- **Triggers**: Insufficient data for estimation
-- **Meaning**: Cannot make a reliable estimate with available data
-- **Action**: Continue monitoring, collect more data over time
-- **Examples**:
-  - NVMe with no write data and 0% used
-  - Drives with missing SMART attributes
+| Level | Meaning | Examples |
+|---|---|---|
+| **High** | Strong evidence of critical condition | SMART FAILED, pending sectors, media errors, spare below threshold |
+| **Medium** | Estimate from measured data or fleet statistics | age countdown, measured NVMe write rate, measured wear slope, caution warnings |
+| **Low** | Assumption-based fallback | assumed write rates (short history), spare depletion |
+| **None** | Cannot estimate | no power-on hours, brand-new NVMe with zero wear |
 
 ---
 
 ## Limitations & Assumptions
 
-### General Limitations
-
-1. **Manufacturer Variability**: Different manufacturers and models have different reliability characteristics. This plugin uses industry averages.
-
-2. **Workload Dependency**: Drive lifespan heavily depends on workload (writes per day, temperature, operating hours). Assumptions may not match all use cases.
-
-3. **No Warranty Information**: Plugin cannot access manufacturer warranty periods or specifications.
-
-4. **SMART Data Reliability**: Some drives report inaccurate or missing SMART data. Results depend on drive firmware quality.
-
-5. **No Crystal Ball**: Drives can fail suddenly without warning. These estimates are **probabilistic guidance**, not guarantees.
-
-### HDD Assumptions
-
-- AFR curves based on Backblaze data (large-scale data center environment)
-- Assumes 24/7 operation (Unraid typical usage)
-- Temperature and environmental factors not accounted for in base estimates
-- Brand/model differences not considered
-
-### NVMe Assumptions
-
-- TBW ratings based on **consumer TLC drives** (500 TBW/TB)
-- Enterprise drives (MLC/SLC) may have 5-10x higher endurance
-- Write amplification factor assumed ~1.0 (ideal scenario)
-- Write rates (15-30 TB/year) based on typical home NAS usage
-- Over-provisioning and TRIM effectiveness assumed optimal
-
-### Prediction Assumptions
-
-- **Conservative Mode**: Assumes higher workload and faster wear than typical
-- **Aggressive Mode**: Assumes lower workload and steady wear rate
-- Linear wear rate (reality: wear accelerates over time for some drives)
-- No consideration of:
-  - Power cycles (startup/shutdown stress)
-  - Temperature extremes
-  - Vibration (in multi-drive arrays)
-  - Firmware bugs or defects
+1. **Fleet vs individual**: Backblaze AFR describes data-center fleet averages of specific models. Your drives, workload and environment differ; individual drives fail without warning at any age.
+2. **AFR labels are approximations**: year-1 (~1.3%) and peak (~4.25% @ ~10.3y) are published precisely; the mid-life band labels are interpolations of the published curve.
+3. **NVMe endurance rating is estimated** (500 TBW/TB): actual vendor ratings range ~220-750 TBW/TB. Enterprise drives can be 5-10× higher. Write amplification is assumed ≈1.
+4. **Measured rates assume history predicts the future**: a workload change (e.g. new backup target) invalidates the projection until history catches up. Conservative mode's +25% margin partially hedges this.
+5. **SATA SSDs** are currently assessed with the age-based model (they expose wear attributes inconsistently across vendors).
+6. **SMART reliability varies** by vendor/firmware; ~half of failed drives in Google's study showed no SMART warnings first. **These estimates are probabilistic planning guidance, not guarantees. Keep backups.**
 
 ---
 
 ## Recommended Actions
 
-### For Users
-
-1. **Don't panic**: Red/high-risk drives don't always fail immediately. Use estimates as planning guidance.
-
-2. **Monitor critical attributes**: Pay close attention to drives with SMART warnings, especially pending sectors.
-
-3. **Have backups**: No prediction model is perfect. Always maintain backups of critical data.
-
-4. **Plan proactively**: Use replacement estimates to budget and schedule drive replacements during maintenance windows.
-
-5. **Use conservative mode for critical data**: If the array contains irreplaceable data, use conservative estimates for safer planning.
-
-### For Developers
-
-1. **Future Enhancement**: Add per-manufacturer TBW databases when/if publicly available
-2. **Future Enhancement**: Track actual write rates over time for more accurate NVMe predictions
-3. **Future Enhancement**: Integrate temperature history for HDD AFR adjustments
-4. **Future Enhancement**: Add machine learning to refine predictions based on actual failures
+1. **Don't panic on red**: High Risk means elevated probability and planning priority, not imminent death - except when driven by critical SMART warnings, which deserve immediate action.
+2. **Watch pending sectors**: any non-zero 197/198 is the strongest "act now" signal.
+3. **Have backups**: no prediction model substitutes for them.
+4. **Use conservative mode for critical data**; aggressive mode to maximize service life on replaceable data.
 
 ---
 
 ## Version History
 
-- **v1.0 (2025-12-26)**: Initial implementation of dual risk model and predictive replacement estimates
+- **v2026.07.16**: Recalibrated to Backblaze 2025 bathtub-curve revisit (4/6/8/10-year bands; 8yr/10yr targets). NVMe projections now use measured per-drive wear rates. Added 187/188 evaluation, SMART-FAILED surfacing/forcing, N/A category, data-freshness reporting, and a unit test suite covering every formula in this document.
+- **v1.0 (2025-12-26)**: Initial dual risk model and predictive replacement estimates.
 
 ---
 
 ## References
 
-1. Backblaze Blog - Hard Drive Stats (2013-2024): https://www.backblaze.com/blog/backblaze-drive-stats/
-2. Google - Failure Trends in a Large Disk Drive Population (2007): https://research.google/pubs/pub32774/
-3. smartmontools Documentation: https://www.smartmontools.org/
-4. Tom's Hardware - SSD Endurance Testing: https://www.tomshardware.com/reviews/ssd-endurance
-5. AnandTech - SSD Reliability and Endurance: https://www.anandtech.com/
+1. Backblaze - Are Hard Drives Getting Better? Let's Revisit the Bathtub Curve (2025): https://www.backblaze.com/blog/are-hard-drives-getting-better-lets-revisit-the-bathtub-curve/
+2. Backblaze Drive Stats for 2024: https://www.backblaze.com/blog/backblaze-drive-stats-for-2024/
+3. Google - Failure Trends in a Large Disk Drive Population (2007): https://research.google/pubs/pub32774/
+4. smartmontools Documentation: https://www.smartmontools.org/
+5. NVMe Specification - SMART/Health Information Log
 6. JEDEC JESD218/JESD219 - SSD Endurance Standards
-7. NVMe Specification 1.4 - SMART/Health Information
 
 ---
 
 **Document Maintained By**: DriveAge Development Team
-**Last Updated**: 2025-12-26
-**Plugin Version**: 2025.12.26+
+**Last Updated**: 2026-07-16
+**Plugin Version**: 2026.07.16+

@@ -1,25 +1,111 @@
 <?php
 /**
- * DriveAge Plugin - SMART Data Collection
+ * DriveAge Plugin - Drive Enumeration & Data Assembly
  *
- * Handles discovery and querying of drive SMART data
+ * Sources, in order of authority:
+ *  1. /var/local/emhttp/disks.ini  - assigned drives: names, ids, sizes,
+ *     temperatures, spin state (Unraid's own live state)
+ *  2. /var/local/emhttp/devs.ini   - unassigned devices
+ *  3. /var/local/emhttp/smart/<dev>      - cached smartctl attribute output,
+ *     refreshed by Unraid on the Disk Settings "poll_attributes" interval
+ *     (default 1800s = 30 minutes) - NOT every 30 seconds
+ *  4. /var/local/emhttp/smart/<dev>.ssa  - cached overall SMART health
+ *  5. Direct `smartctl -a -j` - LAST resort, only when no cache file exists
+ *     and the drive is not spun down
+ *
+ * Enumerating from Unraid's ini files (not /dev globs) supports >26 SATA
+ * devices (sdaa+), multi-digit NVMe names, and keeps temperatures / spin
+ * state consistent with the Main page.
  */
 
-require_once 'formatting.php';
-require_once 'config.php';
-require_once 'helpers.php';
-require_once 'cache.php';
-require_once 'predictions.php';
+require_once __DIR__ . '/formatting.php';
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/risk.php';
+require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/cache.php';
+require_once __DIR__ . '/smartparse.php';
+require_once __DIR__ . '/predictions.php';
 
-// DriveAge now relies entirely on Unraid's SMART cache at /var/local/emhttp/smart/
-// This cache is updated by emhttpd every 30 seconds (configurable via poll_attributes)
-// No plugin-level caching is used to avoid spinning up drives
+// Unraid state directory (guarded define so tests can point at fixtures)
+if (!defined('DRIVEAGE_STATE_DIR')) {
+    define('DRIVEAGE_STATE_DIR', '/var/local/emhttp');
+}
 
 /**
- * Get all drives with their SMART data
+ * Validate a device NAME (not path) against the expected patterns.
+ * Supports sda..sdzzz and multi-digit NVMe controllers/namespaces.
+ */
+function isValidDeviceName($name) {
+    return is_string($name) && preg_match('/^(sd[a-z]{1,3}|nvme\d+n\d+)$/', $name) === 1;
+}
+
+/**
+ * Get Unraid's SMART attribute poll interval (seconds).
+ * This is how often the smart/ cache files are refreshed at most.
+ */
+function getPollInterval() {
+    $varFile = DRIVEAGE_STATE_DIR . '/var.ini';
+    if (file_exists($varFile)) {
+        $vars = @parse_ini_file($varFile) ?: [];
+        if (isset($vars['poll_attributes']) && is_numeric($vars['poll_attributes'])) {
+            return intval($vars['poll_attributes']);
+        }
+    }
+    return 1800; // Unraid default: 30 minutes
+}
+
+/**
+ * Enumerate drives from Unraid's state files.
  *
- * Reads exclusively from Unraid's SMART cache at /var/local/emhttp/smart/
- * This cache is maintained by emhttpd and updated every 30 seconds
+ * @return array Map of deviceName => ['ini' => array, 'source' => 'disks'|'devs']
+ */
+function enumerateDrives() {
+    $found = [];
+
+    // Assigned drives (array, pools, flash)
+    $disksIni = DRIVEAGE_STATE_DIR . '/disks.ini';
+    if (file_exists($disksIni)) {
+        $disks = @parse_ini_file($disksIni, true) ?: [];
+        foreach ($disks as $slotName => $info) {
+            $dev = $info['device'] ?? '';
+            if ($dev === '' || !isValidDeviceName($dev)) {
+                continue; // empty slot or unexpected name
+            }
+            $info['_slot'] = $slotName;
+            $found[$dev] = ['ini' => $info, 'source' => 'disks'];
+        }
+    }
+
+    // Unassigned devices
+    $devsIni = DRIVEAGE_STATE_DIR . '/devs.ini';
+    if (file_exists($devsIni)) {
+        $devs = @parse_ini_file($devsIni, true) ?: [];
+        foreach ($devs as $slotName => $info) {
+            $dev = $info['device'] ?? '';
+            if ($dev === '' || !isValidDeviceName($dev) || isset($found[$dev])) {
+                continue;
+            }
+            $info['_slot'] = $slotName;
+            $found[$dev] = ['ini' => $info, 'source' => 'devs'];
+        }
+    }
+
+    // Safety net: if Unraid state is unavailable (should not happen on a
+    // running system), fall back to /dev discovery incl. sdaa+ and nvme10+
+    if (empty($found)) {
+        foreach (array_merge(glob('/dev/sd?') ?: [], glob('/dev/sd??') ?: [], glob('/dev/nvme*n*') ?: []) as $path) {
+            $dev = basename($path);
+            if (isValidDeviceName($dev) && @filetype($path) === 'block') {
+                $found[$dev] = ['ini' => ['device' => $dev, '_slot' => $dev], 'source' => 'glob'];
+            }
+        }
+    }
+
+    return $found;
+}
+
+/**
+ * Get all drives with their SMART data.
  *
  * @param array $config Plugin configuration
  * @return array Array of drive information
@@ -27,245 +113,272 @@ require_once 'predictions.php';
 function getAllDrives($config) {
     $drives = [];
 
-    // Parse disks.ini once for all drives (performance optimization)
-    $disksIni = '/var/local/emhttp/disks.ini';
-    $diskAssignments = [];
-    if (file_exists($disksIni)) {
-        $diskAssignments = parse_ini_file($disksIni, true) ?: [];
-    }
-
-    // Get user's temperature unit preference from Dynamix config
-    // This matches Unraid's Main page display settings (Settings -> Display Settings)
     $tempUnit = getTemperatureUnit();
+    $pollInterval = getPollInterval();
+    $pohCache = loadPohCache();
+    $pohUpdates = [];
 
-    // Discover all block devices
-    $devices = discoverBlockDevices();
-
-    foreach ($devices as $devicePath) {
-        $driveInfo = getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit);
+    foreach (enumerateDrives() as $deviceName => $entry) {
+        $driveInfo = getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache);
         if ($driveInfo) {
+            // Collect fresh POH readings for the write-on-change cache
+            if (!$driveInfo['is_standby'] && $driveInfo['power_on_hours'] !== null && $driveInfo['power_on_hours'] > 0) {
+                $pohUpdates[$deviceName] = [
+                    'power_on_hours' => $driveInfo['power_on_hours'],
+                    'model' => $driveInfo['model'],
+                    'serial' => $driveInfo['serial']
+                ];
+            }
+            $driveInfo['poll_interval'] = $pollInterval;
             $drives[] = $driveInfo;
         }
     }
 
-    // Sort by power-on hours (descending - oldest first)
+    // Single write, and only if a value actually changed
+    updatePohCache($pohCache, $pohUpdates);
+
+    // Sort by power-on hours (descending - oldest first); nulls sink to end
     usort($drives, function($a, $b) {
-        return $b['power_on_hours'] - $a['power_on_hours'];
+        return intval($b['power_on_hours'] ?? -1) <=> intval($a['power_on_hours'] ?? -1);
     });
 
     // Mark high risk drives for bold formatting
     foreach ($drives as &$drive) {
         $drive['is_oldest'] = ($drive['age_category'] === 'high_risk');
     }
+    unset($drive);
 
     return $drives;
 }
 
 /**
- * Discover all block devices
+ * Read normalized SMART data for a device.
  *
- * @return array Array of device paths
+ * @param string $deviceName Device name (e.g. sda, nvme0n1)
+ * @param bool $iniStandby True if Unraid reports the drive spun down
+ * @return array ['data' => array|null, 'age' => int|null] data + cache age (s)
  */
-function discoverBlockDevices() {
-    $devices = [];
+function readSmartData($deviceName, $iniStandby) {
+    $smartFile = DRIVEAGE_STATE_DIR . '/smart/' . $deviceName;
 
-    // Use glob() instead of shell_exec for security
-    $patterns = ['/dev/sd?', '/dev/nvme?n?'];
-
-    foreach ($patterns as $pattern) {
-        $found = glob($pattern);
-        if ($found) {
-            foreach ($found as $device) {
-                // Validate device path and ensure it's a block device
-                if (isValidBlockDevice($device)) {
-                    $devices[] = $device;
-                }
-            }
+    // Primary: Unraid's cached smartctl output
+    if (file_exists($smartFile)) {
+        $output = @file_get_contents($smartFile);
+        $parsed = driveage_parse_smart_text($output);
+        if ($parsed !== null) {
+            $mtime = @filemtime($smartFile);
+            return ['data' => $parsed, 'age' => $mtime ? max(0, time() - $mtime) : null];
         }
     }
 
-    return $devices;
+    // No cache file. Never touch a spun-down drive.
+    if ($iniStandby) {
+        $standby = driveage_empty_smart_data();
+        $standby['is_standby'] = true;
+        $standby['spin_status'] = 'standby';
+        return ['data' => $standby, 'age' => null];
+    }
+
+    // Last resort: query the drive directly (first run before the cache
+    // exists). -n standby guards against spinning up a sleeping drive.
+    $devicePath = '/dev/' . $deviceName;
+    if (!isValidDeviceName($deviceName) || !file_exists($devicePath)) {
+        return ['data' => null, 'age' => null];
+    }
+
+    exec('smartctl -n standby ' . escapeshellarg($devicePath) . ' >/dev/null 2>&1', $out, $exitCode);
+    if ($exitCode === 2) {
+        $standby = driveage_empty_smart_data();
+        $standby['is_standby'] = true;
+        $standby['spin_status'] = 'standby';
+        return ['data' => $standby, 'age' => null];
+    }
+
+    $jsonOutput = shell_exec('smartctl -a -j ' . escapeshellarg($devicePath) . ' 2>/dev/null');
+    if ($jsonOutput) {
+        $decoded = json_decode($jsonOutput, true);
+        $parsed = driveage_parse_smart_json($decoded);
+        if ($parsed !== null) {
+            return ['data' => $parsed, 'age' => 0];
+        }
+    }
+
+    $textOutput = shell_exec('smartctl -a ' . escapeshellarg($devicePath) . ' 2>/dev/null');
+    if ($textOutput) {
+        return ['data' => driveage_parse_smart_text($textOutput), 'age' => 0];
+    }
+
+    return ['data' => null, 'age' => null];
 }
 
 /**
- * Validate that a path is a legitimate block device
+ * Read Unraid's cached overall SMART health for a device (.ssa file).
  *
- * @param string $path Device path
- * @return bool True if valid block device
+ * @param string $deviceName Device name
+ * @param string $slotName Unraid slot name (disk1, parity, cache...)
+ * @return string|null 'PASSED', 'FAILED' or null if unavailable
  */
-function isValidBlockDevice($path) {
-    // Must match expected pattern
-    if (!preg_match('/^\/dev\/(sd[a-z]|nvme[0-9]n[0-9])$/', $path)) {
-        return false;
+function readSsaHealth($deviceName, $slotName) {
+    foreach ([$deviceName, $slotName] as $base) {
+        if ($base === null || $base === '') {
+            continue;
+        }
+        $file = DRIVEAGE_STATE_DIR . '/smart/' . basename($base) . '.ssa';
+        if (!file_exists($file)) {
+            continue;
+        }
+        $content = strtoupper(trim(@file_get_contents($file) ?: ''));
+        if ($content === '') {
+            continue;
+        }
+        // Content may be a full word (PASSED/FAILED/OK) or a single letter
+        if (strpos($content, 'PASS') !== false || $content === 'OK' || $content === 'P') {
+            return 'PASSED';
+        }
+        if (strpos($content, 'FAIL') !== false || $content === 'F') {
+            return 'FAILED';
+        }
     }
-
-    // Must exist and be readable
-    if (!file_exists($path) || !is_readable($path)) {
-        return false;
-    }
-
-    // Must be a block device (not regular file or symlink)
-    if (is_link($path)) {
-        return false;
-    }
-
-    // Check if it's actually a block device
-    $fileType = @filetype($path);
-    if ($fileType !== 'block') {
-        return false;
-    }
-
-    return true;
+    return null;
 }
 
 /**
- * Get Unraid variable information
+ * Build complete information for one drive.
  *
- * @return array Unraid vars
- */
-function getUnraidVars() {
-    $varFile = '/var/local/emhttp/var.ini';
-
-    if (!file_exists($varFile)) {
-        return [];
-    }
-
-    return parse_ini_file($varFile) ?: [];
-}
-
-/**
- * Get detailed information about a specific drive
- *
- * @param string $devicePath Device path (e.g., /dev/sda)
- * @param array $diskAssignments Parsed disks.ini data
+ * @param string $deviceName Device name (e.g. sda)
+ * @param array $entry Enumeration entry ['ini' => .., 'source' => ..]
  * @param array $config Plugin configuration
  * @param string $tempUnit Temperature unit ('C' or 'F')
- * @return array|null Drive information array or null if failed
+ * @param array $pohCache Persistent POH cache map
+ * @return array|null Drive information array or null if unusable
  */
-function getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit = 'C') {
-    // Get device name (e.g., sda from /dev/sda)
-    $deviceName = basename($devicePath);
+function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
+    $ini = $entry['ini'];
+    $slotName = $ini['_slot'] ?? $deviceName;
 
-    // Get SMART data (may be null if drive in standby or SMART unavailable)
-    $smartData = getSmartData($devicePath);
+    // Assignment info straight from the ini entry
+    $assignment = getUnraidAssignment($slotName, $ini, $entry['source']);
 
-    // Get Unraid assignment info
-    $assignment = getUnraidAssignment($deviceName, $diskAssignments);
+    // Unraid's live state: spin + temperature (consistent with the Main page)
+    $iniStandby = (($ini['spundown'] ?? '0') === '1');
+    $iniTemp = (isset($ini['temp']) && is_numeric($ini['temp'])) ? intval($ini['temp']) : null;
 
-    // Get drive size (preferably from Unraid's disks.ini for accuracy)
-    $size = getDriveSize($devicePath, $deviceName, $diskAssignments);
+    // SMART data (cache file -> standby stub -> direct query)
+    $read = readSmartData($deviceName, $iniStandby);
+    $smartData = $read['data'];
+    $dataAge = $read['age'];
 
-    // If no SMART data and no size, skip this device
-    if (!$smartData && $size == 0) {
-        return null;
+    // Size: Unraid's sectors x sector_size when available, blockdev last resort
+    $size = getDriveSize($deviceName, $ini);
+
+    if ($smartData === null && $size === 0) {
+        return null; // nothing knowable about this device
     }
 
-    // For USB/Flash drives without SMART data, use N/A values instead of defaults
-    $isFlashDrive = ($assignment['drive_type'] === 'flash');
-    $hasSmartData = ($smartData !== null && isset($smartData['power_on_hours']));
+    $isStandby = $iniStandby || (($smartData['is_standby'] ?? false) === true);
 
-    // Use SMART data if available, otherwise use appropriate defaults
-    $model = $smartData['model'] ?? 'Unknown';
-    $serial = $smartData['serial'] ?? 'Unknown';
-
-    // USB drives without SMART: use null for power_on_hours (displays as "N/A")
-    // Other drives without SMART: use 0 (may have been unable to read temporarily)
-    if (!$hasSmartData && $isFlashDrive) {
-        $powerOnHours = null;
-        $temperature = null;
-        $smartStatus = 'N/A';
-        $spinStatus = 'N/A';
-    } else {
-        $powerOnHours = $smartData['power_on_hours'] ?? 0;
-        $temperature = $smartData['temperature'] ?? null;
-        $smartStatus = $smartData['smart_status'] ?? 'UNKNOWN';
-        $spinStatus = $smartData['spin_status'] ?? 'unknown';
-    }
-
-    // Standby state and cache metadata
-    $isStandby = $smartData['is_standby'] ?? false;
-    $cacheTimestamp = $smartData['cache_timestamp'] ?? null;
-    $cacheAge = $cacheTimestamp ? (time() - $cacheTimestamp) : 0;
-    $isStale = $isStandby && $cacheTimestamp && isCacheStale($cacheTimestamp);
-
-    // Detect physical drive type (HDD vs NVMe vs USB) from device path and assignment
-    // Check assignment first for Flash type (USB boot drive)
+    // Physical type
     if ($assignment['drive_type'] === 'flash') {
         $physicalType = 'usb';
-    } elseif (strpos($devicePath, 'nvme') !== false) {
+    } elseif (strpos($deviceName, 'nvme') === 0) {
         $physicalType = 'nvme';
     } else {
         $physicalType = 'hdd';
     }
 
-    // Build temporary array with data needed for risk assessment
-    $tempDriveInfo = array_merge(
-        ['physical_type' => $physicalType],
-        $smartData ?? []
-    );
+    $model  = $smartData['model'] ?? null;
+    $serial = $smartData['serial'] ?? null;
+    $powerOnHours = $smartData['power_on_hours'] ?? null;
+    $temperature = $iniTemp ?? ($smartData['temperature'] ?? null);
 
-    // Determine age category based on drive type
-    // NVMe: Use wear-based risk assessment
-    // HDD/USB: Use age-based risk assessment
+    // Overall SMART health: .ssa cache first, then parsed output
+    $smartStatus = readSsaHealth($deviceName, $slotName)
+        ?? (($smartData['smart_status'] ?? 'UNKNOWN') !== 'UNKNOWN' ? $smartData['smart_status'] : 'UNKNOWN');
+
+    // Spin status: Unraid state wins; NVMe never spins
     if ($physicalType === 'nvme') {
-        $nvmeRiskCategory = getNvmeRiskCategory($tempDriveInfo);
-        $ageCategory = $nvmeRiskCategory ?? getAgeCategory($powerOnHours, $config);
+        $spinStatus = 'active';
+    } elseif ($isStandby) {
+        $spinStatus = 'standby';
+    } else {
+        $spinStatus = $smartData['spin_status'] ?? 'unknown';
+        if ($spinStatus === 'unknown' && isset($ini['spundown'])) {
+            $spinStatus = 'active';
+        }
+    }
+
+    // Standby drives: fill POH/model/serial from the persistent cache
+    $cacheTimestamp = null;
+    if ($isStandby && $powerOnHours === null) {
+        $cached = getPohCacheEntry($pohCache, $deviceName);
+        if ($cached !== null) {
+            $powerOnHours = intval($cached['power_on_hours']);
+            $model = $model ?? ($cached['model'] ?? null);
+            $serial = $serial ?? ($cached['serial'] ?? null);
+            $cacheTimestamp = intval($cached['timestamp']);
+        }
+    }
+    $isStale = $isStandby && $cacheTimestamp !== null && isCacheStale($cacheTimestamp);
+
+    // USB flash drives without SMART: everything is N/A
+    if ($physicalType === 'usb' && $powerOnHours === null) {
+        $smartStatus = 'N/A';
+        $spinStatus = 'n/a';
+    }
+
+    // Merge for risk/health evaluation
+    $evalInfo = array_merge($smartData ?? [], [
+        'physical_type' => $physicalType,
+        'smart_status' => $smartStatus,
+        'power_on_hours' => $powerOnHours
+    ]);
+
+    // Risk category: wear-based for NVMe, age-based otherwise
+    if ($physicalType === 'nvme') {
+        $ageCategory = getNvmeRiskCategory($evalInfo) ?? getAgeCategory($powerOnHours, $config);
     } else {
         $ageCategory = getAgeCategory($powerOnHours, $config);
     }
 
-    // Get health warnings for HDDs
+    // Health warnings
     $healthWarnings = [];
     if ($physicalType === 'hdd' && $smartData) {
-        $healthWarnings = getHddHealthWarnings($tempDriveInfo);
+        $healthWarnings = getHddHealthWarnings($evalInfo);
     }
-
-    // Check for NVMe critical conditions
     if ($physicalType === 'nvme' && $smartData) {
-        if (($smartData['nvme_media_errors'] ?? 0) > 0) {
-            $healthWarnings[] = [
-                'level' => 'critical',
-                'attribute' => 'media_errors',
-                'value' => $smartData['nvme_media_errors'],
-                'message' => 'Media errors detected',
-                'action' => 'Replace ASAP',
-                'tooltip' => 'Uncorrectable data errors. Drive reliability compromised.'
-            ];
-        }
-
-        if (($smartData['nvme_critical_warning'] ?? 0) > 0) {
-            $healthWarnings[] = [
-                'level' => 'critical',
-                'attribute' => 'critical_warning',
-                'value' => $smartData['nvme_critical_warning'],
-                'message' => 'Critical warning active',
-                'action' => 'Check drive immediately',
-                'tooltip' => 'Drive has raised a critical warning flag.'
-            ];
-        }
+        $healthWarnings = array_merge($healthWarnings, getNvmeHealthWarnings($evalInfo));
     }
 
-    // Format device name and identification using Unraid's logic
-    $formattedDeviceName = formatDeviceName($assignment['display_name']);
+    // Drive-reported overall FAILURE outranks everything - surface it first
+    if (strtoupper($smartStatus) === 'FAILED') {
+        array_unshift($healthWarnings, [
+            'level' => 'critical',
+            'attribute' => 'smart_overall_failed',
+            'value' => 1,
+            'message' => 'SMART overall-health FAILED',
+            'action' => 'Replace immediately',
+            'tooltip' => 'The drive reports its own SMART overall-health self-assessment as FAILED. Failure may be imminent.'
+        ]);
+        $ageCategory = 'high_risk';
+    }
 
-    // Use disk ID from disks.ini if available (includes model + serial with underscores)
-    // Otherwise fall back to SMART model data
+    // Identification
+    $formattedDeviceName = formatDeviceName($assignment['display_name']);
     if (!empty($assignment['disk_id'])) {
         $identification = $assignment['disk_id'];
+    } elseif ($model !== null) {
+        $identification = processDeviceId($model) . ' (' . $deviceName . ')';
     } else {
-        // Fallback: use processed SMART model with device name
-        $processedModel = processDeviceId($model);
-        $identification = $processedModel . ' (' . $deviceName . ')';
+        $identification = $deviceName;
     }
 
-    // Build complete drive information array
     $driveInfo = [
         'device_name' => $formattedDeviceName,
-        'device_path' => $devicePath,
+        'device_path' => '/dev/' . $deviceName,
         'device_id' => $deviceName,
         'identification' => $identification,
-        'model' => $model,
-        'serial' => $serial,
+        'model' => $model ?? 'Unknown',
+        'serial' => $serial ?? 'Unknown',
         'size_bytes' => $size,
         'size_human' => formatBytes($size),
         'array_name' => $assignment['array_name'],
@@ -277,17 +390,16 @@ function getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit = 'C') {
         'temperature_formatted' => formatTemperature($temperature, $tempUnit),
         'temperature_class' => getTemperatureClass($temperature, $physicalType),
         'smart_status' => $smartStatus,
-        'smart_status_formatted' => formatSmartStatus($smartStatus),
+        'smart_status_class' => getSmartStatusClass($smartStatus),
         'spin_status' => $spinStatus,
-        'spin_status_formatted' => formatSpinStatus($spinStatus),
+        'spin_status_class' => getSpinStatusClass($spinStatus),
         'age_category' => $ageCategory,
         'color_class' => getAgeColorClass($ageCategory),
         'age_label' => getAgeLabel($ageCategory, $config),
-        'is_oldest' => false, // Will be set later
+        'is_oldest' => false, // set later
         'is_standby' => $isStandby,
-        'cache_age' => $cacheAge,
+        'data_age_seconds' => $dataAge,
         'is_stale' => $isStale,
-        // Health warnings array
         'health_warnings' => $healthWarnings,
         'has_warnings' => count($healthWarnings) > 0,
         // NVMe health metrics (null for non-NVMe drives)
@@ -307,46 +419,65 @@ function getDriveInfo($devicePath, $diskAssignments, $config, $tempUnit = 'C') {
         'hdd_command_timeout' => $smartData['hdd_command_timeout'] ?? null
     ];
 
-    // Calculate predictive replacement estimate
+    // Predictive replacement estimate
     $prediction = getPredictiveReplacement($driveInfo, $config);
-
-    // Add prediction data to drive info
     $driveInfo['replacement_prediction'] = $prediction;
 
-    // CRITICAL: Override age category to high_risk if replacement estimate is < 6 months
-    // This ensures drives with imminent failure warnings show as red regardless of age
-    if (isset($prediction['months_remaining']) &&
-        $prediction['months_remaining'] !== null &&
-        $prediction['months_remaining'] < 6) {
+    // Escalate to high risk on: any critical health warning (incl. SMART
+    // FAILED, which was inserted above), or a replacement estimate under
+    // 6 months on a drive with known age.
+    // Category, color AND label move together (they must never desync).
+    $hasCriticalWarning = false;
+    foreach ($healthWarnings as $warning) {
+        if (($warning['level'] ?? '') === 'critical') {
+            $hasCriticalWarning = true;
+            break;
+        }
+    }
+
+    if ($hasCriticalWarning ||
+        (isset($prediction['months_remaining']) &&
+         $prediction['months_remaining'] !== null &&
+         $prediction['months_remaining'] < 6 &&
+         $driveInfo['age_category'] !== 'unknown')) {
         $driveInfo['age_category'] = 'high_risk';
         $driveInfo['color_class'] = getAgeColorClass('high_risk');
+        $driveInfo['age_label'] = getAgeLabel('high_risk', $config);
     }
 
     return $driveInfo;
 }
 
 /**
- * Detect HDD pre-failure conditions based on critical SMART attributes
+ * Detect HDD pre-failure conditions based on critical SMART attributes.
  *
- * Analyzes reallocated sectors, pending sectors, and uncorrectable errors
- * to provide early warning of drive failure
+ * Google's disk study and Backblaze's SMART analyses identify attributes
+ * 5, 187, 188, 197 and 198 as the strongest failure predictors - all five
+ * are evaluated here.
  *
- * @param array $driveInfo Drive information array with HDD SMART attributes
- * @return array Health warnings [['level' => string, 'attribute' => string, 'value' => int, 'message' => string, 'action' => string, 'tooltip' => string]]
+ * @param array $driveInfo Drive information with HDD SMART attributes
+ * @return array Health warnings
  */
 function getHddHealthWarnings($driveInfo) {
     $warnings = [];
 
-    // Only check if this is an HDD
-    if ($driveInfo['physical_type'] !== 'hdd') {
+    if (($driveInfo['physical_type'] ?? '') !== 'hdd') {
         return $warnings;
     }
 
-    $reallocated = $driveInfo['hdd_reallocated_sectors'] ?? 0;
-    $pending = $driveInfo['hdd_pending_sectors'] ?? 0;
+    $reallocated   = $driveInfo['hdd_reallocated_sectors'] ?? 0;
+    $pending       = $driveInfo['hdd_pending_sectors'] ?? 0;
     $uncorrectable = $driveInfo['hdd_uncorrectable_sectors'] ?? 0;
+    $reported      = $driveInfo['hdd_reported_uncorrectable'] ?? 0;
+    $timeouts      = $driveInfo['hdd_command_timeout'] ?? 0;
 
-    // CRITICAL: Pending sectors = imminent reallocation
+    // SMART 188 raw is a composite field on many drives (three 16-bit
+    // counters packed into 48 bits); the low 16 bits are the total count.
+    if ($timeouts > 0xFFFF) {
+        $timeouts = $timeouts & 0xFFFF;
+    }
+
+    // CRITICAL: pending sectors = imminent reallocation (SMART 197)
     if ($pending > 0) {
         $warnings[] = [
             'level' => 'critical',
@@ -358,7 +489,7 @@ function getHddHealthWarnings($driveInfo) {
         ];
     }
 
-    // CRITICAL: Uncorrectable sectors = data loss risk
+    // CRITICAL: uncorrectable sectors = data loss risk (SMART 198)
     if ($uncorrectable > 0) {
         $warnings[] = [
             'level' => 'critical',
@@ -370,7 +501,7 @@ function getHddHealthWarnings($driveInfo) {
         ];
     }
 
-    // WARNING/CRITICAL: Reallocated sectors = physical damage
+    // WARNING/CRITICAL: reallocated sectors = physical damage (SMART 5)
     if ($reallocated > 0) {
         $severity = $reallocated > 10 ? 'critical' : 'warning';
         $action = $reallocated > 10 ? 'Replace immediately' : 'Backup data, monitor closely';
@@ -385,486 +516,152 @@ function getHddHealthWarnings($driveInfo) {
         ];
     }
 
+    // WARNING/CRITICAL: reported uncorrectable errors (SMART 187)
+    if ($reported > 0) {
+        $severity = $reported > 10 ? 'critical' : 'warning';
+        $warnings[] = [
+            'level' => $severity,
+            'attribute' => 'reported_uncorrectable',
+            'value' => $reported,
+            'message' => $reported . ' reported uncorrectable error' . ($reported > 1 ? 's' : ''),
+            'action' => $severity === 'critical' ? 'Replace ASAP' : 'Monitor closely, plan replacement',
+            'tooltip' => 'Read errors during normal operation. Strong failure predictor (Google study).'
+        ];
+    }
+
+    // WARNING/CRITICAL: command timeouts (SMART 188)
+    if ($timeouts > 0) {
+        $severity = $timeouts > 100 ? 'critical' : 'warning';
+        $warnings[] = [
+            'level' => $severity,
+            'attribute' => 'command_timeout',
+            'value' => $timeouts,
+            'message' => $timeouts . ' command timeout' . ($timeouts > 1 ? 's' : ''),
+            'action' => $severity === 'critical' ? 'Replace ASAP' : 'Monitor closely',
+            'tooltip' => 'Commands timed out - the drive is becoming unresponsive or has cabling/controller issues.'
+        ];
+    }
+
     return $warnings;
 }
 
 /**
- * Get SMART data from Unraid's cached files (updated by emhttpd)
+ * Detect NVMe critical conditions.
  *
- * @param string $deviceName Device name (e.g., sda, nvme0n1)
- * @return array|null SMART data or null if cache not available
+ * @param array $driveInfo Drive information with NVMe SMART attributes
+ * @return array Health warnings
  */
-function getSmartDataFromUnraidCache($deviceName) {
-    // Unraid caches SMART data in /var/local/emhttp/smart/
-    $cacheFile = "/var/local/emhttp/smart/$deviceName";
+function getNvmeHealthWarnings($driveInfo) {
+    $warnings = [];
 
-    if (!file_exists($cacheFile)) {
-        return null;
-    }
-
-    $output = file_get_contents($cacheFile);
-    if (!$output) {
-        return null;
-    }
-
-    // Check if cache file indicates drive is in standby
-    // smartctl -n standby outputs "Device is in STANDBY mode" if drive is sleeping
-    // Return special array indicating standby state (will be filled with cached data)
-    if (stripos($output, 'STANDBY') !== false || stripos($output, 'SLEEP') !== false) {
-        return [
-            'model' => 'Unknown',
-            'serial' => 'Unknown',
-            'smart_status' => 'UNKNOWN',
-            'temperature' => null,
-            'power_on_hours' => null, // Will be filled from cache
-            'spin_status' => 'standby',
-            'is_standby' => true
+    if (($driveInfo['nvme_media_errors'] ?? 0) > 0) {
+        $warnings[] = [
+            'level' => 'critical',
+            'attribute' => 'media_errors',
+            'value' => $driveInfo['nvme_media_errors'],
+            'message' => 'Media errors detected',
+            'action' => 'Replace ASAP',
+            'tooltip' => 'Uncorrectable data errors. Drive reliability compromised.'
         ];
     }
 
-    // Parse the cached smartctl output (same format as smartctl -A)
-    return parseSmartctlOutput($output);
+    if (($driveInfo['nvme_critical_warning'] ?? 0) > 0) {
+        $warnings[] = [
+            'level' => 'critical',
+            'attribute' => 'critical_warning',
+            'value' => $driveInfo['nvme_critical_warning'],
+            'message' => 'Critical warning active',
+            'action' => 'Check drive immediately',
+            'tooltip' => 'Drive has raised a critical warning flag.'
+        ];
+    }
+
+    return $warnings;
 }
 
 /**
- * Parse smartctl text output to extract SMART attributes
+ * Get drive size in bytes.
  *
- * Used to parse Unraid's cached SMART data from /var/local/emhttp/smart/
- *
- * @param string $output Raw smartctl output
- * @return array|null SMART data array or null if failed
- */
-function parseSmartctlOutput($output) {
-    $smartData = [
-        'model' => 'Unknown',
-        'serial' => 'Unknown',
-        'smart_status' => 'UNKNOWN',
-        'temperature' => null,
-        'power_on_hours' => null,
-        'spin_status' => 'unknown'
-    ];
-
-    $lines = explode("\n", $output);
-
-    foreach ($lines as $line) {
-        // Model
-        if (preg_match('/Device Model:\s+(.+)/', $line, $matches)) {
-            $smartData['model'] = trim($matches[1]);
-        } elseif (preg_match('/Model Number:\s+(.+)/', $line, $matches)) {
-            $smartData['model'] = trim($matches[1]);
-        }
-
-        // Serial
-        if (preg_match('/Serial Number:\s+(.+)/', $line, $matches)) {
-            $smartData['serial'] = trim($matches[1]);
-        }
-
-        // SMART status
-        if (preg_match('/SMART overall-health.*:\s+(.+)/', $line, $matches)) {
-            $smartData['smart_status'] = (stripos($matches[1], 'PASSED') !== false) ? 'PASSED' : 'FAILED';
-        }
-
-        // Parse SMART attribute table (ID 9 = Power_On_Hours, ID 194 = Temperature)
-        // Format: ID# ATTRIBUTE_NAME FLAG VALUE WORST THRESH TYPE UPDATED WHEN_FAILED RAW_VALUE
-        if (preg_match('/^\s*(\d+)\s+\S+.*\s+(\d+)\s*$/', $line, $matches)) {
-            $attrId = intval($matches[1]);
-            $rawValue = intval($matches[2]);
-
-            if ($attrId === 9) { // Power_On_Hours
-                $smartData['power_on_hours'] = $rawValue;
-            } elseif ($attrId === 194 && $smartData['temperature'] === null) { // Temperature_Celsius
-                $smartData['temperature'] = $rawValue;
-            }
-        }
-    }
-
-    // Determine spin status from power state line
-    // Example: "Power mode is:    STANDBY" or "Power mode is:    ACTIVE"
-    $fullOutput = implode("\n", $lines);
-    if (stripos($fullOutput, 'STANDBY') !== false || stripos($fullOutput, 'SLEEP') !== false) {
-        $smartData['spin_status'] = 'standby';
-    } elseif (stripos($fullOutput, 'ACTIVE') !== false || stripos($fullOutput, 'IDLE') !== false) {
-        $smartData['spin_status'] = 'active';
-    }
-
-    // Parse HDD-specific critical SMART attributes (text mode)
-    // Check if this is an HDD (has ATA attributes)
-    if (stripos($output, 'ATA') !== false || stripos($output, 'SATA') !== false) {
-        $hddAttrs = parseHddSmartAttributes(null, $output);
-        if (!empty($hddAttrs)) {
-            $smartData = array_merge($smartData, $hddAttrs);
-        }
-    }
-
-    // Return null if we couldn't get critical data
-    return $smartData['power_on_hours'] !== null ? $smartData : null;
-}
-
-/**
- * Get SMART data for a drive
- *
- * Primary: Reads from Unraid's SMART cache (fast, no spinup risk)
- * Fallback: Queries drive directly if cache unavailable (first run, cache not ready)
- *
- * @param string $devicePath Device path (e.g., /dev/sda)
- * @return array|null SMART data or null if failed
- */
-function getSmartData($devicePath) {
-    $deviceName = basename($devicePath);
-
-    // Primary: Try to read from Unraid's cached SMART data
-    // This cache is updated by emhttpd every 30 seconds
-    $cachedData = getSmartDataFromUnraidCache($deviceName);
-
-    if ($cachedData !== null) {
-        // If drive is active and has valid data, save to our persistent cache
-        if (isset($cachedData['power_on_hours']) &&
-            $cachedData['power_on_hours'] > 0 &&
-            (!isset($cachedData['is_standby']) || !$cachedData['is_standby'])) {
-
-            $model = $cachedData['model'] ?? 'Unknown';
-            $serial = $cachedData['serial'] ?? 'Unknown';
-            saveDriveCache($deviceName, $cachedData['power_on_hours'], $model, $serial);
-        }
-
-        // If drive is in standby, load cached power-on hours
-        if (isset($cachedData['is_standby']) && $cachedData['is_standby']) {
-            $cache = loadDriveCache($deviceName);
-            if ($cache) {
-                $cachedData['power_on_hours'] = $cache['power_on_hours'];
-                $cachedData['cache_timestamp'] = $cache['timestamp'];
-                $cachedData['model'] = $cache['model'];
-                $cachedData['serial'] = $cache['serial'];
-            }
-        }
-
-        return $cachedData;
-    }
-
-    // Fallback: If Unraid's cache doesn't exist, query drive directly
-    // This can happen on first load before emhttpd has populated cache
-    // Use smartctl with -n standby to avoid spinning up sleeping drives
-    error_log("DriveAge: No SMART cache found for $deviceName, querying drive directly");
-
-    // Check if drive is in standby first
-    exec("smartctl -n standby " . escapeshellarg($devicePath) . " 2>&1", $output, $exitCode);
-    if ($exitCode === 2) {
-        // Drive is in STANDBY/SLEEP - don't spin it up
-        error_log("DriveAge: Drive $deviceName is in standby, skipping");
-        return null;
-    }
-
-    // Drive is active or cache check failed - safe to query
-    // Try JSON output first (faster, more reliable)
-    $jsonOutput = shell_exec("smartctl -a -j " . escapeshellarg($devicePath) . " 2>/dev/null");
-
-    if ($jsonOutput) {
-        $data = json_decode($jsonOutput, true);
-        if ($data) {
-            return parseSmartctlJsonOutput($data);
-        }
-    }
-
-    // Fallback to text parsing
-    $textOutput = shell_exec("smartctl -a " . escapeshellarg($devicePath) . " 2>/dev/null");
-    if ($textOutput) {
-        return parseSmartctlOutput($textOutput);
-    }
-
-    return null;
-}
-
-/**
- * Parse smartctl JSON output
- *
- * @param array $data Parsed JSON data from smartctl -j
- * @return array|null SMART data or null if failed
- */
-function parseSmartctlJsonOutput($data) {
-    $smartData = [
-        'model' => $data['model_name'] ?? $data['model_family'] ?? 'Unknown',
-        'serial' => $data['serial_number'] ?? 'Unknown',
-        'smart_status' => ($data['smart_status']['passed'] ?? false) ? 'PASSED' : 'FAILED',
-        'temperature' => null,
-        'power_on_hours' => null,
-        'spin_status' => 'active' // If we got here, drive is active
-    ];
-
-    // Get temperature
-    if (isset($data['temperature']['current'])) {
-        $smartData['temperature'] = $data['temperature']['current'];
-    }
-
-    // Get power-on hours (ATA drives)
-    if (isset($data['ata_smart_attributes']['table'])) {
-        foreach ($data['ata_smart_attributes']['table'] as $attr) {
-            if ($attr['id'] === 9) { // Power_On_Hours
-                $smartData['power_on_hours'] = $attr['raw']['value'];
-            }
-            if ($attr['id'] === 194 && $smartData['temperature'] === null) { // Temperature
-                $smartData['temperature'] = $attr['raw']['value'];
-            }
-        }
-    }
-
-    // Get power-on hours (NVMe drives)
-    if (isset($data['nvme_smart_health_information_log'])) {
-        $nvmeData = $data['nvme_smart_health_information_log'];
-        $smartData['temperature'] = $nvmeData['temperature'] ?? $smartData['temperature'];
-        $smartData['power_on_hours'] = isset($nvmeData['power_on_hours'])
-            ? floor($nvmeData['power_on_hours'])
-            : $smartData['power_on_hours'];
-    }
-
-    // Parse NVMe-specific health attributes
-    $nvmeAttrs = parseNvmeSmartAttributes($data);
-    if (!empty($nvmeAttrs)) {
-        $smartData = array_merge($smartData, $nvmeAttrs);
-    }
-
-    // Parse HDD-specific critical SMART attributes
-    $hddAttrs = parseHddSmartAttributes($data, null);
-    if (!empty($hddAttrs)) {
-        $smartData = array_merge($smartData, $hddAttrs);
-    }
-
-    return $smartData['power_on_hours'] !== null ? $smartData : null;
-}
-
-/**
- * Parse NVMe-specific SMART attributes from smartctl JSON
- *
- * Extracts health metrics for wear-based risk assessment
- *
- * @param array $data Parsed JSON data from smartctl -j
- * @return array NVMe health metrics or empty array if not NVMe
- */
-function parseNvmeSmartAttributes($data) {
-    $nvme = [];
-
-    // Check if this is an NVMe drive
-    if (!isset($data['nvme_smart_health_information_log'])) {
-        return $nvme;
-    }
-
-    $health = $data['nvme_smart_health_information_log'];
-
-    // Extract percentage used (0-255, can exceed 100%)
-    $nvme['nvme_percentage_used'] = $health['percentage_used'] ?? null;
-
-    // Extract available spare (0-100%)
-    $nvme['nvme_available_spare'] = $health['available_spare'] ?? null;
-
-    // Extract available spare threshold (0-100%)
-    $nvme['nvme_available_spare_threshold'] = $health['available_spare_threshold'] ?? 10;
-
-    // Extract data units written (512-byte units × 1000)
-    $nvme['nvme_data_units_written'] = $health['data_units_written'] ?? null;
-
-    // Extract data units read (512-byte units × 1000)
-    $nvme['nvme_data_units_read'] = $health['data_units_read'] ?? null;
-
-    // Extract media errors (uncorrectable errors)
-    $nvme['nvme_media_errors'] = $health['media_errors'] ?? 0;
-
-    // Extract critical warning bitmap
-    $nvme['nvme_critical_warning'] = $health['critical_warning'] ?? 0;
-
-    // Calculate actual TBW from data units written
-    // Formula: data_units × 512 bytes × 1000 ÷ 1,000,000,000,000
-    if ($nvme['nvme_data_units_written'] !== null && $nvme['nvme_data_units_written'] > 0) {
-        $bytes = $nvme['nvme_data_units_written'] * 512000;
-        $nvme['nvme_tbw_calculated'] = round($bytes / 1000000000000, 2);
-    } else {
-        $nvme['nvme_tbw_calculated'] = null;
-    }
-
-    return $nvme;
-}
-
-/**
- * Parse HDD-specific critical SMART attributes
- *
- * Extracts attributes that predict imminent drive failure
- *
- * @param array $data Parsed JSON data from smartctl -j (null if text mode)
- * @param string $textOutput Raw smartctl text output (null if JSON mode)
- * @return array HDD critical attributes or empty array if not HDD
- */
-function parseHddSmartAttributes($data = null, $textOutput = null) {
-    $hdd = [
-        'hdd_reallocated_sectors' => null,
-        'hdd_pending_sectors' => null,
-        'hdd_uncorrectable_sectors' => null,
-        'hdd_reported_uncorrectable' => null,
-        'hdd_command_timeout' => null
-    ];
-
-    // Try JSON first (more reliable)
-    if ($data !== null && isset($data['ata_smart_attributes']['table'])) {
-        foreach ($data['ata_smart_attributes']['table'] as $attr) {
-            switch ($attr['id']) {
-                case 5:  // Reallocated_Sector_Ct
-                    $hdd['hdd_reallocated_sectors'] = $attr['raw']['value'] ?? 0;
-                    break;
-                case 197: // Current_Pending_Sector
-                    $hdd['hdd_pending_sectors'] = $attr['raw']['value'] ?? 0;
-                    break;
-                case 198: // Offline_Uncorrectable
-                    $hdd['hdd_uncorrectable_sectors'] = $attr['raw']['value'] ?? 0;
-                    break;
-                case 187: // Reported_Uncorrect
-                    $hdd['hdd_reported_uncorrectable'] = $attr['raw']['value'] ?? 0;
-                    break;
-                case 188: // Command_Timeout
-                    $hdd['hdd_command_timeout'] = $attr['raw']['value'] ?? 0;
-                    break;
-            }
-        }
-        return $hdd;
-    }
-
-    // Fallback: parse text output
-    if ($textOutput !== null) {
-        // Format: ID# ATTRIBUTE_NAME FLAG VALUE WORST THRESH TYPE UPDATED WHEN_FAILED RAW_VALUE
-        $lines = explode("\n", $textOutput);
-        foreach ($lines as $line) {
-            // Match SMART attribute lines
-            if (preg_match('/^\s*(\d+)\s+\S+.*\s+(\d+)\s*$/', $line, $matches)) {
-                $attrId = intval($matches[1]);
-                $rawValue = intval($matches[2]);
-
-                switch ($attrId) {
-                    case 5:
-                        $hdd['hdd_reallocated_sectors'] = $rawValue;
-                        break;
-                    case 197:
-                        $hdd['hdd_pending_sectors'] = $rawValue;
-                        break;
-                    case 198:
-                        $hdd['hdd_uncorrectable_sectors'] = $rawValue;
-                        break;
-                    case 187:
-                        $hdd['hdd_reported_uncorrectable'] = $rawValue;
-                        break;
-                    case 188:
-                        $hdd['hdd_command_timeout'] = $rawValue;
-                        break;
-                }
-            }
-        }
-    }
-
-    return $hdd;
-}
-
-
-/**
- * Get drive size in bytes
- *
- * @param string $devicePath Device path
- * @param string $deviceName Device name (e.g., sda)
- * @param array $diskAssignments Parsed disks.ini data
+ * @param string $deviceName Device name
+ * @param array $ini Ini entry for this device
  * @return int Size in bytes
  */
-function getDriveSize($devicePath, $deviceName, $diskAssignments) {
-    // First try to get size from disks.ini sectors × sector_size
-    if (!empty($diskAssignments)) {
-        foreach ($diskAssignments as $diskName => $diskInfo) {
-            if (isset($diskInfo['device']) && $diskInfo['device'] === $deviceName) {
-                // Calculate actual drive size: sectors × sector_size
-                // This matches how Unraid calculates drive capacity
-                if (isset($diskInfo['sectors']) && isset($diskInfo['sector_size'])) {
-                    $sectors = intval($diskInfo['sectors']);
-                    $sectorSize = intval($diskInfo['sector_size']);
-                    if ($sectors > 0 && $sectorSize > 0) {
-                        return $sectors * $sectorSize;
-                    }
-                }
-                break;
-            }
-        }
+function getDriveSize($deviceName, $ini) {
+    // Unraid's own numbers: sectors x sector_size
+    $sectors = intval($ini['sectors'] ?? 0);
+    $sectorSize = intval($ini['sector_size'] ?? 0);
+    if ($sectors > 0 && $sectorSize > 0) {
+        return $sectors * $sectorSize;
     }
 
-    // Fallback: Use blockdev to get the raw device size
-    $output = shell_exec("blockdev --getsize64 " . escapeshellarg($devicePath) . " 2>/dev/null");
-    return $output ? intval(trim($output)) : 0;
+    // Some ini entries carry size in KiB
+    if (isset($ini['size']) && is_numeric($ini['size']) && intval($ini['size']) > 0) {
+        return intval($ini['size']) * 1024;
+    }
+
+    // Last resort: ask the block layer
+    if (isValidDeviceName($deviceName)) {
+        $output = shell_exec('blockdev --getsize64 ' . escapeshellarg('/dev/' . $deviceName) . ' 2>/dev/null');
+        return $output ? intval(trim($output)) : 0;
+    }
+
+    return 0;
 }
 
 /**
- * Get Unraid assignment information for a drive
+ * Map an ini entry to DriveAge assignment info.
  *
- * @param string $deviceName Device name (e.g., sda)
- * @param array $diskAssignments Parsed disks.ini data
+ * @param string $slotName Section name from the ini (disk1, parity, cache...)
+ * @param array $ini Ini entry
+ * @param string $source 'disks', 'devs' or 'glob'
  * @return array Assignment info
  */
-function getUnraidAssignment($deviceName, $diskAssignments) {
+function getUnraidAssignment($slotName, $ini, $source) {
     $assignment = [
-        'display_name' => $deviceName,
+        'display_name' => $ini['device'] ?? $slotName,
         'array_name' => 'Unassigned',
         'drive_type' => 'unassigned',
-        'disk_id' => null  // Unraid's disk identifier (model_serial)
+        'disk_id' => $ini['id'] ?? null
     ];
 
-    // Check if we have disk assignments data
-    if (empty($diskAssignments)) {
+    if ($source !== 'disks') {
         return $assignment;
     }
 
-    // Search for matching device
-    foreach ($diskAssignments as $diskName => $diskInfo) {
-        if (!isset($diskInfo['device'])) {
-            continue;
-        }
+    $type = $ini['type'] ?? 'Unknown';
 
-        // Match device name (handle both full device like "nvme0n1" and base like "sda")
-        if ($diskInfo['device'] === $deviceName) {
-            $type = $diskInfo['type'] ?? 'Unknown';
+    switch ($type) {
+        case 'Parity':
+            $assignment['display_name'] = ucfirst($slotName);
+            $assignment['array_name'] = 'Main Array';
+            $assignment['drive_type'] = 'parity';
+            break;
 
-            // Get disk ID if available (e.g., "WDC_WD140EDGZ-11B1PA0_Y5KVGN8C")
-            if (isset($diskInfo['id'])) {
-                $assignment['disk_id'] = $diskInfo['id'];
-            }
+        case 'Data':
+            $assignment['display_name'] = ucfirst($slotName);
+            $assignment['array_name'] = 'Main Array';
+            $assignment['drive_type'] = 'array';
+            break;
 
-            // Map Unraid type to our drive type
-            switch ($type) {
-                case 'Parity':
-                    $assignment['display_name'] = ucfirst($diskName);
-                    $assignment['array_name'] = 'Main Array';
-                    $assignment['drive_type'] = 'parity';
-                    break;
+        case 'Cache':
+            // Pool member: use the actual pool/slot name (e.g. "cache", "media_cache")
+            $assignment['display_name'] = ucfirst(str_replace('_', ' ', $slotName));
+            $assignment['array_name'] = ucfirst(str_replace('_', ' ', $slotName));
+            $assignment['drive_type'] = 'cache';
+            break;
 
-                case 'Data':
-                    $assignment['display_name'] = ucfirst($diskName);
-                    $assignment['array_name'] = 'Main Array';
-                    $assignment['drive_type'] = 'array';
-                    break;
+        case 'Flash':
+            $assignment['display_name'] = 'Flash (USB Boot)';
+            $assignment['array_name'] = 'USB Boot';
+            $assignment['drive_type'] = 'flash';
+            break;
 
-                case 'Cache':
-                    // Use the actual cache name (e.g., "cache", "media_cache")
-                    $assignment['display_name'] = ucfirst(str_replace('_', ' ', $diskName));
-                    $assignment['array_name'] = ucfirst(str_replace('_', ' ', $diskName));
-                    $assignment['drive_type'] = 'cache';
-                    break;
-
-                case 'Flash':
-                    // USB boot drive
-                    $assignment['display_name'] = 'Flash (USB Boot)';
-                    $assignment['array_name'] = 'USB Boot';
-                    $assignment['drive_type'] = 'flash';
-                    break;
-
-                default:
-                    $assignment['display_name'] = ucfirst($diskName);
-                    $assignment['array_name'] = 'Unknown';
-                    $assignment['drive_type'] = 'unassigned';
-                    break;
-            }
-
-            return $assignment;
-        }
+        default:
+            $assignment['display_name'] = ucfirst($slotName);
+            $assignment['array_name'] = 'Unknown';
+            $assignment['drive_type'] = 'unassigned';
+            break;
     }
 
     return $assignment;
 }
-

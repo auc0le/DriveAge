@@ -1,0 +1,37 @@
+smartctl 7.4 2023-08-01 r5530 [x86_64-linux-6.1.74-Unraid] (local build)
+Copyright (C) 2002-23, Bruce Allen, Christian Franke, www.smartmontools.org
+
+=== START OF INFORMATION SECTION ===
+Vendor:               HGST
+Product:              HUH721212AL5200
+Revision:             A925
+Compliance:           SPC-4
+User Capacity:        12,000,138,625,024 bytes [12.0 TB]
+Logical block size:   512 bytes
+Physical block size:  4096 bytes
+Rotation Rate:        7200 rpm
+Serial number:        8HHTEST1
+Device type:          disk
+Transport protocol:   SAS (SPL-3)
+Local Time is:        Thu Jul 16 10:00:00 2026 CDT
+SMART support is:     Available - device has SMART capability.
+SMART support is:     Enabled
+Temperature Warning:  Enabled
+
+=== START OF READ SMART DATA SECTION ===
+SMART Health Status: OK
+
+Current Drive Temperature:     34 C
+Drive Trip Temperature:        85 C
+
+Accumulated power on time, hours:minutes 33822:30
+Manufactured in week 26 of year 2019
+Specified cycle count over device lifetime:  50000
+Accumulated start-stop cycles:  55
+Specified load-unload count over device lifetime:  600000
+Accumulated load-unload cycles:  2569
+Elements in grown defect list: 0
+
+Vendor (Seagate Cache) information
+  Blocks sent to initiator = 3735928559
+  number of hours powered up = 33822.50

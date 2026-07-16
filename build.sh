@@ -50,6 +50,30 @@ if [ ! -d "$SOURCE_DIR" ]; then
     exit 1
 fi
 
+# Refuse to package editor backups / scratch files
+if find "$SOURCE_DIR" \( -name '*.backup' -o -name '*.bak' -o -name '*.orig' -o -name '*~' \) | grep -q .; then
+    echo -e "${RED}Error: backup/scratch files found in source tree - remove them before building:${NC}"
+    find "$SOURCE_DIR" \( -name '*.backup' -o -name '*.bak' -o -name '*.orig' -o -name '*~' \)
+    exit 1
+fi
+
+# Write the single-source version file consumed by the .page files
+VERSION_FILE="$SOURCE_DIR/usr/local/emhttp/plugins/driveage/include/version.php"
+cat > "$VERSION_FILE" <<EOF
+<?php
+/**
+ * DriveAge Plugin - Version (single source of truth)
+ *
+ * This file is rewritten by build.sh on every build.
+ * Pages use DRIVEAGE_VERSION for both display and cache-busting.
+ */
+
+if (!defined('DRIVEAGE_VERSION')) {
+    define('DRIVEAGE_VERSION', '${VERSION}-${BUILD}');
+}
+EOF
+echo -e "${GREEN}✓ version.php set to ${VERSION}-${BUILD}${NC}"
+
 # Package filename
 PACKAGE_NAME="${PLUGIN}-${VERSION}-${ARCH}-${BUILD}.txz"
 PACKAGE_PATH="${ARCHIVE_DIR}/${PACKAGE_NAME}"
@@ -72,7 +96,7 @@ if command -v makepkg &> /dev/null; then
 else
     # Fallback: use tar with xz compression
     echo -e "${YELLOW}makepkg not found, using tar...${NC}"
-    tar -cJf "../../${PACKAGE_PATH}" .
+    tar --exclude='*.backup' --exclude='*.bak' -cJf "../../${PACKAGE_PATH}" .
 fi
 
 # Return to root directory

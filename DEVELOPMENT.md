@@ -10,24 +10,28 @@
    cd DriveAge
    ```
 
-2. **Build the package**:
+2. **Run the tests** (no Unraid required):
+   ```bash
+   php tests/run.php
+   ```
+
+3. **Build the package**:
    ```bash
    ./build.sh
    ```
-
-3. **Package will be created in** `archive/` directory
+   The package lands in `archive/`; `build.sh` also stamps `include/version.php` and updates the `.plg` manifest.
 
 ### Testing on Unraid
 
 **Option 1: Local Installation (Recommended for Development)**
-1. Copy the entire `source/driveage/usr/local/emhttp/plugins/driveage/` directory to your Unraid server
-2. Create config directory: `mkdir -p /boot/config/plugins/driveage`
-3. Access at: Settings → DriveAge
+1. Copy `source/driveage/usr/local/emhttp/plugins/driveage/` to your Unraid server
+2. Access at: Settings → DriveAge
+3. CLI diagnostic: `php /usr/local/emhttp/plugins/driveage/scripts/diagnose.php`
 
 **Option 2: Package Installation**
-1. Build the package using `./build.sh`
-2. Upload `.txz` and `.md5` files to GitHub
-3. Install via plugin manifest URL
+1. Build with `./build.sh`
+2. Upload `.txz` and `.md5` to GitHub
+3. Install via the plugin manifest URL
 
 ## Project Structure
 
@@ -36,335 +40,150 @@ DriveAge/
 ├── plugins/
 │   └── driveage.plg              # Plugin manifest (XML)
 │
-├── source/driveage/              # Source files to be packaged
+├── source/driveage/              # Files that ship in the package
 │   └── usr/local/emhttp/plugins/driveage/
-│       ├── DriveAge.page         # Main dashboard (Menu: Utilities)
-│       ├── DriveAgeSettings.page # Settings page (Menu: Utilities:2)
+│       ├── DriveAge.page          # Menu container (tabs)
+│       ├── DriveAgeDashboard.page # Dashboard tab
+│       ├── DriveAgeSettings.page  # Settings tab
+│       ├── DriveAgeHelp.page      # Help tab
 │       │
-│       ├── include/              # PHP modules
-│       │   ├── config.php        # Configuration handling
-│       │   ├── smartdata.php     # SMART data collection
-│       │   └── formatting.php    # Data formatting utilities
+│       ├── include/               # PHP modules
+│       │   ├── version.php        # Version constant (written by build.sh)
+│       │   ├── config.php         # Config load + validation (validate-on-load)
+│       │   ├── risk.php           # Risk category policy
+│       │   ├── smartparse.php     # smartctl parsers - PURE functions, unit-tested
+│       │   ├── smartdata.php      # Enumeration (disks.ini/devs.ini) + assembly
+│       │   ├── predictions.php    # Replacement estimates
+│       │   ├── cache.php          # Persistent POH cache (flash, write-on-change)
+│       │   ├── formatting.php     # Plain-text formatting + CSS class mapping
+│       │   └── helpers.php        # Escaping / form helpers
 │       │
-│       ├── scripts/              # Executable scripts
-│       │   └── get_drive_data.php # AJAX endpoint for dashboard
+│       ├── scripts/
+│       │   ├── get_drive_data.php # JSON endpoint for the dashboard
+│       │   └── diagnose.php       # CLI diagnostic
 │       │
-│       ├── styles/               # CSS stylesheets
-│       │   └── driveage.css      # Main stylesheet
-│       │
-│       └── js/                   # JavaScript files
-│           └── dashboard.js      # Dashboard interactivity
+│       ├── styles/driveage.css    # Theme-aware stylesheet
+│       └── js/
+│           ├── dashboard.js       # Table, sorting, filters, auto-refresh
+│           ├── charts.js          # Chart.js visualizations
+│           ├── settings.js        # Reset-to-defaults
+│           └── vendor/chart.min.js
 │
-├── archive/                      # Built packages (git ignored)
-│   ├── driveage-*.txz           # Slackware package
-│   └── driveage-*.md5           # MD5 checksum
+├── tests/                        # NOT packaged
+│   ├── run.php                   # php tests/run.php
+│   └── fixtures/                 # Captured smartctl outputs
 │
-├── docs/                         # Documentation
-│   ├── screenshots/             # Screenshots for README
-│   └── icon.png                 # Plugin icon
-│
-├── build.sh                      # Build script
-├── README.md                     # User documentation
-├── REQUIREMENTS.md               # Requirements specification
+├── archive/                      # Built packages
+├── docs/                         # Screenshots, icon
+├── build.sh
+├── README.md
+├── METHODOLOGY.md                # The shipped formulas - keep in sync with code
+├── CLAUDE.md                     # AI-assistant guidance - keep in sync with code
 └── DEVELOPMENT.md                # This file
 ```
-
-## Development Workflow
-
-### Making Changes
-
-1. **Modify source files** in `source/driveage/usr/local/emhttp/plugins/driveage/`
-2. **Test changes** by copying to Unraid server
-3. **Update version** in `plugins/driveage.plg` if releasing
-4. **Build package** using `./build.sh`
-5. **Commit and push** to GitHub
-
-### Version Numbering
-
-- Format: `YYYY.MM.DD`
-- Example: `2025.11.26`
-- Update in `plugins/driveage.plg`:
-  ```xml
-  <!ENTITY version   "2025.11.26">
-  ```
-
-### Adding New Features
-
-1. **Update REQUIREMENTS.md** with new feature specifications
-2. **Implement in appropriate module**:
-   - UI changes → `.page` files
-   - Data processing → `include/*.php`
-   - Styling → `styles/driveage.css`
-   - Interactivity → `js/dashboard.js`
-3. **Update configuration** if needed in `include/config.php`
-4. **Test thoroughly** on Unraid
-5. **Document** in README.md and changelog
-
-## Key Components
-
-### 1. Plugin Manifest (`driveage.plg`)
-
-XML file that defines:
-- Plugin metadata (name, version, author)
-- Download URLs
-- Installation scripts
-- Removal scripts
-- Changelog
-
-### 2. Configuration System
-
-**File**: `/boot/config/plugins/driveage/driveage.cfg`
-
-Handled by `include/config.php`:
-- `loadConfig()` - Load configuration
-- `saveConfig()` - Save configuration
-- `validateConfig()` - Validate values
-- `getAgeCategory()` - Determine age category
-
-### 3. SMART Data Collection
-
-**Module**: `include/smartdata.php`
-
-Functions:
-- `getAllDrives()` - Get all drives with SMART data
-- `getSmartData()` - Query SMART data from drive
-- `getUnraidAssignment()` - Get drive assignment info
-- Caching system with 60-second TTL
-
-### 4. Data Formatting
-
-**Module**: `include/formatting.php`
-
-Functions:
-- `formatPowerOnHours()` - Convert hours to human format
-- `formatBytes()` - Format drive size
-- `formatTemperature()` - Format temperature
-- `formatSmartStatus()` - Format SMART status
-- `formatSpinStatus()` - Format spin status
-
-### 5. Dashboard Display
-
-**File**: `DriveAge.page`
-
-- PHP-based Unraid page
-- Loads CSS and JavaScript
-- Renders initial HTML structure
-- JavaScript handles dynamic loading
-
-**JavaScript**: `js/dashboard.js`
-
-- Fetches drive data via AJAX
-- Renders table or card view
-- Handles sorting and filtering
-- Updates UI dynamically
-
-### 6. Settings Page
-
-**File**: `DriveAgeSettings.page`
-
-- HTML form for configuration
-- Posts to Unraid's `/update.php`
-- Validates input with JavaScript
-- Shows color preview
 
 ## Data Flow
 
 ```
-User loads dashboard
+User opens dashboard
     ↓
-DriveAge.page renders HTML
+DriveAgeDashboard.page renders shell (legend colors server-side)
     ↓
-dashboard.js loads
+dashboard.js fetches /plugins/driveage/scripts/get_drive_data.php
     ↓
-AJAX request to get_drive_data.php
+get_drive_data.php: loadConfig() [validated] → getAllDrives() → filters → groups
     ↓
-get_drive_data.php calls getAllDrives()
+getAllDrives(): enumerate from disks.ini/devs.ini
+    → parse /var/local/emhttp/smart/<dev> (ATA/NVMe/SCSI text)
+    → health from <dev>.ssa
+    → temp/spin from disks.ini
+    → standby POH from /boot/config/plugins/driveage/drivecache.json
+    → direct smartctl ONLY if no cache file and not spun down
     ↓
-smartdata.php queries SMART data
+risk.php categorizes → predictions.php estimates → JSON (plain data + CSS classes)
     ↓
-formatting.php formats data
-    ↓
-JSON returned to dashboard.js
-    ↓
-dashboard.js renders table/card view
-    ↓
-User sees drive data
+dashboard.js renders table + charts.js renders charts (theme-aware)
 ```
 
-## Testing Checklist
+## Testing
 
-### Before Release
+### Unit / integration tests (run these every change)
 
-- [ ] Test installation on clean Unraid system
-- [ ] Verify all drives detected
-- [ ] Test SMART data accuracy
-- [ ] Verify color coding
-- [ ] Test sorting functionality
-- [ ] Test view switching (table/card)
-- [ ] Test settings save/load
-- [ ] Test threshold configuration
-- [ ] Verify oldest drive bold formatting
-- [ ] Test with 1 drive
-- [ ] Test with 20+ drives
-- [ ] Test multi-array support
-- [ ] Test JSON API (if enabled)
-- [ ] Test rate limiting
-- [ ] Verify uninstall cleanup
-- [ ] Check browser console for errors
-- [ ] Test on different browsers
+```bash
+php tests/run.php
+```
 
-### Performance Testing
+Coverage: smartctl text parsing (ATA `-A` cache format with vendor raw values, full `-a`, NVMe health log, SCSI/SAS, standby), JSON parsing (universal fields), risk categories (incl. `unknown`), HDD/NVMe prediction math (targets, measured rates, caps, overrides), health warnings (5/187/188/197/198, composite-188 masking, FAILED), config validation, and an end-to-end `getAllDrives()` run against a fixture state directory.
 
-- [ ] Load time with 50+ drives
-- [ ] SMART query performance
-- [ ] Cache effectiveness
-- [ ] Memory usage
-- [ ] CPU usage during refresh
+Adding a test: drop a captured smartctl output into `tests/fixtures/`, assert in `tests/run.php` with `check()`/`checkEq()`.
 
-## Common Development Tasks
+### Manual checklist before release
 
-### Update Age Thresholds
-
-1. Edit `include/config.php` - `getDefaultConfig()`
-2. Update `DriveAgeSettings.page` - default values
-3. Update README.md - threshold table
-
-### Add New Data Field
-
-1. Add to `smartdata.php` - `getDriveInfo()`
-2. Update AJAX response in `get_drive_data.php`
-3. Add column to table in `dashboard.js` - `renderTableView()`
-4. Add to card in `dashboard.js` - `renderCardView()`
-5. Update CSS in `driveage.css` if needed
-
-### Modify Color Scheme
-
-1. Update `driveage.css` - age color classes
-2. Update `DriveAgeSettings.page` - threshold items
-3. Update `DriveAge.page` - legend section
-4. Update README.md - color table
+- [ ] `php tests/run.php` passes
+- [ ] Clean install on Unraid; drives detected (incl. NVMe, unassigned, spun-down)
+- [ ] Verify against `smartctl -a` for one HDD and one NVMe
+- [ ] Dark theme (black) and white theme both readable
+- [ ] Settings: save, reload, reset-to-defaults; filters/auto-refresh/default-sort take effect
+- [ ] Drive with SMART warning shows warning + escalated row color + matching label
+- [ ] Browser console free of errors
+- [ ] Uninstall cleanup
 
 ## Debugging
 
-### Enable PHP Error Logging
-
-Add to PHP files:
-```php
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-```
-
 ### Check SMART Data Manually
-
 ```bash
 smartctl -a /dev/sdX
-smartctl -a -j /dev/sdX  # JSON output
+smartctl -a -j /dev/sdX          # JSON output
+cat /var/local/emhttp/smart/sdX  # what Unraid cached (what DriveAge reads)
+cat /var/local/emhttp/smart/sdX.ssa
 ```
 
-### View JavaScript Console
-
-Open browser DevTools (F12) → Console tab
-
-### Check Unraid Logs
-
+### Diagnostics
 ```bash
-tail -f /var/log/syslog
+php /usr/local/emhttp/plugins/driveage/scripts/diagnose.php
+tail -f /var/log/syslog | grep -i driveage
 ```
 
-### Cache Issues
+### Cache
+Persistent POH cache: `/boot/config/plugins/driveage/drivecache.json` (safe to delete; regenerates as drives are seen awake).
 
-Clear cache:
-```bash
-rm /tmp/driveage_cache.json
-```
+## Design Rules
 
-## Performance Optimization
-
-### SMART Query Optimization
-
-- Cache results for 60 seconds (configurable)
-- Query drives in parallel (future enhancement)
-- Skip spun-down drives option (future enhancement)
-
-### UI Optimization
-
-- Lazy loading for large drive lists (future enhancement)
-- Virtual scrolling for 100+ drives (future enhancement)
-- Debounce sort/filter operations
-
-## Security Considerations
-
-### Input Validation
-
-All user inputs must be validated:
-- `validateConfig()` in config.php
-- JavaScript validation in settings page
-- Sanitization in formatting.php
-
-### API Security
-
-- Disabled by default
-- Rate limiting enforced
-- IP-based tracking
-- No authentication (consider for future)
-
-### File Permissions
-
-- Config files: 644
-- Plugin directory: 755
-- No world-writable files
+1. **Enumerate from Unraid's state files**, never `/dev` globs (breaks at 26 drives).
+2. **Never wake a spun-down drive.**
+3. **Parsers stay pure** (`smartparse.php`): no filesystem/shell access, so they stay testable.
+4. **Validate on load**: `/update.php` writes settings verbatim, so `loadConfig()` is the enforcement point.
+5. **No plugin-level auth/CSRF/rate limiting**: Unraid's webGUI provides authentication and CSRF for `/update.php`.
+6. **Category, color and label change together** - never desync them.
+7. **Docs are part of the change**: prediction/risk changes update METHODOLOGY.md in the same commit.
+8. **Theme-neutral styling**: translucent surfaces + `color: inherit`; no hardcoded light backgrounds.
 
 ## Future Development Ideas
 
-### Phase 2 Features
-- Card view enhancements
-- Advanced filtering
-- Export to CSV
-- Print view
-
-### Phase 3 Features
-- Email notifications
-- Historical tracking
-- Trend graphs
-- Warranty database integration
-
-### Phase 4 Features
+- Email/agent notifications at category transitions or new SMART warnings
+- Historical tracking and wear-trend graphs
+- CSV export
+- Community Applications template/submission
 - Multi-language support
-- Custom alert rules
-- Drive health predictions
-- Integration with other monitoring tools
 
 ## Contributing Guidelines
 
-1. **Fork the repository**
-2. **Create a feature branch**:
-   ```bash
-   git checkout -b feature/amazing-feature
-   ```
-3. **Make changes** following code style
-4. **Test thoroughly** on Unraid
-5. **Update documentation** as needed
-6. **Commit with clear messages**:
-   ```bash
-   git commit -m "Add amazing feature"
-   ```
-7. **Push to your fork**:
-   ```bash
-   git push origin feature/amazing-feature
-   ```
-8. **Create Pull Request** on GitHub
+1. Fork, branch (`feature/...`)
+2. Make changes following the design rules above
+3. `php tests/run.php` (add tests for new logic)
+4. Update README/METHODOLOGY/CLAUDE docs if behavior changed
+5. PR with a clear description
 
 ## Resources
 
 - [Unraid Plugin Development](https://docs.unraid.net/)
 - [smartmontools Documentation](https://www.smartmontools.org/)
-- [Slackware Package Format](http://www.slackware.com/config/packages.php)
+- [Backblaze Drive Stats](https://www.backblaze.com/blog/backblaze-drive-stats-for-2024/)
 - [Unraid Forums - Plugin Support](https://forums.unraid.net/forum/51-plugin-support/)
 
 ## Support
 
 - GitHub Issues: https://github.com/auc0le/DriveAge/issues
-- Unraid Forums: https://forums.unraid.net/
 
 ---
 

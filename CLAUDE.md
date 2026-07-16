@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-DriveAge is an Unraid plugin that monitors drive health and age based on SMART power-on hours. It provides a dashboard with six-tier color coding (brand new → elderly) and displays comprehensive drive information including temperature, SMART status, and spin state. The plugin is security-hardened and OWASP Top 10 compliant.
+DriveAge is an Unraid plugin that monitors drive health and age. It uses a **dual risk model**: age-based risk for HDDs (five tiers calibrated to Backblaze's 2025 bathtub-curve data, plus an N/A tier for devices without SMART data) and wear-based risk for NVMe drives. It produces predictive replacement estimates: HDDs count down to a target age (8 years conservative / 10 years aggressive), NVMe projections use the drive's own measured wear rate.
 
 ## Build and Test Commands
 
@@ -12,220 +12,108 @@ DriveAge is an Unraid plugin that monitors drive health and age based on SMART p
 ```bash
 ./build.sh
 ```
-This creates a Slackware `.txz` package in `archive/` directory with auto-incrementing build numbers. The script:
-- Auto-increments build numbers for same-day versions
-- Generates MD5 checksums
-- Updates the plugin manifest (`plugins/driveage.plg`) with new version, build, and MD5
+Creates a Slackware `.txz` package in `archive/` with auto-incrementing build numbers. The script:
+- Aborts if any `*.backup`/`*.bak` files exist in the source tree
+- Writes `include/version.php` (the single version source used by all pages for display and cache-busting)
+- Generates MD5 checksums and updates `plugins/driveage.plg` (version, build, MD5)
+
+### Running Tests
+```bash
+php tests/run.php
+```
+Pure-PHP test suite - no Unraid or smartmontools required. Covers the smartctl parsers (against captured fixtures in `tests/fixtures/`), risk categorization, prediction math, config validation, and an end-to-end `getAllDrives()` run against a fixture Unraid state directory. **Run this after every change; add fixtures/assertions for any new parsing or prediction logic.**
 
 ### Testing on Unraid
-After building, manually:
-1. Upload `.txz` package and `.md5` file to GitHub releases
-2. Update `plugins/driveage.plg` if needed
-3. Install on Unraid via Plugins → Install Plugin using the GitHub raw URL
-
-### No Automated Tests
-There are no unit tests or linting tools configured. All testing is done manually on Unraid systems.
+1. Build, upload `.txz` + `.md5` to GitHub, install via the raw `.plg` URL, or copy the source tree directly to `/usr/local/emhttp/plugins/driveage/`
+2. CLI diagnostic on the server: `php /usr/local/emhttp/plugins/driveage/scripts/diagnose.php`
 
 ## Architecture
 
 ### Core System Flow
 
-1. **Dashboard (`DriveAge.page`)**: Main UI that loads drive data via AJAX from `get_drive_data.php`
-2. **AJAX Endpoint (`scripts/get_drive_data.php`)**: Returns JSON with all drive data, enforces rate limiting and API enable/disable
-3. **SMART Data Collection (`include/smartdata.php`)**: Discovers drives using `glob()` and reads SMART data from Unraid's cached files (`/var/local/emhttp/smart/`) for performance
-4. **Configuration (`include/config.php`)**: Manages thresholds and settings stored in `/boot/config/plugins/driveage/driveage.cfg`
-5. **Security Layer (`include/security.php`)**: CSRF tokens, rate limiting, security logging
+1. **`DriveAge.page`**: menu container (tabs); **`DriveAgeDashboard.page`** loads data via AJAX from `get_drive_data.php`
+2. **`scripts/get_drive_data.php`**: JSON endpoint - loads config, collects drives, applies drive-type filters, groups, responds. Plain data only (no HTML fragments)
+3. **`include/smartdata.php`**: enumeration + assembly + health-warning policy
+4. **`include/smartparse.php`**: pure parsing functions (no filesystem/shell access) - keep them pure; they are the most heavily unit-tested code
+5. **`include/predictions.php`**: replacement estimates; **`include/risk.php`**: category policy; **`include/config.php`**: config load + validation
 
-### Key Design Decisions
+### Data Sources (order of authority)
 
-**Performance Optimization**: The plugin uses Unraid's pre-cached SMART data from `/var/local/emhttp/smart/` instead of running `smartctl` directly. This reduces dashboard load time from 26-52 seconds to ~100ms. Falls back to direct `smartctl` queries if cache unavailable.
+1. `/var/local/emhttp/disks.ini` + `devs.ini` - device enumeration, ids, sizes, live temp/spin state. **Never enumerate from `/dev` globs** (breaks >26 drives); the glob path exists only as a last-resort fallback when both inis are missing.
+2. `/var/local/emhttp/smart/<dev>` - Unraid's cached smartctl output. **Refreshed on the Disk Settings `poll_attributes` interval (default 1800s = 30 minutes)** - do not claim or assume faster freshness. Cache files written with `smartctl -A` have NO model/serial/health lines for ATA drives.
+3. `/var/local/emhttp/smart/<dev>.ssa` - cached overall-health verdict (PASSED/FAILED).
+4. Direct `smartctl -a -j` - last resort only (no cache file, drive not spun down). Parse the universal `power_on_time`/`temperature`/`smart_status` JSON fields first (covers SAS), then type-specific tables.
 
-**Security-First Architecture**:
-- All drive discovery uses `glob()` instead of `shell_exec()` to prevent command injection
-- Multi-layer device validation (regex, symlink check, block device type verification)
-- CSRF tokens for all settings forms
-- IP-based rate limiting for JSON API
-- All output escaped via `e()` and `esc()` helpers to prevent XSS
+Spun-down drives are **never queried**. Their last-known power-on hours live in `/boot/config/plugins/driveage/drivecache.json` (single JSON file on flash, rewritten only when a value changes - keep it write-on-change to protect the flash device).
 
-**Unraid Integration**: Reads from Unraid's system files:
-- `/var/local/emhttp/disks.ini` - Drive assignments (parity, array, cache)
-- `/var/local/emhttp/var.ini` - Unraid variables
-- `/var/local/emhttp/smart/{device}` - Cached SMART data
+### Key Invariants (do not regress these)
 
-### File Organization
-
-```
-source/driveage/usr/local/emhttp/plugins/driveage/
-├── DriveAge.page              # Main dashboard (Unraid .page format)
-├── DriveAgeSettings.page      # Settings interface
-├── include/
-│   ├── config.php             # Configuration load/save/validate
-│   ├── smartdata.php          # Drive discovery and SMART parsing
-│   ├── formatting.php         # Display formatting utilities
-│   ├── security.php           # Rate limiting, CSRF, logging
-│   └── helpers.php            # XSS prevention (e(), esc())
-├── scripts/
-│   └── get_drive_data.php     # AJAX endpoint for dashboard
-├── styles/
-│   └── driveage.css           # Six-tier color coding CSS
-└── js/
-    └── dashboard.js           # Frontend interactivity, XSS-safe rendering
-```
+- **Category, color class and label always move together.** Any code path that escalates `age_category` must also update `color_class` and `age_label` (a desync here shipped once as a visible bug).
+- **Devices without SMART data are `unknown` / "N/A"**, never Minimal Risk.
+- **SMART overall-health FAILED** forces High Risk, a "Replace Now" prediction, and a first-class health warning.
+- All five Google-study attributes are evaluated: 5, 187, 188, 197, 198. Attribute 188 raw values above 0xFFFF are masked to the low 16 bits (composite vendor encoding).
+- Every prediction result includes `method` and `confidence`.
+- Every setting shown on the Settings page must actually do something (drive-type filters, auto-refresh, default sort are all implemented in `dashboard.js`/`get_drive_data.php`).
+- The JSON endpoint returns plain data; CSS classes are computed server-side (`*_class` fields), HTML is built client-side with `escapeHtml()`.
 
 ### Unraid .page Format
 
-Unraid plugins use `.page` files (not `.php`). Format:
-```
-Menu="Category"
-Title="Page Title"
-Icon="icon.png"
----
-<?PHP /* PHP code here */ ?>
-<html content>
-```
+`.page` files have an ini-style header (`Menu=`, `Title=`), a `---` separator, then PHP/HTML. `DriveAge.page` is the tab container (`Type="xmenu"`, `Tabs="true"`); Dashboard/Settings/Help are `Menu="DriveAge:N"` tabs.
 
-The three lines before `---` are Unraid metadata. Everything after is standard PHP/HTML.
+### Age Categories and Thresholds (defaults, Backblaze 2025)
 
-### SMART Data Parsing Strategy
+Five configurable tiers + N/A (default hours):
+- **minimal_risk**: < 35,040h (< 4 years, AFR ~1%)
+- **low_risk**: 35,040-52,560h (4-6 years, AFR ~1.5%)
+- **moderate_risk**: 52,560-70,080h (6-8 years, AFR ~2%)
+- **elevated_risk**: 70,080-87,600h (8-10 years, AFR ~2.5-4%)
+- **high_risk**: ≥ 87,600h (≥ 10 years, AFR ~4%+; measured fleet peak ~4.25% at ~10.3 years)
+- **unknown**: no SMART data (gray, "N/A")
 
-1. **Primary**: Read from `/var/local/emhttp/smart/{device}` (Unraid's cache, updated by emhttpd)
-2. **Secondary**: Run `smartctl -a -j {device}` for JSON output
-3. **Fallback**: Run `smartctl -a {device}` and parse text output
+Thresholds must be ascending; `validateConfig()` resets to defaults otherwise.
 
-Critical SMART attributes:
-- Attribute ID 9: Power_On_Hours
-- Attribute ID 194: Temperature_Celsius
-- SMART overall-health status
+## Security Model
 
-### Age Categories and Thresholds
-
-Six configurable tiers (default hours):
-- **brand_new**: < 17,520h (< 2 years)
-- **newish**: 17,520-26,280h (2-3 years)
-- **normal**: 26,280-35,040h (3-4 years)
-- **aged**: 35,040-43,800h (4-5 years)
-- **old**: 43,800-52,560h (5-6 years)
-- **elderly**: ≥ 52,560h (≥ 6 years)
-
-Thresholds must be in ascending order; invalid configurations reset to defaults.
-
-## Security Requirements
-
-**CRITICAL**: This plugin is security-hardened. When modifying code:
-
-### Input Validation Rules
-- All enum values (view modes, sort columns, sort directions) must use strict whitelists with `in_array($value, $whitelist, true)`
-- All numeric inputs must be constrained with `max()` and `min()` and cast to `intval()`
-- Boolean values must be validated to literal `'true'` or `'false'` strings
-- Device paths MUST match `/^\/dev\/(sd[a-z]|nvme[0-9]n[0-9])$/` regex AND pass block device validation
-
-### Output Escaping Rules
-- PHP templates: Always use `e()` or `esc()` helper for any dynamic content
-- JavaScript: Always use `escapeHtml()` function when inserting user-controlled data
-- Never output raw variables directly
-
-### Command Execution Rules
-- **NEVER** use `shell_exec()`, `exec()`, `system()` with user input
-- Use `glob()` for file discovery instead of shell commands
-- Use `escapeshellarg()` for any unavoidable shell commands (e.g., `smartctl`, `blockdev`)
-- Prefer PHP built-in functions over shell commands
-
-### File Operation Rules
-- All cache/config files must be validated: not symlinks, not world-writable
-- Use atomic writes (write to temp file, then `rename()`)
-- Cache directory: `/var/lib/driveage/` with 0700 permissions (not `/tmp`)
-- Config directory: `/boot/config/plugins/driveage/` (persists across reboots)
-
-### Rate Limiting
-- JSON API is disabled by default (`API_ENABLED='false'`)
-- Rate limits: 10-1000 requests/minute (default 100)
-- Internal dashboard requests bypass API enable check but still log
-
-### CSRF Protection
-When adding forms that modify settings:
-```php
-// Generate token
-$_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-
-// In form
-<input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']); ?>">
-
-// Validate
-if (!isset($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
-    die('CSRF validation failed');
-}
-```
+- **Access control is Unraid's**: the webGUI authenticates every `/plugins/*` request. Do NOT add plugin-level auth layers, rate limiters, API-enable switches, or custom CSRF tokens - the settings form posts to Unraid's `/update.php`, which enforces Unraid's own CSRF token. A previous custom CSRF implementation conflicted with it and was removed.
+- **Validation happens on load** (`loadConfig()` → `validateConfig()`), because `/update.php` writes POSTed values verbatim. Any new config key needs validation there, a default in `getDefaultConfig()`, and a form field in `DriveAgeSettings.page`.
+- **Escape all output**: `esc()`/`e()` in PHP templates, `escapeHtml()` in JS.
+- **Shell rules**: no shell execution except the `smartctl`/`blockdev` fallbacks, always with `escapeshellarg()` on device names that passed `isValidDeviceName()` (`sd[a-z]{1,3}` or `nvme\d+n\d+`).
 
 ## Common Development Workflows
 
-### Adding a New Age Category
-1. Update defaults in `config.php` `getDefaultConfig()`
-2. Add threshold validation in `validateConfig()`
-3. Add label in `getAgeLabel()`
-4. Update `getAgeCategory()` logic
-5. Add CSS class in `styles/driveage.css`
-6. Update legend in `DriveAge.page`
-
 ### Adding a New Configuration Option
-1. Add to defaults in `getDefaultConfig()` in `config.php`
-2. Add validation logic in `validateConfig()`
-3. Add to `saveConfig()` INI generation
-4. Update settings form in `DriveAgeSettings.page` with CSRF protection
-5. Use new config value in relevant code
+1. Default in `getDefaultConfig()` (config.php)
+2. Validation in `validateConfig()` (config.php) - this is the enforcement point
+3. Form field in `DriveAgeSettings.page` (checkbox pattern: hidden `false` input + checkbox `true` input)
+4. Consume it (PHP endpoint and/or `config` section of the JSON response for JS)
+5. Test in `tests/run.php`
 
-### Modifying SMART Data Collection
-All changes must maintain the cache-first approach:
-1. Try Unraid cache (`getSmartDataFromUnraidCache()`)
-2. Fallback to direct query (`getSmartData()`)
-3. Update cache on successful query (`saveCache()`)
+### Modifying SMART Parsing
+1. Add a captured fixture to `tests/fixtures/`
+2. Extend `smartparse.php` (keep functions pure - string/array in, array out)
+3. Add assertions to `tests/run.php`; run `php tests/run.php`
 
-### Adding API Endpoints
-1. Check API enabled: `if ($config['API_ENABLED'] !== 'true')`
-2. Enforce rate limiting: `checkRateLimit($config, false)`
-3. Validate all inputs
-4. Escape all outputs
-5. Log security events: `logSecurityEvent($event, $data)`
+### Changing Risk/Prediction Logic
+- Category policy lives in `risk.php`; time estimates in `predictions.php`; escalation wiring in `smartdata.php::getDriveInfo()`
+- Update METHODOLOGY.md in the same commit - it documents the shipped formulas, and drift between docs and code is treated as a bug
+- Add assertions to `tests/run.php`
 
 ## Version and Release Process
 
-Version format: `YYYY.MM.DD` (e.g., `2025.11.28`)
+Version format: `YYYY.MM.DD` + build number (`version="&version;-&build;"` in the .plg - the build suffix is required or Unraid refuses same-day reinstalls).
 
-**Build Numbering Convention:**
-- Build numbers reset to 1 with each new date
-- Same-day builds auto-increment (Build 1, Build 2, Build 3)
-- When committing, use the build number that matches the package filename
-- Example: `driveage-2025.11.28-x86_64-1.txz` = "Build 1" in commit message
-- Example: `driveage-2025.11.28-x86_64-2.txz` = "Build 2" in commit message
+**Single version source**: `include/version.php` (`DRIVEAGE_VERSION`), rewritten by `build.sh`. Pages use it for the footer and cache-busting query strings. Do not hardcode version strings anywhere else; update the README badge on release.
 
-**CRITICAL - Version Attribute in Plugin Manifest:**
-- The `version` attribute in `plugins/driveage.plg` **MUST** include the build number: `version="&version;-&build;"`
-- Unraid uses this attribute to determine if a plugin needs updating
-- Without the build number, Unraid sees same-day builds as "same version" and refuses to reinstall
-- Bug discovered: Previously used `version="&version;"` which caused "not reinstalling same version" errors
-- Fixed in Build 4 (2025.12.25) - now uses `version="&version;-&build;"` to ensure unique versions
-
-Release checklist (from `build.sh` output):
-1. Run `./build.sh`
-2. Commit and push to GitHub (including updated `plugins/driveage.plg`)
-   - Use commit message format: "Build N: [description]" where N matches the package build number
-3. Upload package and MD5 to GitHub releases
-4. Test installation on Unraid
-
-## Configuration Files
-
-### Plugin Manifest (`plugins/driveage.plg`)
-XML format with entities for version, build, and MD5. Auto-updated by `build.sh`.
-
-### User Configuration (`/boot/config/plugins/driveage/driveage.cfg`)
-INI format, persists across reboots (Unraid's `/boot` is the USB flash drive).
-
-### Cache Files (`/var/lib/driveage/`)
-JSON cache for SMART data (TTL: 300 seconds). Lost on reboot (ramdisk), regenerated on first access.
+Release checklist:
+1. `php tests/run.php` - must pass
+2. `./build.sh`
+3. Commit and push (including updated `plugins/driveage.plg`), message format "Build N: description"
+4. Upload package and MD5 to GitHub releases
+5. Test installation on Unraid
 
 ## Important Constraints
 
-- **No npm/node**: This is pure PHP/JavaScript, no build tools
-- **No backend framework**: Vanilla PHP, no composer dependencies
-- **Unraid-specific paths**: All system integration assumes Unraid 6.12+ file structure
-- **Slackware packaging**: Must use `.txz` format for Unraid plugin system
-- **Shell availability**: Can assume bash, standard GNU tools, smartmontools
+- **No npm/node/composer**: plain PHP 8.x + vanilla JS (Chart.js vendored in `js/vendor/`)
+- **Theme-aware UI**: Unraid ships white/black/azure/gray themes. Use translucent `rgba(128,128,128,x)` surfaces and `color: inherit`; never hardcode light backgrounds with dark text. Chart.js text color is set from `getComputedStyle(document.body).color` at render time.
+- **Unraid-specific paths** are guarded defines (`DRIVEAGE_STATE_DIR`, `DRIVEAGE_CONFIG_FILE`, `DRIVEAGE_POH_CACHE_FILE`) so tests can redirect them to fixtures - preserve that pattern for any new path.
+- **Slackware packaging**: `.txz` via `build.sh`; `tests/` and repo docs are outside `source/` and never ship.

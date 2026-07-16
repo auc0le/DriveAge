@@ -26,6 +26,22 @@
 <CHANGES>
 ##&name;
 
+###2026.07.16
+- Recalibrated risk categories and AFR labels to Backblaze's 2025 bathtub-curve analysis (peak ~4.25% AFR at ~10.3 years)
+- New default age bands: 4 / 6 / 8 / 10 years; replacement targets now 8 years (conservative) / 10 years (aggressive)
+- NVMe predictions now use the drive's own measured wear history (TB written and wear% per power-on year)
+- SMART 187 (Reported Uncorrectable) and 188 (Command Timeout) now evaluated; SMART overall-health FAILED surfaced and forces High Risk
+- Drive enumeration rebuilt on Unraid's disks.ini/devs.ini (supports >26 drives, multi-digit NVMe, SAS via smartctl JSON)
+- NVMe/SCSI text SMART cache now parsed (no more per-load direct smartctl); robust ATA raw-value parsing
+- Data-age indicator; honest poll interval (Unraid refreshes SMART per Disk Settings poll_attributes, default 30 min)
+- Implemented drive-type filters, auto-refresh, and configurable default sort (previously dead settings)
+- Fixed High Risk label desync on override (chart legend and Age column now consistent)
+- Drives without SMART data (USB flash) now show N/A instead of Minimal Risk
+- Persistent power-on-hours cache moved to flash (survives reboot), write-on-change
+- Theme-aware styling for Unraid dark themes; JSON API returns plain data (no HTML fragments)
+- Removed non-functional CSRF layer, rate limiter, and API gate (endpoint sits behind Unraid webGUI auth)
+- Configuration now validated on load; added unit test suite (tests/run.php)
+
 ###2025.11.26
 - Initial release
 </CHANGES>
@@ -53,30 +69,30 @@ echo ""
 echo "Creating configuration directories..."
 mkdir -p /boot/config/plugins/driveage
 
-# Create cache and log directories
-echo "Creating cache and log directories..."
-mkdir -p /var/lib/driveage/ratelimit
-mkdir -p /var/log
-chmod 700 /var/lib/driveage
+# Clean up legacy per-drive cache/rate-limit dirs from older versions
+rm -rf /var/lib/driveage 2>/dev/null
+rm -f /var/log/driveage_security.log /var/log/driveage_security.log.old 2>/dev/null
 
 # Create default configuration if it doesn't exist
 if [ ! -f "/boot/config/plugins/driveage/driveage.cfg" ]; then
   echo "Creating default configuration..."
   cat > /boot/config/plugins/driveage/driveage.cfg <<'EOF'
 # Display Configuration
-DEFAULT_SORT="power_on_hours"
-DEFAULT_SORT_DIR="desc"
+DEFAULT_SORT="replacement_months"
+DEFAULT_SORT_DIR="asc"
 
 # Refresh Configuration
 AUTO_REFRESH="false"
 REFRESH_INTERVAL="300"
 
-# Age Thresholds (in hours)
-THRESHOLD_BRAND_NEW="17520"
-THRESHOLD_NEWISH="26280"
-THRESHOLD_NORMAL="35040"
-THRESHOLD_AGED="43800"
-THRESHOLD_OLD="52560"
+# Age Thresholds (in hours) - Backblaze 2025 calibration
+THRESHOLD_MINIMAL_RISK="35040"
+THRESHOLD_LOW_RISK="52560"
+THRESHOLD_MODERATE_RISK="70080"
+THRESHOLD_ELEVATED_RISK="87600"
+
+# Prediction Mode: conservative (8yr target) or aggressive (10yr target)
+PREDICTION_MODE="conservative"
 
 # Display Filters
 SHOW_PARITY="true"
@@ -89,10 +105,6 @@ SHOW_UNASSIGNED="true"
 SHOW_TEMPERATURE="true"
 SHOW_SMART_STATUS="true"
 SHOW_SPIN_STATUS="true"
-
-# JSON API Configuration
-API_ENABLED="false"
-API_RATE_LIMIT="100"
 EOF
 fi
 

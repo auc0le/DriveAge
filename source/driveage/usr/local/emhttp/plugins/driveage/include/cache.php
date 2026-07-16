@@ -1,240 +1,150 @@
 <?php
 /**
- * DriveAge Plugin - Drive Data Caching
+ * DriveAge Plugin - Persistent Power-On-Hours Cache
  *
- * Caches power-on hours for drives in standby mode
- * Prevents showing 0 hours when drives are spun down
+ * Remembers last-known power-on hours (plus model/serial) for drives that
+ * are in standby, so spun-down drives still display meaningful data.
+ *
+ * Stored as ONE JSON file on the flash device (/boot) so it survives
+ * reboots - a drive that boots spun-down keeps its last-known values.
+ * Flash wear is a non-issue: the file is rewritten only when a value
+ * actually changes (POH advances ~1/hour per drive, and only while the
+ * dashboard is being used).
  */
 
-// Cache directory (ramdisk, lost on reboot)
-define('DRIVEAGE_CACHE_DIR', '/var/lib/driveage');
+if (!defined('DRIVEAGE_POH_CACHE_FILE')) {
+    define('DRIVEAGE_POH_CACHE_FILE', '/boot/config/plugins/driveage/drivecache.json');
+}
 
-// Cache validity period (24 hours)
+// Cache validity period for the "stale" indicator (24 hours)
 define('DRIVEAGE_CACHE_STALE_SECONDS', 86400);
 
 /**
- * Initialize cache directory
- * Creates directory with proper permissions if it doesn't exist
+ * Load the whole POH cache.
  *
- * @return bool True if directory exists/created, false on failure
+ * @return array Map of deviceName => ['power_on_hours','model','serial','timestamp']
  */
-function initCacheDirectory() {
-    if (!file_exists(DRIVEAGE_CACHE_DIR)) {
-        if (!@mkdir(DRIVEAGE_CACHE_DIR, 0700, true)) {
-            error_log('DriveAge: Failed to create cache directory: ' . DRIVEAGE_CACHE_DIR);
-            return false;
+function loadPohCache() {
+    $file = DRIVEAGE_POH_CACHE_FILE;
+
+    if (!file_exists($file) || is_link($file)) {
+        return [];
+    }
+
+    $json = @file_get_contents($file);
+    if ($json === false || $json === '') {
+        return [];
+    }
+
+    $data = json_decode($json, true);
+    if (!is_array($data)) {
+        error_log('DriveAge: Invalid POH cache file, ignoring');
+        return [];
+    }
+
+    return $data;
+}
+
+/**
+ * Get the cached entry for one device.
+ *
+ * @param array $cache Cache map from loadPohCache()
+ * @param string $deviceName Device name (e.g., "sda")
+ * @return array|null Entry or null
+ */
+function getPohCacheEntry($cache, $deviceName) {
+    $entry = $cache[$deviceName] ?? null;
+    if ($entry === null) {
+        return null;
+    }
+    if (!isset($entry['power_on_hours']) || !is_numeric($entry['power_on_hours']) ||
+        !isset($entry['timestamp']) || !is_numeric($entry['timestamp'])) {
+        return null;
+    }
+    return $entry;
+}
+
+/**
+ * Merge fresh readings into the cache and persist - but ONLY if something
+ * actually changed (write-on-change keeps flash writes near zero).
+ *
+ * @param array $cache Existing cache map (from loadPohCache())
+ * @param array $updates Map of deviceName => ['power_on_hours','model','serial']
+ * @return array Updated cache map
+ */
+function updatePohCache($cache, $updates) {
+    $changed = false;
+
+    foreach ($updates as $deviceName => $u) {
+        if (!is_numeric($u['power_on_hours'] ?? null) || $u['power_on_hours'] < 0) {
+            continue;
+        }
+        $hours = intval($u['power_on_hours']);
+        $existing = $cache[$deviceName] ?? null;
+
+        if ($existing === null || intval($existing['power_on_hours'] ?? -1) !== $hours) {
+            $cache[$deviceName] = [
+                'power_on_hours' => $hours,
+                'model'  => $u['model'] ?? ($existing['model'] ?? null),
+                'serial' => $u['serial'] ?? ($existing['serial'] ?? null),
+                'timestamp' => time()
+            ];
+            $changed = true;
         }
     }
 
-    // Verify directory is not a symlink (security check)
-    if (is_link(DRIVEAGE_CACHE_DIR)) {
-        error_log('DriveAge: Cache directory is a symlink (security violation): ' . DRIVEAGE_CACHE_DIR);
+    if ($changed) {
+        savePohCache($cache);
+    }
+
+    return $cache;
+}
+
+/**
+ * Persist the cache map atomically.
+ *
+ * @param array $cache Cache map
+ * @return bool True on success
+ */
+function savePohCache($cache) {
+    $file = DRIVEAGE_POH_CACHE_FILE;
+    $dir = dirname($file);
+
+    if (!is_dir($dir) && !@mkdir($dir, 0755, true)) {
+        error_log('DriveAge: Failed to create cache directory: ' . $dir);
         return false;
     }
 
-    // Verify permissions
-    $perms = fileperms(DRIVEAGE_CACHE_DIR);
-    if (($perms & 0777) > 0700) {
-        error_log('DriveAge: Cache directory has insecure permissions: ' . DRIVEAGE_CACHE_DIR);
-        @chmod(DRIVEAGE_CACHE_DIR, 0700);
+    $json = json_encode($cache);
+    if ($json === false) {
+        error_log('DriveAge: Failed to encode POH cache');
+        return false;
+    }
+
+    // Atomic-ish write: temp file then rename
+    $tmp = $file . '.tmp';
+    if (@file_put_contents($tmp, $json, LOCK_EX) === false) {
+        error_log('DriveAge: Failed to write POH cache');
+        return false;
+    }
+    if (!@rename($tmp, $file)) {
+        @unlink($tmp);
+        error_log('DriveAge: Failed to replace POH cache file');
+        return false;
     }
 
     return true;
 }
 
 /**
- * Get cache file path for a device
- *
- * @param string $deviceName Device name (e.g., "sda")
- * @return string Cache file path
- */
-function getCacheFilePath($deviceName) {
-    // Sanitize device name to prevent directory traversal
-    $safeDeviceName = preg_replace('/[^a-z0-9_-]/i', '', $deviceName);
-    return DRIVEAGE_CACHE_DIR . '/drive_cache_' . $safeDeviceName . '.json';
-}
-
-/**
- * Save drive metrics to persistent cache
- *
- * @param string $deviceName Device name (e.g., "sda")
- * @param int $powerOnHours Power-on hours value
- * @param string $model Drive model
- * @param string $serial Drive serial number
- * @return bool True on success, false on failure
- */
-function saveDriveCache($deviceName, $powerOnHours, $model, $serial) {
-    // Validate inputs
-    if (empty($deviceName) || !is_numeric($powerOnHours) || $powerOnHours < 0) {
-        return false;
-    }
-
-    // Initialize cache directory
-    if (!initCacheDirectory()) {
-        return false;
-    }
-
-    $cacheFile = getCacheFilePath($deviceName);
-
-    $cacheData = [
-        'device' => $deviceName,
-        'power_on_hours' => intval($powerOnHours),
-        'model' => $model,
-        'serial' => $serial,
-        'timestamp' => time(),
-        'last_updated' => date('Y-m-d H:i:s')
-    ];
-
-    $json = json_encode($cacheData, JSON_PRETTY_PRINT);
-    if ($json === false) {
-        error_log('DriveAge: Failed to encode cache data for ' . $deviceName);
-        return false;
-    }
-
-    // Atomic write: write to temp file, then rename
-    $tempFile = $cacheFile . '.tmp';
-    if (@file_put_contents($tempFile, $json, LOCK_EX) === false) {
-        error_log('DriveAge: Failed to write cache file for ' . $deviceName);
-        return false;
-    }
-
-    if (!@rename($tempFile, $cacheFile)) {
-        @unlink($tempFile);
-        error_log('DriveAge: Failed to rename cache file for ' . $deviceName);
-        return false;
-    }
-
-    // Set restrictive permissions
-    @chmod($cacheFile, 0600);
-
-    return true;
-}
-
-/**
- * Load cached drive metrics
- *
- * @param string $deviceName Device name (e.g., "sda")
- * @return array|null Cache data array or null if not found/invalid
- */
-function loadDriveCache($deviceName) {
-    $cacheFile = getCacheFilePath($deviceName);
-
-    // Check if file exists
-    if (!file_exists($cacheFile)) {
-        return null;
-    }
-
-    // Security check: verify not a symlink
-    if (is_link($cacheFile)) {
-        error_log('DriveAge: Cache file is a symlink (security violation): ' . $cacheFile);
-        @unlink($cacheFile);
-        return null;
-    }
-
-    // Read cache file
-    $json = @file_get_contents($cacheFile);
-    if ($json === false) {
-        return null;
-    }
-
-    // Parse JSON
-    $cacheData = json_decode($json, true);
-    if (!is_array($cacheData)) {
-        error_log('DriveAge: Invalid cache data for ' . $deviceName);
-        @unlink($cacheFile);
-        return null;
-    }
-
-    // Validate required fields
-    if (!isset($cacheData['power_on_hours']) || !isset($cacheData['timestamp'])) {
-        error_log('DriveAge: Incomplete cache data for ' . $deviceName);
-        @unlink($cacheFile);
-        return null;
-    }
-
-    // Validate data types
-    if (!is_numeric($cacheData['power_on_hours']) || !is_numeric($cacheData['timestamp'])) {
-        error_log('DriveAge: Invalid cache data types for ' . $deviceName);
-        @unlink($cacheFile);
-        return null;
-    }
-
-    return $cacheData;
-}
-
-/**
- * Check if cache is stale (> 24 hours old)
+ * Check if a cache timestamp is stale (> 24 hours old)
  *
  * @param int $cacheTimestamp Unix timestamp from cache
- * @return bool True if stale, false otherwise
+ * @return bool True if stale
  */
 function isCacheStale($cacheTimestamp) {
     if (!is_numeric($cacheTimestamp)) {
         return true;
     }
-
-    $age = time() - intval($cacheTimestamp);
-    return $age > DRIVEAGE_CACHE_STALE_SECONDS;
-}
-
-/**
- * Get cache age in human-readable format
- *
- * @param int $cacheTimestamp Unix timestamp from cache
- * @return string Formatted age (e.g., "2h ago", "3d ago")
- */
-function getCacheAge($cacheTimestamp) {
-    if (!is_numeric($cacheTimestamp)) {
-        return 'unknown';
-    }
-
-    $age = time() - intval($cacheTimestamp);
-
-    if ($age < 60) {
-        return 'just now';
-    } elseif ($age < 3600) {
-        $minutes = floor($age / 60);
-        return $minutes . 'm ago';
-    } elseif ($age < 86400) {
-        $hours = floor($age / 3600);
-        return $hours . 'h ago';
-    } else {
-        $days = floor($age / 86400);
-        return $days . 'd ago';
-    }
-}
-
-/**
- * Clean up old cache files (maintenance function)
- * Removes cache files older than 30 days
- *
- * @return int Number of files deleted
- */
-function cleanupOldCacheFiles() {
-    if (!is_dir(DRIVEAGE_CACHE_DIR)) {
-        return 0;
-    }
-
-    $deleted = 0;
-    $maxAge = 30 * 86400; // 30 days
-    $files = glob(DRIVEAGE_CACHE_DIR . '/drive_cache_*.json');
-
-    foreach ($files as $file) {
-        if (!is_file($file) || is_link($file)) {
-            continue;
-        }
-
-        $mtime = @filemtime($file);
-        if ($mtime === false) {
-            continue;
-        }
-
-        if ((time() - $mtime) > $maxAge) {
-            if (@unlink($file)) {
-                $deleted++;
-            }
-        }
-    }
-
-    return $deleted;
+    return (time() - intval($cacheTimestamp)) > DRIVEAGE_CACHE_STALE_SECONDS;
 }
