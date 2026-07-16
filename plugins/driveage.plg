@@ -3,7 +3,7 @@
   <!ENTITY name      "driveage">
   <!ENTITY author    "Tony Coleman">
   <!ENTITY version   "2026.07.16">
-  <!ENTITY build     "1">
+  <!ENTITY build     "2">
   <!ENTITY launch    "Settings/DriveAge">
   <!ENTITY gitURL    "https://raw.githubusercontent.com/auc0le/DriveAge/main">
   <!ENTITY pluginURL "&gitURL;/plugins/&name;.plg">
@@ -11,7 +11,7 @@
   <!ENTITY pkg       "/boot/config/plugins/&name;/packages">
   <!ENTITY plgpath   "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
-  <!ENTITY md5       "e4b292c534d0ffeab1190836babe7a7e">
+  <!ENTITY md5       "56015da1cdde74d5d52630a3601efc5d">
 ]>
 
 <PLUGIN
@@ -116,7 +116,7 @@ chmod 644 /boot/config/plugins/driveage/driveage.cfg
 echo ""
 echo "-----------------------------------------------------------"
 echo " DriveAge has been installed successfully!"
-echo " Version: 2026.07.16 (Build 1)"
+echo " Version: 2026.07.16 (Build 2)"
 echo " Access it at: Settings -> DriveAge"
 echo "-----------------------------------------------------------"
 echo ""

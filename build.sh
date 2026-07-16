@@ -57,6 +57,27 @@ if find "$SOURCE_DIR" \( -name '*.backup' -o -name '*.bak' -o -name '*.orig' -o 
     exit 1
 fi
 
+# Normalize line endings to LF on all shipped text files.
+# Unraid splits a .page file's ini header from its PHP body on a bare "---"
+# line; a CRLF working tree (e.g. edited on Windows) turns that into "---\r",
+# the split fails, the body never executes, and the plugin renders a BLANK
+# white page. This shipped once - strip CR here so it can never recur,
+# regardless of how the working tree was checked out or edited.
+echo -e "${YELLOW}Normalizing line endings (CRLF -> LF)...${NC}"
+find "$SOURCE_DIR" -type f \( -name '*.page' -o -name '*.php' -o -name '*.js' \
+    -o -name '*.css' -o -name '*.svg' -o -name '*.html' -o -name '*.txt' \) \
+    -exec sed -i 's/\r$//' {} +
+
+# Guard: abort if any parsed/executed file still contains a carriage return.
+CR_FILES=$(grep -rlI $'\r' "$SOURCE_DIR" --include='*.page' --include='*.php' \
+    --include='*.js' --include='*.css' 2>/dev/null || true)
+if [ -n "$CR_FILES" ]; then
+    echo -e "${RED}Error: carriage returns remain in shipped files after normalization:${NC}"
+    echo "$CR_FILES"
+    exit 1
+fi
+echo -e "${GREEN}✓ Line endings normalized to LF${NC}"
+
 # Write the single-source version file consumed by the .page files
 VERSION_FILE="$SOURCE_DIR/usr/local/emhttp/plugins/driveage/include/version.php"
 cat > "$VERSION_FILE" <<EOF
