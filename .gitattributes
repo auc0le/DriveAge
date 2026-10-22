@@ -1,2 +1,20 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Force LF in the working tree for everything the plugin ships or executes.
+# Unraid parses .page files by splitting the ini header from the PHP body on a
+# bare "---" line; a CRLF checkout (e.g. on Windows) breaks that split and the
+# plugin renders a blank white page. eol=lf keeps these LF on every platform.
+*.page text eol=lf
+*.php  text eol=lf
+*.js   text eol=lf
+*.css  text eol=lf
+*.svg  text eol=lf
+*.sh   text eol=lf
+*.plg  text eol=lf
+*.md   text eol=lf
+
+# Binary artifacts - never touch line endings.
+*.png  binary
+*.txz  binary
+*.md5  binary

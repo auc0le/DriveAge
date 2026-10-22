@@ -7,5 +7,5 @@
  */
 
 if (!defined('DRIVEAGE_VERSION')) {
-    define('DRIVEAGE_VERSION', '2026.07.16-1');
+    define('DRIVEAGE_VERSION', '2026.07.16-2');
 }
