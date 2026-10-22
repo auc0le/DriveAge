@@ -379,9 +379,13 @@ touch(DRIVEAGE_STATE_DIR . '/smart/parity', time() - 600); // direct queries rep
 file_put_contents(DRIVEAGE_STATE_DIR . '/smart/parity.ssa', 'PASSED');
 copy("$FIXTURES/nvme_cache.txt", DRIVEAGE_STATE_DIR . '/smart/cache');
 copy("$FIXTURES/scsi_sas.txt", DRIVEAGE_STATE_DIR . '/smart/dev1');
-// sdc: spun down, no cache file -> POH must come from the persistent cache
+// sdc: spun down, no cache file -> POH must come from the persistent cache,
+// keyed by Unraid disk id. A legacy device-name entry ('sdc', written by an
+// older version for whatever drive had that letter then) must be ignored
+// and pruned.
 file_put_contents(DRIVEAGE_POH_CACHE_FILE, json_encode([
-    'sdc' => ['power_on_hours' => 39111, 'model' => 'WDC WD140EDGZ', 'serial' => 'Y5KVSLPY', 'timestamp' => time() - 3600]
+    'WDC_WD140EDGZ-11B1PA0_Y5KVSLPY' => ['power_on_hours' => 39111, 'model' => 'WDC WD140EDGZ', 'serial' => 'Y5KVSLPY', 'timestamp' => time() - 3600],
+    'sdc' => ['power_on_hours' => 11111, 'model' => 'OLD', 'serial' => 'OLD', 'timestamp' => time() - 3600]
 ]));
 
 $drives = getAllDrives($config);
@@ -392,7 +396,11 @@ checkEq('all 5 devices enumerated', 5, count($drives));
 check('parity parsed from cache', isset($byDev['sdb']));
 checkEq('parity health from .ssa', 'PASSED', $byDev['sdb']['smart_status'] ?? null);
 checkEq('parity temp from disks.ini', 36, $byDev['sdb']['temperature'] ?? null);
-checkEq('parity size from sectors x sector_size', 27344764824 * 512, $byDev['sdb']['size_bytes'] ?? null);
+if (PHP_INT_SIZE >= 8) { // 14 TB overflows 32-bit ints (e.g. php-wasm); Unraid is 64-bit
+    checkEq('parity size from sectors x sector_size', 27344764824 * 512, $byDev['sdb']['size_bytes'] ?? null);
+} else {
+    echo "skip  parity size from sectors x sector_size (needs 64-bit PHP)\n";
+}
 // sdb has 5 reallocated + 187=2 + masked 188=3 -> warnings, no criticals -> 3 months
 checkEq('parity: warnings -> 3 month estimate', 3, $byDev['sdb']['replacement_prediction']['months_remaining'] ?? null);
 checkEq('parity escalated to high risk (<6 months)', 'high_risk', $byDev['sdb']['age_category'] ?? null);
@@ -417,7 +425,11 @@ checkEq('poll interval read from var.ini', 1800, $byDev['sdb']['poll_interval'] 
 
 // POH cache write-on-change: fresh values should now be persisted
 $cacheAfter = json_decode(file_get_contents(DRIVEAGE_POH_CACHE_FILE), true);
-checkEq('POH cache updated for parity', 33477, $cacheAfter['sdb']['power_on_hours'] ?? null);
+checkEq('POH cache updated for parity (keyed by disk id)', 33477, $cacheAfter['WDC_WD140EDGZ-11B1PA0_Y5KVTEST']['power_on_hours'] ?? null);
+check('legacy device-name key pruned', !isset($cacheAfter['sdc']));
+checkEq('standby entry kept under its id', 39111, $cacheAfter['WDC_WD140EDGZ-11B1PA0_Y5KVSLPY']['power_on_hours'] ?? null);
+checkEq('cache key: disk id', 'WDC_X_1', getDriveCacheKey('sdb', ['id' => 'WDC_X_1']));
+checkEq('cache key: no id -> dev: prefix', 'dev:sdb', getDriveCacheKey('sdb', []));
 $mtimeBefore = filemtime(DRIVEAGE_POH_CACHE_FILE);
 sleep(1);
 clearstatcache();

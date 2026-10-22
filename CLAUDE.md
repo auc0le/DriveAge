@@ -44,7 +44,7 @@ Pure-PHP test suite - no Unraid or smartmontools required. Covers the smartctl p
 3. `/var/local/emhttp/smart/<name>.ssa` - cached overall-health verdict (PASSED/FAILED).
 4. Direct `smartctl -a -j` - last resort only (no cache file, drive not spun down). Parse the universal `power_on_time`/`temperature`/`smart_status` JSON fields first (covers SAS), then type-specific tables.
 
-Spun-down drives are **never queried**. Their last-known power-on hours live in `/boot/config/plugins/driveage/drivecache.json` (single JSON file on flash, rewritten only when a value changes - keep it write-on-change to protect the flash device).
+Spun-down drives are **never queried**. Their last-known power-on hours live in `/boot/config/plugins/driveage/drivecache.json` (single JSON file on flash, rewritten only when a value changes - keep it write-on-change to protect the flash device). Entries are keyed by Unraid's disk id (`getDriveCacheKey()`), never by `sdX` - device letters change between boots.
 
 ### Key Invariants (do not regress these)
 

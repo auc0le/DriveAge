@@ -125,7 +125,7 @@ function getAllDrives($config) {
         if ($driveInfo) {
             // Collect fresh POH readings for the write-on-change cache
             if (!$driveInfo['is_standby'] && $driveInfo['power_on_hours'] !== null && $driveInfo['power_on_hours'] > 0) {
-                $pohUpdates[$deviceName] = [
+                $pohUpdates[getDriveCacheKey($deviceName, $entry['ini'])] = [
                     'power_on_hours' => $driveInfo['power_on_hours'],
                     'model' => $driveInfo['model'],
                     'serial' => $driveInfo['serial']
@@ -339,7 +339,7 @@ function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
     // Standby drives: fill POH/model/serial from the persistent cache
     $cacheTimestamp = null;
     if ($isStandby && $powerOnHours === null) {
-        $cached = getPohCacheEntry($pohCache, $deviceName);
+        $cached = getPohCacheEntry($pohCache, getDriveCacheKey($deviceName, $ini));
         if ($cached !== null) {
             $powerOnHours = intval($cached['power_on_hours']);
             $model = $model ?? ($cached['model'] ?? null);

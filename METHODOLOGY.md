@@ -260,7 +260,7 @@ DriveAge does not poll drives itself. Sources, in order of authority:
 3. **`/var/local/emhttp/smart/<name>.ssa`** - Unraid's cached overall-health verdict.
 4. **Direct `smartctl -a -j`** - last resort only, when no cache file exists and the drive is not spun down (e.g. first run). The JSON parse uses smartctl's universal `power_on_time`/`temperature`/`smart_status` fields, so SAS drives work too.
 
-Spun-down drives are **never woken**. Their last-known power-on hours persist in `/boot/config/plugins/driveage/drivecache.json` (single file, rewritten only when a value changes), so they survive reboots.
+Spun-down drives are **never woken**. Their last-known power-on hours persist in `/boot/config/plugins/driveage/drivecache.json` (single file, rewritten only when a value changes, keyed by Unraid's disk id so a drive keeps its own values even if its `sdX` letter changes), so they survive reboots.
 
 ---
 
