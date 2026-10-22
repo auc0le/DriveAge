@@ -81,6 +81,7 @@ try {
             'refresh_interval' => intval($config['REFRESH_INTERVAL']),
             'default_sort' => $config['DEFAULT_SORT'],
             'default_sort_dir' => $config['DEFAULT_SORT_DIR'],
+            'row_style' => $config['ROW_STYLE'],
             'temperature_unit' => getTemperatureUnit()
         ]
     ];

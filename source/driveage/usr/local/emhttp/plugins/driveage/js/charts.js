@@ -1,439 +1,117 @@
 /**
- * DriveAge Plugin - Chart Rendering Module
- * Handles Chart.js visualization of drive data
- */
-
-// Chart instances (global for cleanup)
-let riskChart = null;
-let temperatureChart = null;
-let sizeChart = null;
-
-// Neutral color for drives with no SMART data
-const UNKNOWN_COLOR = '#9E9E9E';
-
-// Temperature bin thresholds (°C) - single source for binning AND tooltips.
-// Kept in sync with getTemperatureClass() on the server.
-const TEMP_THRESHOLDS = {
-    hdd:  { elevated: 40, high: 50, critical: 60 },
-    nvme: { elevated: 50, high: 65, critical: 75 }
-};
-
-/**
- * Main entry point - renders all charts
+ * DriveAge Plugin - Charts
  *
- * @param {Object} driveData - Full data object from API
+ * Two small dependency-free charts (inline SVG + CSS) replacing the 200 KB
+ * Chart.js bundle. Colors come from the same CSS custom properties as the
+ * risk badges, so user-configured category colors and every Unraid theme
+ * apply without any JavaScript color handling.
  */
-function renderCharts(driveData) {
-    if (!driveData || !driveData.drives || driveData.drives.length === 0) {
-        hideCharts();
-        return;
+window.DriveAge = window.DriveAge || {};
+
+(function (DA) {
+    'use strict';
+
+    const CATEGORIES = ['minimal_risk', 'low_risk', 'moderate_risk', 'elevated_risk', 'high_risk', 'unknown'];
+
+    // Replacement timeline buckets by months_remaining
+    const BUCKETS = [
+        { key: 'now', label: 'Now', test: m => m === 0 },
+        { key: 'y1', label: '≤ 1 year', test: m => m > 0 && m <= 12 },
+        { key: 'y2', label: '1–2 years', test: m => m > 12 && m <= 24 },
+        { key: 'y3', label: '2–3 years', test: m => m > 24 && m <= 36 },
+        { key: 'y5', label: '3–5 years', test: m => m > 36 && m <= 60 },
+        { key: 'later', label: '5+ years', test: m => m > 60 },
+        { key: 'unknown', label: 'Unknown', test: m => m === null }
+    ];
+
+    function esc(value) {
+        return DA.escapeHtml(value);
     }
 
-    const container = document.getElementById('charts-container');
-    if (container) {
-        container.style.display = 'block';
+    function categoryLabel(category, data) {
+        return (data.labels && data.labels[category]) || category;
     }
 
-    // Follow the active Unraid theme: chart text inherits the page color
-    if (typeof Chart !== 'undefined' && Chart.defaults) {
-        Chart.defaults.color = getComputedStyle(document.body).color;
-    }
-
-    destroyCharts();
-
-    renderRiskChart(driveData);
-    renderTemperatureChart(driveData);
-    renderSizeChart(driveData);
-}
-
-/**
- * Category label - always from the server (single source of truth).
- *
- * @param {string} category - Risk category key
- * @param {Object} driveData - Full data object from API
- * @return {string} Human-readable label
- */
-function getCategoryLabel(category, driveData) {
-    if (driveData && driveData.labels && driveData.labels[category]) {
-        return driveData.labels[category];
-    }
-    return category === 'unknown' ? 'N/A (no SMART data)' : category;
-}
-
-/**
- * Aggregate drives by risk category
- *
- * @param {Array} drives - Array of drive objects
- * @return {Object} Category counts
- */
-function aggregateRiskData(drives) {
-    const categories = {
-        'minimal_risk': 0,
-        'low_risk': 0,
-        'moderate_risk': 0,
-        'elevated_risk': 0,
-        'high_risk': 0,
-        'unknown': 0
-    };
-
-    drives.forEach(drive => {
-        const category = drive.risk_category;
-        if (Object.prototype.hasOwnProperty.call(categories, category)) {
-            categories[category]++;
-        } else {
-            categories.unknown++;
+    /**
+     * Donut of drives per overall risk category, with a counted legend.
+     */
+    function renderRisk(el, data) {
+        if (!el) return;
+        const counts = {};
+        CATEGORIES.forEach(c => { counts[c] = 0; });
+        data.drives.forEach(d => {
+            counts[Object.prototype.hasOwnProperty.call(counts, d.risk_category) ? d.risk_category : 'unknown']++;
+        });
+        const total = data.drives.length;
+        if (!total) {
+            el.innerHTML = '<p class="muted">No drives.</p>';
+            return;
         }
-    });
 
-    return categories;
-}
+        // Circle with circumference 100: dash lengths are percentages.
+        // Offset 25 starts the first segment at 12 o'clock.
+        const r = 15.91549430918954;
+        let done = 0;
+        let segments = '';
+        CATEGORIES.forEach(c => {
+            if (!counts[c]) return;
+            const pct = counts[c] / total * 100;
+            segments += `<circle class="donut-seg seg-${c}" cx="21" cy="21" r="${r}" ` +
+                `stroke-dasharray="${pct.toFixed(3)} ${(100 - pct).toFixed(3)}" stroke-dashoffset="${(125 - done).toFixed(3)}">` +
+                `<title>${esc(categoryLabel(c, data))}: ${counts[c]}</title></circle>`;
+            done += pct;
+        });
 
-/**
- * Render risk category distribution chart (donut)
- *
- * @param {Object} driveData - Full data object from API
- */
-function renderRiskChart(driveData) {
-    const ctx = document.getElementById('risk-chart');
-    if (!ctx) return;
+        const legend = CATEGORIES.filter(c => counts[c]).map(c =>
+            `<li><span class="legend-swatch age-${c}"></span>` +
+            `<span class="legend-text">${esc(categoryLabel(c, data))}</span>` +
+            `<span class="legend-count">${counts[c]}</span></li>`
+        ).join('');
 
-    const riskData = aggregateRiskData(driveData.drives);
-
-    const keys = ['minimal_risk', 'low_risk', 'moderate_risk', 'elevated_risk', 'high_risk'];
-    const labels = keys.map(k => getCategoryLabel(k, driveData));
-    const data = keys.map(k => riskData[k]);
-    const colors = keys.map(k => driveData.colors[k]);
-
-    // Only show the Unknown slice when it exists
-    if (riskData.unknown > 0) {
-        labels.push(getCategoryLabel('unknown', driveData));
-        data.push(riskData.unknown);
-        colors.push(UNKNOWN_COLOR);
+        const summary = CATEGORIES.filter(c => counts[c]).map(c => categoryLabel(c, data) + ': ' + counts[c]).join(', ');
+        el.innerHTML =
+            `<div class="donut-wrap"><svg class="donut" viewBox="0 0 42 42" role="img" aria-label="${esc('Risk distribution. ' + summary)}">` +
+            `<circle class="donut-track" cx="21" cy="21" r="${r}"></circle>${segments}` +
+            `<text x="21" y="19.5" class="donut-total">${total}</text>` +
+            `<text x="21" y="27.5" class="donut-caption">drives</text></svg>` +
+            `<ul class="donut-legend">${legend}</ul></div>`;
     }
 
-    riskChart = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: labels,
-            datasets: [{
-                data: data,
-                backgroundColor: colors,
-                borderWidth: 2,
-                borderColor: '#fff'
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: {
-                        boxWidth: 15,
-                        padding: 10,
-                        font: { size: 11 }
-                    }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const label = context.label || '';
-                            const value = context.parsed || 0;
-                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-                            return label + ': ' + value + ' drives (' + percentage + '%)';
-                        }
-                    }
-                }
+    /**
+     * Horizontal bars of drives due per time bucket, with the capacity
+     * involved and the drive names - the replacement budgeting view.
+     */
+    function renderForecast(el, data) {
+        if (!el) return;
+        const rows = BUCKETS.map(b => ({ bucket: b, drives: [], bytes: 0 }));
+
+        data.drives.forEach(d => {
+            const p = d.replacement_prediction || {};
+            const m = (p.months_remaining === null || p.months_remaining === undefined) ? null : p.months_remaining;
+            const row = rows.find(r => r.bucket.test(m));
+            if (row) {
+                row.drives.push(d);
+                row.bytes += d.size_bytes || 0;
             }
-        }
-    });
-}
+        });
 
-/**
- * Bin a temperature into a severity bucket for a drive class.
- *
- * @param {number|null} temp - Temperature in °C
- * @param {string} kind - 'hdd' or 'nvme'
- * @return {string} Bucket name
- */
-function binTemperature(temp, kind) {
-    if (temp === null || temp === undefined || temp === '') {
-        return 'unknown';
-    }
-    const t = TEMP_THRESHOLDS[kind];
-    if (temp >= t.critical) return 'critical';
-    if (temp >= t.high) return 'high';
-    if (temp >= t.elevated) return 'elevated';
-    return 'normal';
-}
-
-/**
- * Human-readable range text for a temperature bucket.
- *
- * @param {string} bucket - Bucket name
- * @param {string} kind - 'hdd' or 'nvme'
- * @param {string} unit - 'C' or 'F'
- * @return {string} Range text like "(40-49°C)"
- */
-function tempRangeText(bucket, kind, unit) {
-    const t = TEMP_THRESHOLDS[kind];
-    const conv = c => unit === 'F' ? Math.round(c * 9 / 5) + 32 : c;
-    const u = '°' + unit;
-
-    switch (bucket) {
-        case 'Normal':   return `(<${conv(t.elevated)}${u})`;
-        case 'Elevated': return `(${conv(t.elevated)}-${conv(t.high) - 1}${u})`;
-        case 'High':     return `(${conv(t.high)}-${conv(t.critical) - 1}${u})`;
-        case 'Critical': return `(≥${conv(t.critical)}${u})`;
-        default:         return '';
-    }
-}
-
-/**
- * Aggregate drives by temperature bucket, separated by drive type
- *
- * @param {Array} drives - Array of drive objects
- * @return {Object} Bucket counts for HDD and NVMe
- */
-function aggregateTemperatureData(drives) {
-    const empty = () => ({ normal: 0, elevated: 0, high: 0, critical: 0, unknown: 0 });
-    const bins = { hdd: empty(), nvme: empty() };
-
-    drives.forEach(drive => {
-        const kind = drive.physical_type === 'nvme' ? 'nvme' : 'hdd';
-        bins[kind][binTemperature(drive.temperature, kind)]++;
-    });
-
-    return bins;
-}
-
-/**
- * Render temperature distribution chart (grouped bar)
- *
- * @param {Object} driveData - Full data object from API
- */
-function renderTemperatureChart(driveData) {
-    const ctx = document.getElementById('temperature-chart');
-    if (!ctx) return;
-
-    const tempData = aggregateTemperatureData(driveData.drives);
-    const tempUnit = driveData.config && driveData.config.temperature_unit ? driveData.config.temperature_unit : 'C';
-
-    const labels = ['Normal', 'Elevated', 'High', 'Critical', 'Unknown'];
-    const order = ['normal', 'elevated', 'high', 'critical', 'unknown'];
-
-    temperatureChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'HDD',
-                data: order.map(k => tempData.hdd[k]),
-                backgroundColor: '#2196F3',
-                borderWidth: 1,
-                borderColor: '#fff'
-            }, {
-                label: 'NVMe',
-                data: order.map(k => tempData.nvme[k]),
-                backgroundColor: '#FF9800',
-                borderWidth: 1,
-                borderColor: '#fff'
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        stepSize: 1,
-                        font: { size: 11 }
-                    }
-                },
-                x: {
-                    ticks: {
-                        font: { size: 11 }
-                    }
-                }
-            },
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'top',
-                    labels: {
-                        boxWidth: 15,
-                        padding: 10,
-                        font: { size: 11 }
-                    }
-                },
-                tooltip: {
-                    callbacks: {
-                        title: function(context) {
-                            return context[0].label;
-                        },
-                        label: function(context) {
-                            const kind = context.datasetIndex === 0 ? 'hdd' : 'nvme';
-                            const range = tempRangeText(context.label, kind, tempUnit);
-                            return context.dataset.label + ' ' + range + ': ' + context.parsed.y + ' drives';
-                        }
-                    }
-                }
-            }
-        }
-    });
-}
-
-/**
- * Aggregate drives by actual unique sizes, separated by drive type
- *
- * @param {Array} drives - Array of drive objects
- * @return {Object} Size labels and counts for HDD, NVMe, and USB
- */
-function aggregateSizeData(drives) {
-    const sizeMap = new Map();
-
-    drives.forEach(drive => {
-        const sizeHuman = drive.size_human || 'Unknown';
-        const sizeBytes = drive.size_bytes || 0;
-        const driveType = drive.physical_type || 'hdd';
-
-        if (!sizeMap.has(sizeHuman)) {
-            sizeMap.set(sizeHuman, {
-                bytes: sizeBytes,
-                hdd: 0,
-                nvme: 0,
-                usb: 0
-            });
-        }
-
-        const sizeEntry = sizeMap.get(sizeHuman);
-        if (driveType === 'nvme') {
-            sizeEntry.nvme++;
-        } else if (driveType === 'usb') {
-            sizeEntry.usb++;
-        } else {
-            sizeEntry.hdd++;
-        }
-    });
-
-    const sortedSizes = Array.from(sizeMap.entries())
-        .sort((a, b) => a[1].bytes - b[1].bytes);
-
-    return {
-        labels: sortedSizes.map(entry => entry[0]),
-        hdd: sortedSizes.map(entry => entry[1].hdd),
-        nvme: sortedSizes.map(entry => entry[1].nvme),
-        usb: sortedSizes.map(entry => entry[1].usb)
-    };
-}
-
-/**
- * Render drive size distribution chart (grouped bar)
- *
- * @param {Object} driveData - Full data object from API
- */
-function renderSizeChart(driveData) {
-    const ctx = document.getElementById('size-chart');
-    if (!ctx) return;
-
-    const sizeData = aggregateSizeData(driveData.drives);
-
-    sizeChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: sizeData.labels,
-            datasets: [{
-                label: 'HDD',
-                data: sizeData.hdd,
-                backgroundColor: '#2196F3',
-                borderWidth: 1,
-                borderColor: '#fff'
-            }, {
-                label: 'NVMe',
-                data: sizeData.nvme,
-                backgroundColor: '#FF9800',
-                borderWidth: 1,
-                borderColor: '#fff'
-            }, {
-                label: 'USB',
-                data: sizeData.usb,
-                backgroundColor: '#4CAF50',
-                borderWidth: 1,
-                borderColor: '#fff'
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        stepSize: 1,
-                        font: { size: 11 }
-                    }
-                },
-                x: {
-                    ticks: {
-                        font: { size: 11 }
-                    }
-                }
-            },
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'top',
-                    labels: {
-                        boxWidth: 15,
-                        padding: 10,
-                        font: { size: 11 }
-                    }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return (context.dataset.label || '') + ': ' + context.parsed.y + ' drives';
-                        }
-                    }
-                }
-            }
-        }
-    });
-}
-
-/**
- * Destroy all chart instances for cleanup
- */
-function destroyCharts() {
-    if (riskChart) {
-        riskChart.destroy();
-        riskChart = null;
+        const max = Math.max(1, ...rows.map(r => r.drives.length));
+        el.innerHTML = '<div class="forecast">' + rows.map(r => {
+            const n = r.drives.length;
+            const width = (n / max * 100).toFixed(1);
+            const names = r.drives
+                .sort((a, b) => (a.replacement_prediction.months_remaining ?? 1e9) - (b.replacement_prediction.months_remaining ?? 1e9))
+                .map(d => d.device_name);
+            const shown = names.slice(0, 6).join(', ') + (names.length > 6 ? ' +' + (names.length - 6) + ' more' : '');
+            const tb = r.bytes / 1e12;
+            const capacity = n ? (tb >= 10 ? tb.toFixed(0) : tb.toFixed(1)) + ' TB' : '';
+            return `<div class="fc-row fc-${r.bucket.key}${n ? '' : ' fc-empty'}">` +
+                `<span class="fc-label">${esc(r.bucket.label)}</span>` +
+                `<span class="fc-track"><span class="fc-bar" style="width:${width}%"></span></span>` +
+                `<span class="fc-count">${n}${capacity ? ' <small>· ' + esc(capacity) + '</small>' : ''}</span>` +
+                `<span class="fc-names" title="${esc(names.join(', '))}">${esc(shown)}</span></div>`;
+        }).join('') + '</div>';
     }
 
-    if (temperatureChart) {
-        temperatureChart.destroy();
-        temperatureChart = null;
-    }
-
-    if (sizeChart) {
-        sizeChart.destroy();
-        sizeChart = null;
-    }
-}
-
-/**
- * Hide charts container when no data
- */
-function hideCharts() {
-    const container = document.getElementById('charts-container');
-    if (container) {
-        container.style.display = 'none';
-    }
-}
-
-/**
- * Expose destroyCharts to global scope for dashboard.js
- */
-window.destroyCharts = destroyCharts;
+    DA.charts = { risk: renderRisk, forecast: renderForecast };
+})(window.DriveAge);

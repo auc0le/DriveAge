@@ -262,7 +262,7 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
 </style>
 
 <div class="driveage-container">
-        <form method="POST" action="/update.php" target="progressFrame">
+        <form id="driveage-settings-form" method="POST" action="/update.php" target="progressFrame">
             <input type="hidden" name="#file" value="/boot/config/plugins/driveage/driveage.cfg">
 
             <div class="settings-form">
@@ -532,12 +532,23 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
                             <option value="size_bytes" <?= selected($config['DEFAULT_SORT'], 'size_bytes'); ?>>Size</option>
                             <option value="temperature" <?= selected($config['DEFAULT_SORT'], 'temperature'); ?>>Temperature</option>
                             <option value="smart_status" <?= selected($config['DEFAULT_SORT'], 'smart_status'); ?>>SMART Status</option>
+                            <option value="risk_category" <?= selected($config['DEFAULT_SORT'], 'risk_category'); ?>>Risk</option>
+                            <option value="health_status" <?= selected($config['DEFAULT_SORT'], 'health_status'); ?>>Health</option>
                         </select>
                         <select name="DEFAULT_SORT_DIR">
                             <option value="asc" <?= selected($config['DEFAULT_SORT_DIR'], 'asc'); ?>>Ascending</option>
                             <option value="desc" <?= selected($config['DEFAULT_SORT_DIR'], 'desc'); ?>>Descending</option>
                         </select>
                         <div class="help-text">Default column and sort direction for the dashboard table</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="driveage-row-style">Row Coloring</label>
+                        <select name="ROW_STYLE" id="driveage-row-style">
+                            <option value="accent" <?= selected($config['ROW_STYLE'], 'accent'); ?>>Accent - colored edge and risk badge</option>
+                            <option value="full" <?= selected($config['ROW_STYLE'], 'full'); ?>>Full row - whole row in the category color</option>
+                        </select>
+                        <div class="help-text">How the risk category colors are applied to dashboard rows</div>
                     </div>
 
                     <div class="form-group">
@@ -637,11 +648,15 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
     </div>
 
 <script>
-// Real-time preview, duplicate-color validation and year->hour threshold sync
-document.addEventListener('DOMContentLoaded', function() {
-    const colorInputs = document.querySelectorAll('.color-input');
-    const thresholdInputs = document.querySelectorAll('.threshold-years');
-    const form = document.querySelector('form');
+// Real-time preview, duplicate-color validation and year->hour threshold sync.
+// Scoped to this form: Unraid renders every DriveAge tab (and its own forms)
+// into one document, so a bare querySelector('form') can find the wrong one.
+(function () {
+function initDriveAgeSettings() {
+    const form = document.getElementById('driveage-settings-form');
+    if (!form) return;
+    const colorInputs = form.querySelectorAll('.color-input');
+    const thresholdInputs = form.querySelectorAll('.threshold-years');
     const submitButton = form.querySelector('input[type="submit"]');
 
     // Real-time preview updates for colors
@@ -667,7 +682,7 @@ document.addEventListener('DOMContentLoaded', function() {
         input.addEventListener('input', function() {
             const years = parseFloat(this.value) || 0;
             const hours = Math.round(years * 8760);
-            const hiddenInput = document.querySelector(`input[name="${this.dataset.field}"]`);
+            const hiddenInput = form.querySelector(`input[name="${this.dataset.field}"]`);
             if (hiddenInput) {
                 hiddenInput.value = hours;
             }
@@ -676,7 +691,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Duplicate color validation (background colors only)
     function checkDuplicateColors() {
-        const bgColorInputs = document.querySelectorAll('.bg-color');
+        const bgColorInputs = form.querySelectorAll('.bg-color');
         const colors = Array.from(bgColorInputs).map(input => input.value.toUpperCase());
         const hasDuplicates = colors.length !== new Set(colors).size;
 
@@ -720,10 +735,17 @@ document.addEventListener('DOMContentLoaded', function() {
     checkDuplicateColors();
 
     // Initialize all previews with current colors
-    document.querySelectorAll('.color-preview-inline').forEach(preview => {
+    form.querySelectorAll('.color-preview-inline').forEach(preview => {
         const colorRow = preview.closest('.color-row');
         preview.style.backgroundColor = colorRow.querySelector('.bg-color').value.toUpperCase();
         preview.style.color = colorRow.querySelector('.text-color').value.toUpperCase();
     });
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initDriveAgeSettings);
+} else {
+    initDriveAgeSettings();
+}
+})();
 </script>

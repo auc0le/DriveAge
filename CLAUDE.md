@@ -53,7 +53,7 @@ Spun-down drives are **never queried**. Their last-known power-on hours live in 
 - **SMART overall-health FAILED** forces health `failing` (overall High Risk, label "Failing (SMART)"), a "Replace Now" prediction, and a first-class health warning. "Replace Now" is reserved for SMART evidence; reaching the age target shows "Due now".
 - All five Google-study attributes are evaluated: 5, 187, 188, 197, 198. Attribute 188 raw values above 0xFFFF are masked to the low 16 bits (composite vendor encoding).
 - Every prediction result includes `method` and `confidence`.
-- Every setting shown on the Settings page must actually do something (drive-type filters, auto-refresh, default sort are all implemented in `dashboard.js`/`get_drive_data.php`).
+- Every setting shown on the Settings page must actually do something (drive-type filters, row style, auto-refresh, default sort are all implemented in `dashboard.js`/`get_drive_data.php`/`filterDrivesByType()`).
 - The JSON endpoint returns plain data; CSS classes are computed server-side (`*_class` fields), HTML is built client-side with `escapeHtml()`.
 
 ### Unraid .page Format
@@ -113,7 +113,8 @@ Release checklist:
 
 ## Important Constraints
 
-- **No npm/node/composer**: plain PHP 8.x + vanilla JS (Chart.js vendored in `js/vendor/`)
-- **Theme-aware UI**: Unraid ships white/black/azure/gray themes. Use translucent `rgba(128,128,128,x)` surfaces and `color: inherit`; never hardcode light backgrounds with dark text. Chart.js text color is set from `getComputedStyle(document.body).color` at render time.
+- **No npm/node/composer**: plain PHP 8.x + vanilla JS, no third-party libraries (charts are inline SVG/CSS in `charts.js`)
+- **Theme-aware UI**: Unraid ships white/black/azure/gray themes. Use translucent `rgba(128,128,128,x)` surfaces and `color: inherit`; never hardcode light backgrounds with dark text. Category colors are CSS custom properties `--da-<category>-bg/-fg` written by `DriveAgeDashboard.page` from Settings; use them with a fallback at the use site (`var(--da-high_risk-bg, #F44336)`) and never define them on `:root` in `driveage.css`.
+- **One document, one PHP scope**: Unraid renders all `Tabs="true"` pages (Dashboard, Settings, Help) into a single HTML document in a single PHP request. JS lives in closures under `window.DriveAge`; scope DOM queries to your own container/form (never `document.querySelector('form')`); prefix PHP variables/functions defined in `.page` files (`$da...`) to avoid collisions; scripts must not rely on `DOMContentLoaded` still being pending (check `document.readyState`).
 - **Unraid-specific paths** are guarded defines (`DRIVEAGE_STATE_DIR`, `DRIVEAGE_CONFIG_FILE`, `DRIVEAGE_POH_CACHE_FILE`) so tests can redirect them to fixtures - preserve that pattern for any new path.
 - **Slackware packaging**: `.txz` via `build.sh`; `tests/` and repo docs are outside `source/` and never ship.

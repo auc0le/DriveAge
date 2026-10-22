@@ -27,11 +27,15 @@ DriveAge is an Unraid plugin that provides intelligent drive health monitoring w
 - **Honest Data Freshness**: Shows how old the underlying SMART cache is and Unraid's actual refresh interval
 
 ### Display Options
-- **Sortable Columns** with a configurable default sort
-- **Hierarchical Grouping**: Drives organized by array and type (Parity, Array, Cache/Pool, USB Boot, Unassigned) with collapsible groups
+- **Summary at a glance**: drives needing attention, replacements due within 12 months, and the next replacement
+- **Replacement Timeline**: drives (and capacity) due now, within a year, 1-2 years and beyond - for budgeting
+- **Drive Details**: click any row for the SMART values, the age/wear band vs SMART health, and how the estimate was worked out
+- **Sortable Columns** with a configurable default sort (keyboard accessible; your sort and collapsed groups are remembered)
+- **Hierarchical Grouping**: Drives organized like Unraid's Main page (array, cache pool, other pools, unassigned, boot flash) with collapsible groups
 - **Drive-Type Filters**: Show/hide parity, array, cache/pool, and unassigned devices
 - **Auto-Refresh**: Optional, with a configurable interval
-- **Theme-Aware**: Follows Unraid's white/black/azure/gray themes (charts included)
+- **Row Coloring**: colored edge + risk badge (default) or the classic full-row color
+- **Theme-Aware**: Follows Unraid's white/black/azure/gray themes (charts included); no third-party JavaScript
 
 ### Configuration
 - **Customizable Thresholds, Labels and Colors** for every risk category
@@ -57,8 +61,8 @@ DriveAge is an Unraid plugin that provides intelligent drive health monitoring w
 
 ### Accessing the Dashboard
 1. Navigate to **Settings** → **User Utilities** → **DriveAge**
-2. View all drives with color-coded risk indicators and charts
-3. Click column headers to sort; click group headers to collapse
+2. View all drives with color-coded risk indicators, a summary and charts
+3. Click column headers to sort; click group headers to collapse; click a drive for details
 4. Click **Refresh** to update drive data
 
 ### Interpreting Risk Categories
@@ -268,8 +272,8 @@ DriveAge/
 │       │   └── diagnose.php       # CLI diagnostic
 │       ├── styles/driveage.css    # Theme-aware stylesheet
 │       └── js/
-│           ├── dashboard.js       # Table rendering, sorting, filters, auto-refresh
-│           ├── charts.js          # Chart.js visualizations (theme-aware)
+│           ├── dashboard.js       # Summary, table, details, sorting, auto-refresh
+│           ├── charts.js          # Risk donut + replacement timeline (inline SVG/CSS)
 │           └── settings.js        # Reset-to-defaults
 ├── tests/
 │   ├── run.php                    # Test runner (php tests/run.php)

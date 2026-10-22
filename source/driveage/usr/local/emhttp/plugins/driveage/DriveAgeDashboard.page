@@ -10,94 +10,92 @@ require_once '/usr/local/emhttp/plugins/driveage/include/helpers.php';
 
 $config = loadConfig();
 
-// Helper function to format years without .0 for whole numbers
-function formatYears($hours) {
-    $years = $hours / 8760;
-    if (floor($years) == $years) {
-        return number_format($years, 0);
-    }
-    return number_format($years, 1);
-}
-
 // Cache busting tied to the plugin version (single source: version.php)
 $cacheVersion = DRIVEAGE_VERSION;
+
+$daCategories = ['minimal_risk', 'low_risk', 'moderate_risk', 'elevated_risk', 'high_risk'];
+
+// Hours -> years for the legend, without a trailing ".0"
+$daYears = fn($hours) => rtrim(rtrim(number_format($hours / 8760, 1, '.', ''), '0'), '.');
 ?>
+<script>
+// Start loading drive data immediately, in parallel with the rest of the page
+window.driveagePending = fetch('/plugins/driveage/scripts/get_drive_data.php', { credentials: 'same-origin' })
+    .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.json(); });
+window.driveagePending.catch(function () {}); // handled by dashboard.js
+</script>
 <link rel="stylesheet" href="/plugins/driveage/styles/driveage.css?v=<?= e($cacheVersion); ?>">
+<style>
+/* Category colors from Settings (validated #RRGGBB values) */
+:root {
+<?php foreach ($daCategories as $daCat): $daKey = strtoupper($daCat); ?>
+    --da-<?= $daCat ?>-bg: <?= e($config['COLOR_' . $daKey]); ?>;
+    --da-<?= $daCat ?>-fg: <?= e($config['TEXTCOLOR_' . $daKey]); ?>;
+<?php endforeach; ?>
+}
+</style>
+<script defer src="/plugins/driveage/js/charts.js?v=<?= e($cacheVersion); ?>"></script>
+<script defer src="/plugins/driveage/js/dashboard.js?v=<?= e($cacheVersion); ?>"></script>
 
-<script src="/plugins/driveage/js/dashboard.js?v=<?= e($cacheVersion); ?>"></script>
-<script src="/plugins/driveage/js/vendor/chart.min.js?v=<?= e($cacheVersion); ?>"></script>
-<script src="/plugins/driveage/js/charts.js?v=<?= e($cacheVersion); ?>"></script>
-
-<div class="driveage-container">
+<div class="driveage-container" id="driveage-dashboard">
     <div class="driveage-header">
-        <div>
-            <span id="last-updated" class="last-updated">Loading...</span>
-            <span id="data-age" class="data-age"></span>
-        </div>
+        <div id="driveage-summary" class="driveage-summary" aria-live="polite"></div>
         <div class="driveage-controls">
-            <button id="refresh-btn" title="Refresh drive data">
-                <span>&#8635;</span> Refresh
+            <span id="data-age" class="data-age"></span>
+            <button type="button" id="refresh-btn" title="Reload drive data">
+                <i class="fa fa-refresh" aria-hidden="true"></i> Refresh
             </button>
         </div>
     </div>
 
-    <!-- Legend Section (colors rendered server-side; kept in sync client-side) -->
+    <div id="driveage-error" class="driveage-error" role="alert" hidden></div>
+
+    <!-- Legend (colors from Settings; ranges are the HDD age bands) -->
     <div class="driveage-legend">
+<?php foreach ($daCategories as $i => $daCat): ?>
         <div class="legend-item">
-            <div class="legend-color age-minimal_risk" style="background-color: <?= e($config['COLOR_MINIMAL_RISK']); ?>;"></div>
-            <span class="legend-label"><?= e(getAgeLabel('minimal_risk', $config)); ?></span>
-            <span class="legend-hours">(&lt; <?= e(formatYears($config['THRESHOLD_MINIMAL_RISK'])); ?> years)</span>
+            <span class="legend-swatch age-<?= $daCat ?>"></span>
+            <span class="legend-label"><?= e(getAgeLabel($daCat, $config)); ?></span>
+            <span class="legend-hours"><?php
+                $daThresholds = ['THRESHOLD_MINIMAL_RISK', 'THRESHOLD_LOW_RISK', 'THRESHOLD_MODERATE_RISK', 'THRESHOLD_ELEVATED_RISK'];
+                if ($i === 0) {
+                    echo '(&lt; ' . esc($daYears($config[$daThresholds[0]])) . ' yr)';
+                } elseif ($i === 4) {
+                    echo '(&ge; ' . esc($daYears($config[$daThresholds[3]])) . ' yr)';
+                } else {
+                    echo '(' . esc($daYears($config[$daThresholds[$i - 1]])) . '-' . esc($daYears($config[$daThresholds[$i]])) . ' yr)';
+                }
+            ?></span>
         </div>
+<?php endforeach; ?>
         <div class="legend-item">
-            <div class="legend-color age-low_risk" style="background-color: <?= e($config['COLOR_LOW_RISK']); ?>;"></div>
-            <span class="legend-label"><?= e(getAgeLabel('low_risk', $config)); ?></span>
-            <span class="legend-hours">(<?= e(formatYears($config['THRESHOLD_MINIMAL_RISK'])); ?>-<?= e(formatYears($config['THRESHOLD_LOW_RISK'])); ?> years)</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color age-moderate_risk" style="background-color: <?= e($config['COLOR_MODERATE_RISK']); ?>;"></div>
-            <span class="legend-label"><?= e(getAgeLabel('moderate_risk', $config)); ?></span>
-            <span class="legend-hours">(<?= e(formatYears($config['THRESHOLD_LOW_RISK'])); ?>-<?= e(formatYears($config['THRESHOLD_MODERATE_RISK'])); ?> years)</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color age-elevated_risk" style="background-color: <?= e($config['COLOR_ELEVATED_RISK']); ?>;"></div>
-            <span class="legend-label"><?= e(getAgeLabel('elevated_risk', $config)); ?></span>
-            <span class="legend-hours">(<?= e(formatYears($config['THRESHOLD_MODERATE_RISK'])); ?>-<?= e(formatYears($config['THRESHOLD_ELEVATED_RISK'])); ?> years)</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color age-high_risk" style="background-color: <?= e($config['COLOR_HIGH_RISK']); ?>;"></div>
-            <span class="legend-label"><?= e(getAgeLabel('high_risk', $config)); ?></span>
-            <span class="legend-hours">(&ge; <?= e(formatYears($config['THRESHOLD_ELEVATED_RISK'])); ?> years)</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color age-unknown"></div>
+            <span class="legend-swatch age-unknown"></span>
             <span class="legend-label"><?= e(getAgeLabel('unknown')); ?></span>
         </div>
+        <p class="legend-note">
+            Year ranges are HDD age bands; SSD/NVMe bands follow wear. A drive's color is the worse of its
+            age/wear band and its SMART health - a SMART warning raises it to at least Elevated, a failure to High.
+            <a href="/Settings/DriveAgeHelp#risk-model">How risk is assessed</a>
+        </p>
     </div>
 
-    <!-- Charts Section -->
-    <div id="charts-container" class="driveage-charts-container">
-        <div class="chart-grid">
-            <div class="chart-card">
-                <h3>Risk Category Distribution</h3>
-                <canvas id="risk-chart"></canvas>
-            </div>
-            <div class="chart-card">
-                <h3>Temperature Distribution</h3>
-                <canvas id="temperature-chart"></canvas>
-            </div>
-            <div class="chart-card">
-                <h3>Drive Size Distribution</h3>
-                <canvas id="size-chart"></canvas>
-            </div>
-        </div>
+    <div id="charts-container" class="driveage-charts">
+        <section class="chart-card">
+            <h3>Risk Distribution</h3>
+            <div id="risk-chart" class="chart-body"></div>
+        </section>
+        <section class="chart-card">
+            <h3>Replacement Timeline</h3>
+            <div id="forecast-chart" class="chart-body"></div>
+        </section>
     </div>
 
-    <!-- Drive data container (populated by JavaScript) -->
-    <div id="drive-container"></div>
+    <div id="drive-container">
+        <div class="driveage-loading"><span class="spinner" aria-hidden="true"></span> Loading drive data...</div>
+    </div>
 
-    <!-- Footer Section -->
     <div class="driveage-footer">
-        <span id="drive-count">Total Drives: 0</span> |
+        <span id="drive-count"></span>
         DriveAge v<?= e(DRIVEAGE_VERSION); ?>
     </div>
 </div>

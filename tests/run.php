@@ -68,7 +68,7 @@ checkEq('serial', 'Y5KVTEST', $d['serial']);
 checkEq('overall health', 'PASSED', $d['smart_status']);
 checkEq('reallocated=5', 5, $d['hdd_reallocated_sectors']);
 checkEq('reported uncorrectable=2', 2, $d['hdd_reported_uncorrectable']);
-checkEq('command timeout raw composite parsed', 65539, $d['hdd_command_timeout']);
+checkEq('command timeout composite masked to low 16 bits', 3, $d['hdd_command_timeout']);
 
 echo "\n== smartparse: NVMe text health log (Unraid cache format) ==\n";
 $d = driveage_parse_smart_text(file_get_contents("$FIXTURES/nvme_cache.txt"));
@@ -366,6 +366,13 @@ checkEq('label tags stripped', 'xDanger', $v['LABEL_HIGH_RISK']);
 $v = validateConfig(array_merge(getDefaultConfig(), ['REFRESH_INTERVAL' => '5']));
 checkEq('refresh interval clamped to 30', '30', $v['REFRESH_INTERVAL']);
 
+$v = validateConfig(array_merge(getDefaultConfig(), ['ROW_STYLE' => 'full']));
+checkEq('row style full accepted', 'full', $v['ROW_STYLE']);
+$v = validateConfig(array_merge(getDefaultConfig(), ['ROW_STYLE' => '<b>']));
+checkEq('bad row style -> accent', 'accent', $v['ROW_STYLE']);
+$v = validateConfig(array_merge(getDefaultConfig(), ['DEFAULT_SORT' => 'risk_category']));
+checkEq('risk is a valid default sort', 'risk_category', $v['DEFAULT_SORT']);
+
 // ---------------------------------------------------------------------------
 echo "\n== smart cache lookup: Unraid disk name first, device name fallback ==\n";
 checkEq('assigned disk: name, then device', ['disk1', 'sdc'],
@@ -537,6 +544,7 @@ checkEq('NVMe lifecycle label shows wear', 'Minimal Risk (wear 3%)', $byDev['nvm
 
 checkEq('SAS unassigned POH parsed', 33822, $byDev['sdd']['device_id'] === 'sdd' ? $byDev['sdd']['power_on_hours'] : null);
 checkEq('unassigned type', 'unassigned', $byDev['sdd']['drive_type'] ?? null);
+checkEq('unassigned device uses Unraid name', 'Dev 1', $byDev['sdd']['device_name'] ?? null);
 
 checkEq('flash -> unknown category (not Minimal Risk)', 'unknown', $byDev['sda']['age_category'] ?? null);
 checkEq('flash label N/A', 'N/A (no SMART data)', $byDev['sda']['age_label'] ?? null);

@@ -90,6 +90,17 @@ function driveage_extract_leading_int($raw) {
 }
 
 /**
+ * SMART 188 (Command_Timeout) raw value is a composite on many drives: three
+ * 16-bit counters packed into 48 bits. The low 16 bits are the total count.
+ *
+ * @param int $raw Raw value
+ * @return int Timeout count
+ */
+function driveage_mask_command_timeout($raw) {
+    return ($raw > 0xFFFF) ? ($raw & 0xFFFF) : $raw;
+}
+
+/**
  * Convert NVMe Data Units (512-byte units x 1000) to TB written (decimal).
  *
  * @param int|null $dataUnits
@@ -207,7 +218,7 @@ function driveage_parse_smart_text($output) {
             case 5:   $data['hdd_reallocated_sectors'] = $rawInt; break;
             case 9:   $data['power_on_hours'] = $rawInt; break;
             case 187: $data['hdd_reported_uncorrectable'] = $rawInt; break;
-            case 188: $data['hdd_command_timeout'] = $rawInt; break;
+            case 188: $data['hdd_command_timeout'] = driveage_mask_command_timeout($rawInt); break;
             case 190: $temp190 = $rawInt; break;
             case 194: $data['temperature'] = $rawInt; break;
             case 197: $data['hdd_pending_sectors'] = $rawInt; break;
@@ -327,7 +338,7 @@ function driveage_parse_smart_json($json) {
                     }
                     break;
                 case 187: $data['hdd_reported_uncorrectable'] = $rawInt; break;
-                case 188: $data['hdd_command_timeout'] = $rawInt; break;
+                case 188: $data['hdd_command_timeout'] = driveage_mask_command_timeout($rawInt); break;
                 case 194:
                     if ($data['temperature'] === null) {
                         $data['temperature'] = $rawInt;

@@ -439,6 +439,7 @@ function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
         'is_standby' => $isStandby,
         'data_age_seconds' => $dataAge,
         'is_stale' => $isStale,
+        'poh_cached_at' => $cacheTimestamp, // set when POH came from drivecache (drive spun down)
         'health_warnings' => $healthWarnings,
         'has_warnings' => count($healthWarnings) > 0,
         // NVMe health metrics (null for non-NVMe drives)
@@ -489,11 +490,9 @@ function getHddHealthWarnings($driveInfo) {
     $reported      = $driveInfo['hdd_reported_uncorrectable'] ?? 0;
     $timeouts      = $driveInfo['hdd_command_timeout'] ?? 0;
 
-    // SMART 188 raw is a composite field on many drives (three 16-bit
-    // counters packed into 48 bits); the low 16 bits are the total count.
-    if ($timeouts > 0xFFFF) {
-        $timeouts = $timeouts & 0xFFFF;
-    }
+    // SMART 188 composite raw values (already masked by the parser; values
+    // supplied from elsewhere get the same treatment)
+    $timeouts = driveage_mask_command_timeout($timeouts);
 
     // CRITICAL: pending sectors = imminent reallocation (SMART 197)
     if ($pending > 0) {
@@ -697,7 +696,8 @@ function groupDrives($drives) {
  */
 function getUnraidAssignment($slotName, $ini, $source) {
     $assignment = [
-        'display_name' => $ini['device'] ?? $slotName,
+        // Unraid's own name ("dev1" -> "Dev 1" for unassigned devices)
+        'display_name' => $ini['name'] ?? $ini['device'] ?? $slotName,
         'array_name' => 'Unassigned',
         'drive_type' => 'unassigned',
         'disk_id' => $ini['id'] ?? null

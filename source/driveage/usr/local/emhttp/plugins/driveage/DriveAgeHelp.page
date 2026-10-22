@@ -164,6 +164,35 @@ $cacheVersion = DRIVEAGE_VERSION;
 <div class="help-container">
     <h1>DriveAge Help & Documentation</h1>
 
+    <!-- Risk Model Section -->
+    <div class="help-section" id="risk-model">
+        <h2>How DriveAge Assesses Risk</h2>
+
+        <p>Every drive is judged on two independent questions, and the dashboard shows both:</p>
+        <ul>
+            <li><strong>Age / wear band</strong> - how old (hard drives) or how worn (SSDs and NVMe) the drive is.
+                For hard drives the bands follow Backblaze's fleet failure rates by age (the "AFR" figures in the labels).
+                This is a statistic about drives <em>like</em> yours, not evidence about this one.</li>
+            <li><strong>SMART health</strong> - what this drive's own SMART data says: <em>Healthy</em>, <em>Warning</em>
+                (worth watching), or <em>Failing</em> (act now). <em>N/A</em> means no SMART data is available.</li>
+        </ul>
+
+        <p>
+            The <strong>Risk</strong> badge and row color show the worse of the two. A SMART warning raises a drive to at
+            least <em>Elevated</em> and is labelled "Warning (SMART)"; a SMART failure raises it to <em>High</em> and is
+            labelled "Failing (SMART)" - so a red row always tells you which kind of red it is. Click any row to see both
+            parts, the SMART values and how the replacement estimate was worked out.
+        </p>
+
+        <h3>"Replace Now" vs "Due now"</h3>
+        <p>
+            <strong>Replace Now</strong> is reserved for evidence from the drive itself - SMART failed, pending or
+            uncorrectable sectors, NVMe media errors, a read-only drive. <strong>Due now</strong> means the drive has reached
+            the replacement target age (8 years in conservative mode, 10 in aggressive) or used up its rated endurance:
+            a planning milestone, not a sign of failure.
+        </p>
+    </div>
+
     <!-- Reallocated Sectors Section -->
     <div class="help-section" id="reallocated-sectors">
         <h2>⚠️ Reallocated Sectors (SMART Attribute ID 5)</h2>

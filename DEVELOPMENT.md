@@ -64,10 +64,9 @@ DriveAge/
 │       │
 │       ├── styles/driveage.css    # Theme-aware stylesheet
 │       └── js/
-│           ├── dashboard.js       # Table, sorting, filters, auto-refresh
-│           ├── charts.js          # Chart.js visualizations
-│           ├── settings.js        # Reset-to-defaults
-│           └── vendor/chart.min.js
+│           ├── dashboard.js       # Summary, table, details, sorting, auto-refresh
+│           ├── charts.js          # Risk donut + replacement timeline (inline SVG/CSS)
+│           └── settings.js        # Reset-to-defaults
 │
 ├── tests/                        # NOT packaged
 │   ├── run.php                   # php tests/run.php
@@ -87,9 +86,10 @@ DriveAge/
 ```
 User opens dashboard
     ↓
-DriveAgeDashboard.page renders shell (legend colors server-side)
+DriveAgeDashboard.page renders shell (category colors as CSS variables) and
+starts the get_drive_data.php request inline, before the page finishes parsing
     ↓
-dashboard.js fetches /plugins/driveage/scripts/get_drive_data.php
+dashboard.js (deferred) picks up that request
     ↓
 get_drive_data.php: loadConfig() [validated] → getAllDrives() → filters → groups
     ↓
@@ -102,7 +102,7 @@ getAllDrives(): enumerate from disks.ini/devs.ini
     ↓
 risk.php categorizes → predictions.php estimates → JSON (plain data + CSS classes)
     ↓
-dashboard.js renders table + charts.js renders charts (theme-aware)
+dashboard.js renders summary + table (+ detail panels on demand); charts.js renders charts
 ```
 
 ## Testing

@@ -60,6 +60,7 @@ function getDefaultConfig() {
         // Display Configuration
         'DEFAULT_SORT' => 'replacement_months',
         'DEFAULT_SORT_DIR' => 'asc',
+        'ROW_STYLE' => 'accent',  // 'accent' (colored edge + risk pill) or 'full' (whole row in category color)
 
         // Refresh Configuration
         'AUTO_REFRESH' => 'false',
@@ -142,7 +143,7 @@ function validateConfig($config) {
     // Sorting - strict whitelist (matches sortable dashboard columns)
     $validSortColumns = [
         'device_name', 'identification', 'size_bytes', 'power_on_hours',
-        'temperature', 'smart_status', 'replacement_months'
+        'temperature', 'smart_status', 'risk_category', 'health_status', 'replacement_months'
     ];
     $validated['DEFAULT_SORT'] = in_array($config['DEFAULT_SORT'] ?? '', $validSortColumns, true)
         ? $config['DEFAULT_SORT']
@@ -152,6 +153,10 @@ function validateConfig($config) {
     $validated['DEFAULT_SORT_DIR'] = in_array($config['DEFAULT_SORT_DIR'] ?? '', $validSortDirs, true)
         ? $config['DEFAULT_SORT_DIR']
         : $defaults['DEFAULT_SORT_DIR'];
+
+    $validated['ROW_STYLE'] = in_array($config['ROW_STYLE'] ?? '', ['accent', 'full'], true)
+        ? $config['ROW_STYLE']
+        : $defaults['ROW_STYLE'];
 
     // Refresh settings
     $validated['AUTO_REFRESH'] = ($config['AUTO_REFRESH'] ?? 'false') === 'true' ? 'true' : 'false';
