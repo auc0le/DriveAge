@@ -40,8 +40,8 @@ Pure-PHP test suite - no Unraid or smartmontools required. Covers the smartctl p
 ### Data Sources (order of authority)
 
 1. `/var/local/emhttp/disks.ini` + `devs.ini` - device enumeration, ids, sizes, live temp/spin state. **Never enumerate from `/dev` globs** (breaks >26 drives); the glob path exists only as a last-resort fallback when both inis are missing.
-2. `/var/local/emhttp/smart/<dev>` - Unraid's cached smartctl output. **Refreshed on the Disk Settings `poll_attributes` interval (default 1800s = 30 minutes)** - do not claim or assume faster freshness. Cache files written with `smartctl -A` have NO model/serial/health lines for ATA drives.
-3. `/var/local/emhttp/smart/<dev>.ssa` - cached overall-health verdict (PASSED/FAILED).
+2. `/var/local/emhttp/smart/<name>` - Unraid's cached smartctl output. **`<name>` is the Unraid disk name** (`parity`, `disk1`, `cache`, `cache2`, `dev1`...), not the kernel device - emhttpd and dynamix's monitor use `$disk['name']`. `getSmartCacheNames()` tries the ini `name`, then the section name, then the device name as a fallback. **Refreshed on the Disk Settings `poll_attributes` interval (default 1800s = 30 minutes)** - do not claim or assume faster freshness. Cache files written with `smartctl -A` have NO model/serial/health lines for ATA drives.
+3. `/var/local/emhttp/smart/<name>.ssa` - cached overall-health verdict (PASSED/FAILED).
 4. Direct `smartctl -a -j` - last resort only (no cache file, drive not spun down). Parse the universal `power_on_time`/`temperature`/`smart_status` JSON fields first (covers SAS), then type-specific tables.
 
 Spun-down drives are **never queried**. Their last-known power-on hours live in `/boot/config/plugins/driveage/drivecache.json` (single JSON file on flash, rewritten only when a value changes - keep it write-on-change to protect the flash device).

@@ -33,13 +33,21 @@ if (is_dir($smartDir)) {
     $files = glob("$smartDir/*") ?: [];
     echo '   Found ' . count($files) . " files\n";
     foreach ($devices as $dev => $entry) {
-        $cacheFile = "$smartDir/$dev";
-        if (file_exists($cacheFile)) {
+        $names = getSmartCacheNames($dev, $entry['ini']);
+        $found = null;
+        foreach ($names as $name) {
+            if (file_exists("$smartDir/$name")) {
+                $found = $name;
+                break;
+            }
+        }
+        if ($found !== null) {
+            $cacheFile = "$smartDir/$found";
             $age = time() - filemtime($cacheFile);
-            echo "   \u{2713} $dev (age: {$age}s, " . filesize($cacheFile) . " bytes)";
+            echo "   \u{2713} $dev -> smart/$found (age: {$age}s, " . filesize($cacheFile) . " bytes)";
             echo file_exists("$cacheFile.ssa") ? " + .ssa health\n" : "\n";
         } else {
-            echo "   \u{2717} $dev - no cache file (will query directly unless spun down)\n";
+            echo "   \u{2717} $dev - no cache file (tried: " . implode(', ', $names) . "; will query directly unless spun down)\n";
         }
     }
 } else {
@@ -49,7 +57,7 @@ if (is_dir($smartDir)) {
 echo "\n4. Parse results:\n";
 foreach ($devices as $dev => $entry) {
     $iniStandby = (($entry['ini']['spundown'] ?? '0') === '1');
-    $read = readSmartData($dev, $iniStandby);
+    $read = readSmartData($dev, $iniStandby, getSmartCacheNames($dev, $entry['ini']));
     $d = $read['data'];
     if ($d === null) {
         echo "   \u{2717} $dev: no data\n";

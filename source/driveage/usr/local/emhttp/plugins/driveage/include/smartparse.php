@@ -10,7 +10,7 @@
  *  - NVMe text health log       (smartctl -A / -a on nvme devices)
  *  - SCSI/SAS text output       (smartctl -a on SAS drives behind HBAs)
  *
- * Note: Unraid's cache files at /var/local/emhttp/smart/<dev> are written
+ * Note: Unraid's cache files at /var/local/emhttp/smart/<name> are written
  * with `smartctl -n standby -A`, which contains NO model/serial/overall-health
  * lines for ATA drives. Callers must source identity from disks.ini/devs.ini
  * and health from the .ssa files; the parser only fills what is present.

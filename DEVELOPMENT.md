@@ -94,8 +94,8 @@ dashboard.js fetches /plugins/driveage/scripts/get_drive_data.php
 get_drive_data.php: loadConfig() [validated] → getAllDrives() → filters → groups
     ↓
 getAllDrives(): enumerate from disks.ini/devs.ini
-    → parse /var/local/emhttp/smart/<dev> (ATA/NVMe/SCSI text)
-    → health from <dev>.ssa
+    → parse /var/local/emhttp/smart/<name> (ATA/NVMe/SCSI text; <name> = Unraid disk name, device name as fallback)
+    → health from <name>.ssa
     → temp/spin from disks.ini
     → standby POH from /boot/config/plugins/driveage/drivecache.json
     → direct smartctl ONLY if no cache file and not spun down
@@ -134,8 +134,8 @@ Adding a test: drop a captured smartctl output into `tests/fixtures/`, assert in
 ```bash
 smartctl -a /dev/sdX
 smartctl -a -j /dev/sdX          # JSON output
-cat /var/local/emhttp/smart/sdX  # what Unraid cached (what DriveAge reads)
-cat /var/local/emhttp/smart/sdX.ssa
+cat /var/local/emhttp/smart/disk1      # what Unraid cached (what DriveAge reads) - named by disk name: parity, disk1, cache, dev1...
+cat /var/local/emhttp/smart/disk1.ssa
 ```
 
 ### Diagnostics

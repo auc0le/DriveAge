@@ -6,10 +6,12 @@
  *  1. /var/local/emhttp/disks.ini  - assigned drives: names, ids, sizes,
  *     temperatures, spin state (Unraid's own live state)
  *  2. /var/local/emhttp/devs.ini   - unassigned devices
- *  3. /var/local/emhttp/smart/<dev>      - cached smartctl attribute output,
+ *  3. /var/local/emhttp/smart/<name>     - cached smartctl attribute output,
  *     refreshed by Unraid on the Disk Settings "poll_attributes" interval
- *     (default 1800s = 30 minutes) - NOT every 30 seconds
- *  4. /var/local/emhttp/smart/<dev>.ssa  - cached overall SMART health
+ *     (default 1800s = 30 minutes) - NOT every 30 seconds. <name> is the
+ *     Unraid disk name (parity, disk1, cache, dev1...), NOT the kernel
+ *     device; the device name is only tried as a fallback
+ *  4. /var/local/emhttp/smart/<name>.ssa - cached overall SMART health
  *  5. Direct `smartctl -a -j` - LAST resort, only when no cache file exists
  *     and the drive is not spun down
  *
@@ -152,19 +154,49 @@ function getAllDrives($config) {
 }
 
 /**
+ * Candidate basenames for a device's files in the smart/ cache directory,
+ * most authoritative first.
+ *
+ * emhttpd names the cache after the Unraid disk NAME (parity, disk1, cache,
+ * cache2, dev1...) - dynamix's own monitor script reads smart/$disk['name'].
+ * The kernel device name (sdb, nvme0n1) is kept as a last fallback.
+ *
+ * @param string $deviceName Device name (e.g. sdb)
+ * @param array $ini Ini entry for this device
+ * @return array Unique, path-safe basenames
+ */
+function getSmartCacheNames($deviceName, $ini) {
+    $names = [];
+    foreach ([$ini['name'] ?? null, $ini['_slot'] ?? null, $deviceName] as $candidate) {
+        if (!is_string($candidate)) {
+            continue;
+        }
+        $candidate = basename($candidate);
+        if ($candidate === '' || $candidate === '.' || $candidate === '..' || in_array($candidate, $names, true)) {
+            continue;
+        }
+        $names[] = $candidate;
+    }
+    return $names;
+}
+
+/**
  * Read normalized SMART data for a device.
  *
  * @param string $deviceName Device name (e.g. sda, nvme0n1)
  * @param bool $iniStandby True if Unraid reports the drive spun down
+ * @param array|null $cacheNames Cache basenames to try, in order (see
+ *                               getSmartCacheNames()); defaults to the device name
  * @return array ['data' => array|null, 'age' => int|null] data + cache age (s)
  */
-function readSmartData($deviceName, $iniStandby) {
-    $smartFile = DRIVEAGE_STATE_DIR . '/smart/' . $deviceName;
-
+function readSmartData($deviceName, $iniStandby, $cacheNames = null) {
     // Primary: Unraid's cached smartctl output
-    if (file_exists($smartFile)) {
-        $output = @file_get_contents($smartFile);
-        $parsed = driveage_parse_smart_text($output);
+    foreach ($cacheNames ?? [$deviceName] as $cacheName) {
+        $smartFile = DRIVEAGE_STATE_DIR . '/smart/' . $cacheName;
+        if (!file_exists($smartFile)) {
+            continue;
+        }
+        $parsed = driveage_parse_smart_text(@file_get_contents($smartFile));
         if ($parsed !== null) {
             $mtime = @filemtime($smartFile);
             return ['data' => $parsed, 'age' => $mtime ? max(0, time() - $mtime) : null];
@@ -214,16 +246,12 @@ function readSmartData($deviceName, $iniStandby) {
 /**
  * Read Unraid's cached overall SMART health for a device (.ssa file).
  *
- * @param string $deviceName Device name
- * @param string $slotName Unraid slot name (disk1, parity, cache...)
+ * @param array $cacheNames Cache basenames to try, in order (see getSmartCacheNames())
  * @return string|null 'PASSED', 'FAILED' or null if unavailable
  */
-function readSsaHealth($deviceName, $slotName) {
-    foreach ([$deviceName, $slotName] as $base) {
-        if ($base === null || $base === '') {
-            continue;
-        }
-        $file = DRIVEAGE_STATE_DIR . '/smart/' . basename($base) . '.ssa';
+function readSsaHealth($cacheNames) {
+    foreach ($cacheNames as $base) {
+        $file = DRIVEAGE_STATE_DIR . '/smart/' . $base . '.ssa';
         if (!file_exists($file)) {
             continue;
         }
@@ -264,7 +292,8 @@ function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
     $iniTemp = (isset($ini['temp']) && is_numeric($ini['temp'])) ? intval($ini['temp']) : null;
 
     // SMART data (cache file -> standby stub -> direct query)
-    $read = readSmartData($deviceName, $iniStandby);
+    $cacheNames = getSmartCacheNames($deviceName, $ini);
+    $read = readSmartData($deviceName, $iniStandby, $cacheNames);
     $smartData = $read['data'];
     $dataAge = $read['age'];
 
@@ -292,7 +321,7 @@ function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
     $temperature = $iniTemp ?? ($smartData['temperature'] ?? null);
 
     // Overall SMART health: .ssa cache first, then parsed output
-    $smartStatus = readSsaHealth($deviceName, $slotName)
+    $smartStatus = readSsaHealth($cacheNames)
         ?? (($smartData['smart_status'] ?? 'UNKNOWN') !== 'UNKNOWN' ? $smartData['smart_status'] : 'UNKNOWN');
 
     // Spin status: Unraid state wins; NVMe never spins

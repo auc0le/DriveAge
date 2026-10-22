@@ -283,10 +283,35 @@ $v = validateConfig(array_merge(getDefaultConfig(), ['REFRESH_INTERVAL' => '5'])
 checkEq('refresh interval clamped to 30', '30', $v['REFRESH_INTERVAL']);
 
 // ---------------------------------------------------------------------------
+echo "\n== smart cache lookup: Unraid disk name first, device name fallback ==\n";
+checkEq('assigned disk: name, then device', ['disk1', 'sdc'],
+    getSmartCacheNames('sdc', ['name' => 'disk1', '_slot' => 'disk1']));
+checkEq('pool member: name, then device', ['cache2', 'nvme1n1'],
+    getSmartCacheNames('nvme1n1', ['name' => 'cache2', '_slot' => 'cache2']));
+checkEq('glob fallback entry: device only', ['sdb'],
+    getSmartCacheNames('sdb', ['device' => 'sdb', '_slot' => 'sdb']));
+checkEq('path components stripped from ini names', ['x', 'sdc'],
+    getSmartCacheNames('sdc', ['name' => '../../x', '_slot' => '..']));
+
+// Device-name file alone is still found (fallback)
+copy("$FIXTURES/ata_cache.txt", DRIVEAGE_STATE_DIR . '/smart/sdz');
+$r = readSmartData('sdz', false, getSmartCacheNames('sdz', ['name' => 'disk9']));
+checkEq('device-name cache file used when no name file', 33477, $r['data']['power_on_hours'] ?? null);
+// Once the disk-name file exists it wins over a stale device-name file
+copy("$FIXTURES/nvme_cache.txt", DRIVEAGE_STATE_DIR . '/smart/disk9');
+$r = readSmartData('sdz', false, getSmartCacheNames('sdz', ['name' => 'disk9']));
+checkEq('disk-name cache file preferred', 24845, $r['data']['power_on_hours'] ?? null);
+file_put_contents(DRIVEAGE_STATE_DIR . '/smart/sdz.ssa', 'FAILED');
+file_put_contents(DRIVEAGE_STATE_DIR . '/smart/disk9.ssa', 'PASSED');
+checkEq('disk-name .ssa preferred', 'PASSED', readSsaHealth(getSmartCacheNames('sdz', ['name' => 'disk9'])));
+foreach (['sdz', 'sdz.ssa', 'disk9', 'disk9.ssa'] as $f) { @unlink(DRIVEAGE_STATE_DIR . "/smart/$f"); }
+
+// ---------------------------------------------------------------------------
 echo "\n== end-to-end: getAllDrives() against fixture Unraid state ==\n";
 
 // disks.ini: parity (active, cache file), disk1 (spun down, no cache file),
-// cache pool nvme, flash USB
+// cache pool nvme, flash USB. Cache files are named after the Unraid disk
+// name (smart/parity, smart/cache, smart/dev1), exactly as emhttpd writes them.
 file_put_contents(DRIVEAGE_STATE_DIR . '/disks.ini', <<<INI
 ["parity"]
 idx="0"
@@ -348,11 +373,12 @@ INI);
 
 file_put_contents(DRIVEAGE_STATE_DIR . '/var.ini', "poll_attributes=\"1800\"\n");
 
-// SMART cache files
-copy("$FIXTURES/ata_full.txt", DRIVEAGE_STATE_DIR . '/smart/sdb');
-file_put_contents(DRIVEAGE_STATE_DIR . '/smart/sdb.ssa', 'PASSED');
-copy("$FIXTURES/nvme_cache.txt", DRIVEAGE_STATE_DIR . '/smart/nvme0n1');
-copy("$FIXTURES/scsi_sas.txt", DRIVEAGE_STATE_DIR . '/smart/sdd');
+// SMART cache files, named by Unraid disk name (not kernel device)
+copy("$FIXTURES/ata_full.txt", DRIVEAGE_STATE_DIR . '/smart/parity');
+touch(DRIVEAGE_STATE_DIR . '/smart/parity', time() - 600); // direct queries report age 0
+file_put_contents(DRIVEAGE_STATE_DIR . '/smart/parity.ssa', 'PASSED');
+copy("$FIXTURES/nvme_cache.txt", DRIVEAGE_STATE_DIR . '/smart/cache');
+copy("$FIXTURES/scsi_sas.txt", DRIVEAGE_STATE_DIR . '/smart/dev1');
 // sdc: spun down, no cache file -> POH must come from the persistent cache
 file_put_contents(DRIVEAGE_POH_CACHE_FILE, json_encode([
     'sdc' => ['power_on_hours' => 39111, 'model' => 'WDC WD140EDGZ', 'serial' => 'Y5KVSLPY', 'timestamp' => time() - 3600]
@@ -385,7 +411,8 @@ checkEq('unassigned type', 'unassigned', $byDev['sdd']['drive_type'] ?? null);
 checkEq('flash -> unknown category (not Minimal Risk)', 'unknown', $byDev['sda']['age_category'] ?? null);
 checkEq('flash label N/A', 'N/A (no SMART data)', $byDev['sda']['age_label'] ?? null);
 
-check('data age recorded for cached drives', is_numeric($byDev['sdb']['data_age_seconds'] ?? null));
+check('parity read from smart/parity (data age = file age)', ($byDev['sdb']['data_age_seconds'] ?? 0) >= 600,
+    'got ' . var_export($byDev['sdb']['data_age_seconds'] ?? null, true));
 checkEq('poll interval read from var.ini', 1800, $byDev['sdb']['poll_interval'] ?? null);
 
 // POH cache write-on-change: fresh values should now be persisted
@@ -399,7 +426,7 @@ clearstatcache();
 checkEq('no rewrite when values unchanged', $mtimeBefore, filemtime(DRIVEAGE_POH_CACHE_FILE));
 
 // SMART FAILED end-to-end: flip the .ssa file and confirm escalation
-file_put_contents(DRIVEAGE_STATE_DIR . '/smart/sdb.ssa', 'FAILED');
+file_put_contents(DRIVEAGE_STATE_DIR . '/smart/parity.ssa', 'FAILED');
 $drives = getAllDrives($config);
 $byDev = [];
 foreach ($drives as $d) { $byDev[$d['device_id']] = $d; }
