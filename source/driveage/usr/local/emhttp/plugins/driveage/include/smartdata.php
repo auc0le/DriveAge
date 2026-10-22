@@ -629,6 +629,65 @@ function getDriveSize($deviceName, $ini) {
 }
 
 /**
+ * Pool name for a pool member's slot name (Unraid's prefix()):
+ * "cache2" -> "cache", "media_pool3" -> "media_pool".
+ */
+function getPoolName($slotName) {
+    $pool = preg_replace('/\d+$/', '', (string)$slotName);
+    return $pool !== '' ? $pool : (string)$slotName;
+}
+
+/**
+ * Apply the Settings page drive-type filters.
+ *
+ * @param array $drives Drives from getAllDrives()
+ * @param array $config Validated configuration
+ * @return array Drives to display (re-indexed)
+ */
+function filterDrivesByType($drives, $config) {
+    $filterMap = [
+        'parity'     => 'SHOW_PARITY',
+        'array'      => 'SHOW_ARRAY',
+        'cache'      => 'SHOW_CACHE',
+        'pool'       => 'SHOW_POOL',
+        'unassigned' => 'SHOW_UNASSIGNED'
+        // 'flash' (USB boot) is always shown
+    ];
+    return array_values(array_filter($drives, function($drive) use ($config, $filterMap) {
+        $key = $filterMap[$drive['drive_type']] ?? null;
+        return $key === null || ($config[$key] ?? 'true') === 'true';
+    }));
+}
+
+/**
+ * Group drives for display, in the order Unraid's Main page uses: the
+ * array, then pools (cache first, others alphabetically), unassigned
+ * devices, and the boot flash last.
+ *
+ * @param array $drives Drives to display
+ * @return array List of ['name' => group name, 'type' => drive_type, 'drives' => [...]]
+ */
+function groupDrives($drives) {
+    $typeOrder = ['parity' => 1, 'array' => 2, 'cache' => 3, 'pool' => 4, 'unassigned' => 5, 'flash' => 6];
+
+    $groups = [];
+    foreach ($drives as $drive) {
+        $key = $drive['array_name'] . "\0" . $drive['drive_type'];
+        if (!isset($groups[$key])) {
+            $groups[$key] = ['name' => $drive['array_name'], 'type' => $drive['drive_type'], 'drives' => []];
+        }
+        $groups[$key]['drives'][] = $drive;
+    }
+
+    $groups = array_values($groups);
+    usort($groups, function($a, $b) use ($typeOrder) {
+        return [$typeOrder[$a['type']] ?? 99, strtolower($a['name'])]
+           <=> [$typeOrder[$b['type']] ?? 99, strtolower($b['name'])];
+    });
+    return $groups;
+}
+
+/**
  * Map an ini entry to DriveAge assignment info.
  *
  * @param string $slotName Section name from the ini (disk1, parity, cache...)
@@ -664,10 +723,15 @@ function getUnraidAssignment($slotName, $ini, $source) {
             break;
 
         case 'Cache':
-            // Pool member: use the actual pool/slot name (e.g. "cache", "media_cache")
-            $assignment['display_name'] = ucfirst(str_replace('_', ' ', $slotName));
-            $assignment['array_name'] = ucfirst(str_replace('_', ' ', $slotName));
-            $assignment['drive_type'] = 'cache';
+            // Pool member. Unraid names members <pool>, <pool>2, <pool>3...
+            // and derives the pool name by stripping trailing digits (its
+            // prefix() helper) - so cache + cache2 are ONE pool, "Cache".
+            // The pool literally named "cache" is the cache pool; every
+            // other pool is drive_type 'pool' (SHOW_POOL).
+            $poolName = getPoolName($slotName);
+            $assignment['display_name'] = str_replace('_', ' ', $slotName);
+            $assignment['array_name'] = ucfirst(str_replace('_', ' ', $poolName));
+            $assignment['drive_type'] = ($poolName === 'cache') ? 'cache' : 'pool';
             break;
 
         case 'Flash':

@@ -391,6 +391,37 @@ checkEq('disk-name .ssa preferred', 'PASSED', readSsaHealth(getSmartCacheNames('
 foreach (['sdz', 'sdz.ssa', 'disk9', 'disk9.ssa'] as $f) { @unlink(DRIVEAGE_STATE_DIR . "/smart/$f"); }
 
 // ---------------------------------------------------------------------------
+echo "\n== assignment: pools, filters, grouping ==\n";
+$a = getUnraidAssignment('cache2', ['type' => 'Cache', 'device' => 'nvme1n1'], 'disks');
+checkEq('cache2 belongs to pool "Cache"', 'Cache', $a['array_name']);
+checkEq('cache pool members are type cache', 'cache', $a['drive_type']);
+checkEq('member keeps its own slot name', 'cache2', $a['display_name']);
+$a = getUnraidAssignment('media_pool3', ['type' => 'Cache'], 'disks');
+checkEq('media_pool3 belongs to pool "Media pool"', 'Media pool', $a['array_name']);
+checkEq('non-cache pools are type pool', 'pool', $a['drive_type']);
+checkEq('pool name strips trailing digits', 'media_pool', getPoolName('media_pool3'));
+
+$cfgNoPool = array_merge(getDefaultConfig(), ['SHOW_POOL' => 'false']);
+$fakeDrives = [
+    ['device_id' => 'sdb', 'array_name' => 'Main Array', 'drive_type' => 'parity'],
+    ['device_id' => 'sdc', 'array_name' => 'Main Array', 'drive_type' => 'array'],
+    ['device_id' => 'nvme0n1', 'array_name' => 'Cache', 'drive_type' => 'cache'],
+    ['device_id' => 'nvme1n1', 'array_name' => 'Cache', 'drive_type' => 'cache'],
+    ['device_id' => 'sde', 'array_name' => 'Media pool', 'drive_type' => 'pool'],
+    ['device_id' => 'sda', 'array_name' => 'USB Boot', 'drive_type' => 'flash'],
+    ['device_id' => 'sdf', 'array_name' => 'Unassigned', 'drive_type' => 'unassigned'],
+];
+checkEq('SHOW_POOL=false hides other pools only', ['sdb', 'sdc', 'nvme0n1', 'nvme1n1', 'sda', 'sdf'],
+    array_column(filterDrivesByType($fakeDrives, $cfgNoPool), 'device_id'));
+checkEq('SHOW_CACHE=false hides the cache pool only', ['sdb', 'sdc', 'sde', 'sda', 'sdf'],
+    array_column(filterDrivesByType($fakeDrives, array_merge(getDefaultConfig(), ['SHOW_CACHE' => 'false'])), 'device_id'));
+$groups = groupDrives($fakeDrives);
+checkEq('group order: array, pools, unassigned, flash',
+    ['Main Array/parity', 'Main Array/array', 'Cache/cache', 'Media pool/pool', 'Unassigned/unassigned', 'USB Boot/flash'],
+    array_map(fn($g) => $g['name'] . '/' . $g['type'], $groups));
+checkEq('multi-device pool is one group', 2, count($groups[2]['drives']));
+
+// ---------------------------------------------------------------------------
 echo "\n== end-to-end: getAllDrives() against fixture Unraid state ==\n";
 
 // disks.ini: parity (active, cache file), disk1 (spun down, no cache file),

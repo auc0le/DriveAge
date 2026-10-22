@@ -168,23 +168,22 @@ function renderTableView() {
     html += '</tr></thead>';
     html += '<tbody>';
 
-    const grouped = driveData.grouped;
+    const byId = {};
+    driveData.drives.forEach(drive => { byId[drive.device_id] = drive; });
 
-    for (const arrayName in grouped) {
-        for (const driveType in grouped[arrayName]) {
-            const drives = sortDrives([...grouped[arrayName][driveType]], sortColumn, sortDirection);
+    driveData.groups.forEach(group => {
+        const drives = sortDrives(group.device_ids.map(id => byId[id]).filter(Boolean), sortColumn, sortDirection);
 
-            html += `<tr class="group-header" onclick="toggleGroup(this)">`;
-            html += `<td colspan="20">`;
-            html += `<span class="group-toggle">▼</span>`;
-            html += `${escapeHtml(arrayName)} - ${escapeHtml(formatDriveType(driveType))} (${drives.length})`;
-            html += `</td></tr>`;
+        html += `<tr class="group-header" onclick="toggleGroup(this)">`;
+        html += `<td colspan="20">`;
+        html += `<span class="group-toggle">▼</span>`;
+        html += `${escapeHtml(group.name)} - ${escapeHtml(formatDriveType(group.type))} (${drives.length})`;
+        html += `</td></tr>`;
 
-            drives.forEach(drive => {
-                html += renderDriveRow(drive);
-            });
-        }
-    }
+        drives.forEach(drive => {
+            html += renderDriveRow(drive);
+        });
+    });
 
     html += '</tbody></table></div>';
 

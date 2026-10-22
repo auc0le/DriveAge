@@ -23,22 +23,14 @@ try {
     // Collect all drives from Unraid's state + SMART cache
     $drives = getAllDrives($config);
 
-    // Apply drive-type display filters
-    $filterMap = [
-        'parity'     => 'SHOW_PARITY',
-        'array'      => 'SHOW_ARRAY',
-        'cache'      => 'SHOW_CACHE',
-        'pool'       => 'SHOW_POOL',
-        'unassigned' => 'SHOW_UNASSIGNED'
-        // 'flash' (USB boot) is always shown
-    ];
-    $drives = array_values(array_filter($drives, function($drive) use ($config, $filterMap) {
-        $key = $filterMap[$drive['drive_type']] ?? null;
-        return $key === null || ($config[$key] ?? 'true') === 'true';
-    }));
-
-    // Group drives by array and type
-    $grouped = groupDrives($drives);
+    // Apply drive-type display filters, then group (array, pools, unassigned, flash)
+    $drives = filterDrivesByType($drives, $config);
+    // Groups reference drives by device_id so each drive is sent only once
+    $groups = array_map(fn($g) => [
+        'name' => $g['name'],
+        'type' => $g['type'],
+        'device_ids' => array_column($g['drives'], 'device_id')
+    ], groupDrives($drives));
 
     // Oldest SMART cache age across drives (for the data-age indicator)
     $dataAges = array_filter(array_map(fn($d) => $d['data_age_seconds'], $drives), 'is_numeric');
@@ -52,7 +44,7 @@ try {
         'data_age_seconds' => $maxDataAge,
         'poll_interval' => getPollInterval(),
         'drives' => $drives,
-        'grouped' => $grouped,
+        'groups' => $groups,
         'thresholds' => [
             'minimal_risk' => intval($config['THRESHOLD_MINIMAL_RISK']),
             'low_risk' => intval($config['THRESHOLD_LOW_RISK']),
@@ -108,42 +100,3 @@ try {
     ]);
 }
 
-/**
- * Group drives by array and drive type
- *
- * @param array $drives Array of drive data
- * @return array Grouped drives
- */
-function groupDrives($drives) {
-    $grouped = [];
-
-    foreach ($drives as $drive) {
-        $arrayName = $drive['array_name'];
-        $driveType = $drive['drive_type'];
-
-        if (!isset($grouped[$arrayName])) {
-            $grouped[$arrayName] = [];
-        }
-
-        if (!isset($grouped[$arrayName][$driveType])) {
-            $grouped[$arrayName][$driveType] = [];
-        }
-
-        $grouped[$arrayName][$driveType][] = $drive;
-    }
-
-    ksort($grouped);
-
-    foreach ($grouped as $arrayName => &$types) {
-        $typeOrder = ['parity' => 1, 'array' => 2, 'cache' => 3, 'pool' => 4, 'flash' => 5, 'unassigned' => 6];
-
-        uksort($types, function($a, $b) use ($typeOrder) {
-            $orderA = $typeOrder[$a] ?? 99;
-            $orderB = $typeOrder[$b] ?? 99;
-            return $orderA - $orderB;
-        });
-    }
-    unset($types);
-
-    return $grouped;
-}

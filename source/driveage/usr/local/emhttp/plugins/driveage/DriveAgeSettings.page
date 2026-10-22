@@ -548,9 +548,9 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
                             <input type="hidden" name="SHOW_ARRAY" value="false">
                             <label><input type="checkbox" name="SHOW_ARRAY" value="true" <?= checked($config['SHOW_ARRAY']); ?>> Array Disks</label><br>
                             <input type="hidden" name="SHOW_CACHE" value="false">
-                            <label><input type="checkbox" name="SHOW_CACHE" value="true" <?= checked($config['SHOW_CACHE']); ?>> Cache / Pool Disks</label><br>
+                            <label><input type="checkbox" name="SHOW_CACHE" value="true" <?= checked($config['SHOW_CACHE']); ?>> Cache Pool (named "cache")</label><br>
                             <input type="hidden" name="SHOW_POOL" value="false">
-                            <label><input type="checkbox" name="SHOW_POOL" value="true" <?= checked($config['SHOW_POOL']); ?>> Other Pool Disks</label><br>
+                            <label><input type="checkbox" name="SHOW_POOL" value="true" <?= checked($config['SHOW_POOL']); ?>> Other Pools</label><br>
                             <input type="hidden" name="SHOW_UNASSIGNED" value="false">
                             <label><input type="checkbox" name="SHOW_UNASSIGNED" value="true" <?= checked($config['SHOW_UNASSIGNED']); ?>> Unassigned Devices</label>
                         </div>
