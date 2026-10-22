@@ -120,16 +120,20 @@ NVMe drives are assessed on two wear metrics; the **more severe of the two wins*
 | Risk Category | Percentage Used | Available Spare |
 |--------------|-----------------|-----------------|
 | **Minimal Risk** | < 50% | > 80% |
-| **Low Risk** | 50-79% | 60-80% |
-| **Moderate Risk** | 80-99% | 40-60% |
-| **Elevated Risk** | > 100% | within 10 pts of threshold |
-| **High Risk** | critical conditions below | < vendor threshold |
+| **Low Risk** | 50-79% | 51-80% |
+| **Moderate Risk** | 80-100% | ≤ 50% |
+| **Elevated Risk** | > 100% | within 10 pts of the threshold |
+| **High Risk** | - | < vendor threshold |
+
+A drive reporting neither metric falls back to its age band (N/A without power-on hours) - never Minimal Risk by default.
 
 ### Health Conditions (health `failing` → overall High Risk)
 
 - SMART overall-health FAILED
 - Media Errors > 0
-- Critical Warning flag > 0
+- Critical Warning bits 0x01 (spare low), 0x04 (reliability degraded), 0x08 (read-only), 0x10 (backup failed), 0x20 (PMR read-only)
+
+Bit 0x02 (temperature) and unrecognized bits raise health `watch` only.
 
 ### End of Wear Life (lifecycle High Risk)
 
@@ -158,7 +162,7 @@ The first attribute in this order that the drive reports is used. Host writes co
 
 ### Lifecycle band and estimate
 
-The wear indicator maps to the same bands as NVMe Percentage Used (< 50% minimal, 50-79% low, 80-100% moderate, > 100% elevated) and feeds the same flash estimator (see [NVMe Predictive Replacement Estimation](#nvme-predictive-replacement-estimation)) after the SMART overrides. An SSD reporting no wear attribute uses its age band, labelled "(age)", and shows "Unknown" for the estimate.
+The wear indicator maps to the same bands as NVMe Percentage Used (< 50% minimal, 50-79% low, 80-100% moderate, > 100% elevated) and feeds the same flash estimator (see [NVMe Predictive Replacement Estimation](#nvme-predictive-replacement-estimation)) after the SMART overrides. An SSD reporting no wear attribute uses its age band, labelled "(age)"; its estimate falls back to host writes against an estimated rating (Method 2) when it reports a host-writes attribute, otherwise "Unknown".
 
 ---
 
@@ -171,7 +175,7 @@ Evaluated in order; the first match wins. Every result carries `method` and `con
 - **Estimate**: 0 months (Replace Now) · **Confidence**: High
 
 #### Method 1: Critical SMART Warnings (`critical_smart`)
-- **Trigger**: any critical attribute warning (197>0, 198>0, 5>10, 187>10, 188>100)
+- **Trigger**: any critical attribute warning - 197 > 0, 198 > 0, 188 > 100, or 5/187/SAS counters per the trend rule (rising within 30 days; > 10 with no history; > 100 when stable)
 - **Estimate**: 0 months (Replace Now) · **Confidence**: High
 
 #### Method 2: Non-Critical SMART Warnings (`smart_warnings` / `smart_warnings_stable`)
@@ -211,7 +215,7 @@ Evaluated in order; the first match wins. A measured rate is used when the drive
 |---|---|---|
 | SMART overall-health FAILED | 0 months, "Replace Now" | `smart_failed` |
 | Media Errors > 0, or Critical Warning bit 0x04 / 0x08 / 0x10 / 0x20 | 0 months, "Replace Now" | `critical_error` |
-| Available Spare < threshold, or Critical Warning bit 0x01 | 1 month, "Replace Now" | `spare_below_threshold` |
+| Available Spare < threshold, or Critical Warning bit 0x01 | 0 months, "Replace Now" (within a month) | `spare_below_threshold` |
 
 Critical Warning bit **0x02 (temperature)** does *not* trigger replacement - it raises a "watch" health warning advising better cooling. All overrides are High confidence.
 
@@ -314,8 +318,8 @@ Only **5** (retired blocks) and **187** are evaluated, with the same rules as fo
 
 | Attribute | Caution | Critical |
 |-----------|-------------------|-------------------|
-| **Percentage Used** | ≥ 80% | > 100% |
-| **Available Spare** | ≤ 60% | < Spare Threshold |
+| **Percentage Used** | lifecycle band only (Moderate at 80%, Elevated above 100%) | - |
+| **Available Spare** | lifecycle band only (Low ≤ 80%, Moderate ≤ 50%) | < Spare Threshold |
 | **Media Errors** | - | > 0 |
 | **Critical Warning** | bit 0x02 (temperature): watch | bits 0x01, 0x04, 0x08, 0x10, 0x20 |
 | **SMART overall-health** | - | FAILED |

@@ -354,18 +354,18 @@ $cacheVersion = DRIVEAGE_VERSION;
         <div class="critical-box">
             <span class="severity-badge severity-critical">CRITICAL</span>
             <strong>Spare < Threshold (typically 10%)</strong><br>
-            <strong>Action:</strong> Replace within 1 month<br><br>
+            <strong>Action:</strong> Replace now (within a month)<br><br>
             The SSD has consumed most of its spare NAND blocks. When spare capacity is fully depleted, the drive will fail.
         </div>
 
         <h3>High Percentage Used</h3>
         <div class="warning-box">
             <span class="severity-badge severity-warning">WARNING</span>
-            <strong>80-99% used:</strong> Monitor closely<br>
-            <span class="severity-badge severity-critical">CRITICAL</span>
-            <strong>≥100% used:</strong> Replace soon<br><br>
-            Vendor-specific wear indicator showing how much of the drive's rated lifespan has been consumed.
-            Values over 100% indicate the drive has exceeded its rated endurance.
+            <strong>80-100% used:</strong> Moderate wear band - plan a replacement<br>
+            <strong>Over 100% used:</strong> Elevated band, estimate "Due now"<br><br>
+            The drive's own wear indicator: how much of its rated endurance has been consumed. Past 100% the
+            rated endurance is used up; many drives keep running well beyond it, so this is a planning signal -
+            spare capacity and media errors tell you when it is actually wearing out.
         </div>
     </div>
 

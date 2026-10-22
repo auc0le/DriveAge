@@ -122,6 +122,8 @@ $d = driveage_parse_smart_text(file_get_contents("$FIXTURES/scsi_sas_errors.txt"
 checkEq('grown defect list', 12, $d['scsi_grown_defects']);
 checkEq('uncorrected read+write+verify', 3, $d['scsi_uncorrected_errors']);
 checkEq('SAS POH still parsed', 51234, $d['power_on_hours']);
+$d = driveage_parse_smart_text("SMART Health Status: OK\nCurrent Drive Temperature:     31 C\nAccumulated power on time, hours:minutes 40,112:05\nElements in grown defect list: 0\n");
+checkEq('non-Seagate SAS: POH from the standard log page', 40112, $d['power_on_hours']);
 $d = driveage_parse_smart_text(file_get_contents("$FIXTURES/scsi_sas.txt"));
 checkEq('clean SAS: zero defects', 0, $d['scsi_grown_defects']);
 checkEq('no error counter log -> null', null, $d['scsi_uncorrected_errors']);
@@ -161,9 +163,11 @@ checkEq('high label', 'High Risk (AFR ~4%+)', getAgeLabel('high_risk', $config))
 
 echo "\n== risk: NVMe wear categories ==\n";
 checkEq('media errors are health, not wear', 'minimal_risk',
-    getNvmeRiskCategory(['physical_type' => 'nvme', 'nvme_media_errors' => 1]));
+    getNvmeRiskCategory(['physical_type' => 'nvme', 'nvme_percentage_used' => 3, 'nvme_available_spare' => 100, 'nvme_media_errors' => 1]));
 checkEq('SMART FAILED is health, not wear', 'minimal_risk',
-    getNvmeRiskCategory(['physical_type' => 'nvme', 'smart_status' => 'FAILED']));
+    getNvmeRiskCategory(['physical_type' => 'nvme', 'nvme_percentage_used' => 3, 'nvme_available_spare' => 100, 'smart_status' => 'FAILED']));
+checkEq('no wear metrics -> no wear band (never Minimal by default)', null,
+    getNvmeRiskCategory(['physical_type' => 'nvme']));
 checkEq('85% used -> moderate', 'moderate_risk',
     getNvmeRiskCategory(['physical_type' => 'nvme', 'nvme_percentage_used' => 85, 'nvme_available_spare' => 100]));
 checkEq('worse-of-two wins (spare 45 -> moderate)', 'moderate_risk',
@@ -344,6 +348,7 @@ $p = estimateNvmeRemainingLife(array_merge($drive, ['nvme_critical_warning' => 0
 checkEq('read-only bit -> Replace Now', 'critical_error', $p['method']);
 $p = estimateNvmeRemainingLife(array_merge($drive, ['nvme_critical_warning' => 0x01]), 'conservative');
 checkEq('spare bit -> spare_below_threshold', 'spare_below_threshold', $p['method']);
+checkEq('spare below threshold counts as now (0 months)', 0, $p['months_remaining']);
 $w = getNvmeHealthWarnings(['nvme_critical_warning' => 0x02, 'nvme_media_errors' => 0]);
 checkEq('temperature bit -> one warning', 1, count($w));
 checkEq('temperature bit -> warning level', 'warning', $w[0]['level'] ?? null);
@@ -509,6 +514,17 @@ $hist['GROW_1']['attrs']['hdd_reallocated_sectors']['value'] = 4;
 $g = getDriveInfo('sdq', $growIni, getDefaultConfig(), 'C', $hist);
 checkEq('4 for 90 days: watch, not failing', 'watch', $g['health_status']);
 checkEq('stable warning -> 12 months', 12, $g['replacement_prediction']['months_remaining']);
+// A command-timeout warning (188) must not keep an otherwise stable drive
+// "new" forever: 188 has a trend too
+file_put_contents(DRIVEAGE_STATE_DIR . '/smart/disk8', $ataGrow
+    . "188 Command_Timeout         0x0032   100   100   000    Old_age   Always       -       2\n");
+$hist['GROW_1']['attrs']['hdd_command_timeout'] = ['value' => 2, 'since' => time() - 200 * $day, 'prev' => null, 'prev_since' => null];
+$g = getDriveInfo('sdq', $growIni, getDefaultConfig(), 'C', $hist);
+checkEq('stable 5 + stable 188 -> stable estimate', 'smart_warnings_stable', $g['replacement_prediction']['method']);
+$nv = getDriveInfo('nvme5n1', ['ini' => ['name' => 'cache9', '_slot' => 'cache9', 'device' => 'nvme5n1', 'id' => 'NV_EMPTY',
+    'type' => 'Cache', 'sectors' => '1000', 'sector_size' => '512', 'temp' => '*', 'spundown' => '0'], 'source' => 'disks'],
+    getDefaultConfig(), 'C', []);
+checkEq('NVMe with no SMART data -> unknown, not Minimal', 'unknown', $nv['age_category']);
 
 // ---------------------------------------------------------------------------
 echo "\n== config validation (enforced on load) ==\n";
@@ -746,6 +762,7 @@ checkEq('unassigned device uses Unraid name', 'Dev 1', $byDev['sdd']['device_nam
 checkEq('flash -> unknown category (not Minimal Risk)', 'unknown', $byDev['sda']['age_category'] ?? null);
 checkEq('flash label N/A', 'N/A (no SMART data)', $byDev['sda']['age_label'] ?? null);
 
+checkEq('data source reported', 'unraid_cache', $byDev['sdb']['data_source'] ?? null);
 check('parity read from smart/parity (data age = file age)', ($byDev['sdb']['data_age_seconds'] ?? 0) >= 600,
     'got ' . var_export($byDev['sdb']['data_age_seconds'] ?? null, true));
 checkEq('poll interval read from var.ini', 1800, $byDev['sdb']['poll_interval'] ?? null);

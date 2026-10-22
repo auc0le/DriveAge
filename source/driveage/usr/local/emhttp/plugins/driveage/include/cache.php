@@ -38,10 +38,11 @@ define('DRIVEAGE_WRITE_SAMPLES_MAX', 26);
 // Recent write rate: measured over (up to) this window, needs >= 30 days
 define('DRIVEAGE_RECENT_RATE_WINDOW_SECONDS', 120 * 86400);
 
-// Error counts tracked for trends
+// Error counts tracked for trends. Every count that can raise a warning on
+// an HDD/SSD must be here: a warning without a trend can never be "stable".
 const DRIVEAGE_TREND_FIELDS = [
     'hdd_reallocated_sectors', 'hdd_reported_uncorrectable', 'hdd_pending_sectors',
-    'hdd_uncorrectable_sectors', 'scsi_grown_defects', 'scsi_uncorrected_errors'
+    'hdd_uncorrectable_sectors', 'hdd_command_timeout', 'scsi_grown_defects', 'scsi_uncorrected_errors'
 ];
 
 /**

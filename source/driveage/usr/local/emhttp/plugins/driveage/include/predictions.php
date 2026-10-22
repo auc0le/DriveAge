@@ -167,7 +167,7 @@ function estimateFlashRemainingLife($w, $predictionMode = 'conservative') {
     // CRITICAL: available spare below vendor threshold
     if (($availableSpare !== null && $availableSpare < $spareThreshold) || ($criticalWarning & DRIVEAGE_NVME_CW_SPARE)) {
         return [
-            'months_remaining' => 1,
+            'months_remaining' => 0,
             'confidence' => 'high',
             'method' => 'spare_below_threshold',
             'notes' => 'Available spare below threshold. Replace within 1 month.',

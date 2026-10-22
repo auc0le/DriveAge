@@ -50,10 +50,14 @@ function getAgeCategory($hours, $config) {
  * evidence and handled by getHealthStatus(), not here.
  *
  * @param array $driveInfo Drive information array with NVMe SMART attributes
- * @return string|null Risk category, or null if not applicable (not NVMe)
+ * @return string|null Risk category, or null if not applicable (not NVMe,
+ *                     or no wear metrics at all - never pretend "Minimal")
  */
 function getNvmeRiskCategory($driveInfo) {
     if (($driveInfo['physical_type'] ?? '') !== 'nvme') {
+        return null;
+    }
+    if (($driveInfo['nvme_percentage_used'] ?? null) === null && ($driveInfo['nvme_available_spare'] ?? null) === null) {
         return null;
     }
     return getWearRiskCategory(

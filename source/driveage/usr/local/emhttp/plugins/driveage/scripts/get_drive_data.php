@@ -86,7 +86,9 @@ try {
         ]
     ];
 
-    echo json_encode($response);
+    // A stray non-UTF-8 byte in a model/serial string must not blank the
+    // whole response (json_encode would return false)
+    echo json_encode($response, JSON_INVALID_UTF8_SUBSTITUTE);
 
 } catch (\Throwable $e) {
     // Log full error for debugging

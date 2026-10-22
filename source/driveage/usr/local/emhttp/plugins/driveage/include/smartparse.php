@@ -330,6 +330,12 @@ function driveage_parse_smart_text($output) {
     }
 
     // ---- SCSI/SAS text output ----
+    // Standard log page (all vendors; what Unraid's "-A" cache holds for HGST,
+    // Toshiba, WD...), then Seagate's vendor page
+    if ($data['power_on_hours'] === null &&
+        preg_match('/Accumulated power on time, hours:minutes\s+([\d,]+):\d+/i', $output, $m)) {
+        $data['power_on_hours'] = intval(str_replace(',', '', $m[1]));
+    }
     if ($data['power_on_hours'] === null &&
         preg_match('/number of hours powered up\s*=\s*([\d.]+)/i', $output, $m)) {
         $data['power_on_hours'] = intval(floor(floatval($m[1])));

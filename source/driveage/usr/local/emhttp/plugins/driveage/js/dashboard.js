@@ -88,6 +88,7 @@ window.DriveAge = window.DriveAge || {};
         sortColumn: null,
         sortDirection: null,
         userSorted: false,
+        savedSortDefault: null, // the Default Sort setting in force when the user sorted
         collapsed: new Set(),   // group keys
         expanded: new Set(),    // device ids with the detail panel open
         loading: false,
@@ -125,9 +126,13 @@ window.DriveAge = window.DriveAge || {};
         return RISK_RANK[drive.risk_category] ?? -1;
     }
 
-    /** Most urgent first: fewest months, then worst risk. */
+    function healthRank(drive) {
+        return HEALTH_RANK[drive.health_status] ?? -1;
+    }
+
+    /** Most urgent first: fewest months, then SMART evidence, then worst risk. */
     function byUrgency(a, b) {
-        return (monthsOf(a) - monthsOf(b)) || (riskRank(b) - riskRank(a));
+        return (monthsOf(a) - monthsOf(b)) || (healthRank(b) - healthRank(a)) || (riskRank(b) - riskRank(a));
     }
 
     function naturalCompare(a, b) {
@@ -151,6 +156,7 @@ window.DriveAge = window.DriveAge || {};
                 state.sortColumn = prefs.sortColumn;
                 state.sortDirection = prefs.sortDirection === 'desc' ? 'desc' : 'asc';
                 state.userSorted = true;
+                state.savedSortDefault = prefs.sortDefault || null;
             }
         } catch (e) {
             // Storage unavailable (private window, blocked) - defaults are fine
@@ -162,7 +168,8 @@ window.DriveAge = window.DriveAge || {};
             window.localStorage.setItem(PREFS_KEY, JSON.stringify({
                 collapsed: Array.from(state.collapsed),
                 sortColumn: state.userSorted ? state.sortColumn : null,
-                sortDirection: state.sortDirection
+                sortDirection: state.sortDirection,
+                sortDefault: state.savedSortDefault
             }));
         } catch (e) {
             // ignore
@@ -192,6 +199,14 @@ window.DriveAge = window.DriveAge || {};
                     throw new Error((data && data.message) || 'unexpected response');
                 }
                 state.data = data;
+                // A sort the user clicked is remembered - until the Default
+                // Sort setting changes, which then takes effect again
+                const configured = configuredSort(data);
+                if (state.userSorted && state.savedSortDefault !== configured) {
+                    state.userSorted = false;
+                    state.savedSortDefault = null;
+                    savePrefs();
+                }
                 if (!state.userSorted) {
                     state.sortColumn = data.config.default_sort || 'replacement_months';
                     state.sortDirection = data.config.default_sort_dir || 'asc';
@@ -208,6 +223,10 @@ window.DriveAge = window.DriveAge || {};
                 setBusy(false);
                 scheduleRefresh();
             });
+    }
+
+    function configuredSort(data) {
+        return (data.config.default_sort || 'replacement_months') + ':' + (data.config.default_sort_dir || 'asc');
     }
 
     function setBusy(busy) {
@@ -439,8 +458,10 @@ window.DriveAge = window.DriveAge || {};
             result = (typeof av === 'number' && typeof bv === 'number') ? av - bv : naturalCompare(av, bv);
             if (state.sortDirection === 'desc') result = -result;
         }
-        // Ties: worse risk first, then natural device order (Disk 2 before Disk 10)
-        return result || (riskRank(b) - riskRank(a)) || naturalCompare(a.device_name, b.device_name);
+        // Ties: SMART evidence first, then worse risk, then natural device
+        // order (Disk 2 before Disk 10)
+        return result || (healthRank(b) - healthRank(a)) || (riskRank(b) - riskRank(a)) ||
+            naturalCompare(a.device_name, b.device_name);
     }
 
     function rowHtml(drive, collapsed) {
@@ -564,8 +585,10 @@ window.DriveAge = window.DriveAge || {};
         let source;
         if (drive.poh_cached_at) {
             source = 'Last known values from ' + new Date(drive.poh_cached_at * 1000).toLocaleString() + ' (drive spun down)';
-        } else if (drive.data_age_seconds !== null && drive.data_age_seconds !== undefined) {
-            source = drive.data_age_seconds > 0 ? 'Unraid SMART cache, ' + formatAge(drive.data_age_seconds) + ' old' : 'Queried directly';
+        } else if (drive.data_source === 'unraid_cache') {
+            source = 'Unraid SMART cache, ' + formatAge(drive.data_age_seconds) + ' old';
+        } else if (drive.data_source === 'direct' || drive.data_source === 'direct_memo') {
+            source = 'Queried directly with smartctl' + (drive.data_age_seconds ? ', ' + formatAge(drive.data_age_seconds) + ' ago' : '');
         } else if (drive.is_standby) {
             source = 'Drive spun down - no data read yet';
         }
@@ -609,6 +632,7 @@ window.DriveAge = window.DriveAge || {};
             state.sortDirection = (column === 'replacement_months' || column === 'device_name' || column === 'identification') ? 'asc' : 'desc';
         }
         state.userSorted = true;
+        state.savedSortDefault = state.data ? configuredSort(state.data) : null;
         savePrefs();
 
         document.querySelectorAll('#drive-container th[aria-sort]').forEach(th => {

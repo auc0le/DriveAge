@@ -635,7 +635,7 @@ tr.drive-row[data-risk="unknown"]       { --da-row-bg: #9E9E9E; --da-row-fg: #00
     opacity: 0.8;
 }
 
-.spinner {
+.driveage-loading .spinner {
     width: 26px;
     height: 26px;
     margin-right: 10px;

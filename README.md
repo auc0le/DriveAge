@@ -92,8 +92,8 @@ A drive's row shows the worse of its band and its SMART health. A **SMART warnin
 | Color | Risk Category | Percentage Used | Available Spare |
 |-------|--------------|----------------|-----------------|
 | 🟢 Green | Minimal Risk | < 50% | > 80% |
-| 🟢 Light Green | Low Risk | 50-79% | 60-80% |
-| 🟡 Amber | Moderate Risk | 80-99% | 40-60% |
+| 🟢 Light Green | Low Risk | 50-79% | 51-80% |
+| 🟡 Amber | Moderate Risk | 80-100% | ≤ 50% |
 | 🟠 Orange | Elevated Risk | > 100% | Within 10 pts of threshold |
 | 🔴 Red | High Risk | - | < vendor threshold |
 

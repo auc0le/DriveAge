@@ -78,6 +78,13 @@ if [ -n "$CR_FILES" ]; then
 fi
 echo -e "${GREEN}✓ Line endings normalized to LF${NC}"
 
+# Normalize permissions: editors and tools can leave files owner-only (0600),
+# and makepkg packages the tree as-is. Every shipped file must be readable
+# by the webGUI.
+find "$SOURCE_DIR" -type d -exec chmod 755 {} +
+find "$SOURCE_DIR" -type f -exec chmod 644 {} +
+echo -e "${GREEN}✓ Permissions normalized (directories 755, files 644)${NC}"
+
 # Write the single-source version file consumed by the .page files
 VERSION_FILE="$SOURCE_DIR/usr/local/emhttp/plugins/driveage/include/version.php"
 cat > "$VERSION_FILE" <<EOF

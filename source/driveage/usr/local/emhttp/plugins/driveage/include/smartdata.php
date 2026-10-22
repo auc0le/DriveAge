@@ -238,7 +238,9 @@ function getSmartCacheNames($deviceName, $ini) {
  * @param array|null $cacheNames Cache basenames to try, in order (see
  *                               getSmartCacheNames()); defaults to the device name
  * @param array $ini Ini entry (SMART controller settings for direct queries)
- * @return array ['data' => array|null, 'age' => int|null] data + data age (s)
+ * @return array ['data' => array|null, 'age' => int|null, 'source' => string|null]
+ *               data, data age (s) and where it came from: 'unraid_cache',
+ *               'direct' (queried now) or 'direct_memo' (queried recently)
  */
 function readSmartData($deviceName, $iniStandby, $cacheNames = null, $ini = []) {
     // Primary: Unraid's cached smartctl output
@@ -250,19 +252,19 @@ function readSmartData($deviceName, $iniStandby, $cacheNames = null, $ini = []) 
         $parsed = driveage_parse_smart_text(@file_get_contents($smartFile));
         if ($parsed !== null) {
             $mtime = @filemtime($smartFile);
-            return ['data' => $parsed, 'age' => $mtime ? max(0, time() - $mtime) : null];
+            return ['data' => $parsed, 'age' => $mtime ? max(0, time() - $mtime) : null, 'source' => 'unraid_cache'];
         }
     }
 
     // No cache file. Never touch a spun-down drive.
     if ($iniStandby) {
-        return ['data' => driveage_standby_smart_data(), 'age' => null];
+        return ['data' => driveage_standby_smart_data(), 'age' => null, 'source' => null];
     }
 
     // Last resort: query the drive directly (e.g. first run before Unraid's
     // cache exists, or a device Unraid does not poll)
     if (!isValidDeviceName($deviceName) || !file_exists('/dev/' . $deviceName)) {
-        return ['data' => null, 'age' => null];
+        return ['data' => null, 'age' => null, 'source' => null];
     }
 
     // A recent direct result (or failure - e.g. a USB stick smartctl cannot
@@ -274,7 +276,8 @@ function readSmartData($deviceName, $iniStandby, $cacheNames = null, $ini = []) 
     if (is_array($memo) && ($memo['id'] ?? null) === $driveId && array_key_exists('data', $memo)
         && time() - intval($memo['time'] ?? 0) < getPollInterval()) {
         $data = is_array($memo['data']) ? $memo['data'] : null;
-        return ['data' => $data, 'age' => $data === null ? null : max(0, time() - intval($memo['time']))];
+        return ['data' => $data, 'age' => $data === null ? null : max(0, time() - intval($memo['time'])),
+                'source' => $data === null ? null : 'direct_memo'];
     }
 
     $result = queryDriveDirectly($deviceName, $ini);
@@ -283,7 +286,8 @@ function readSmartData($deviceName, $iniStandby, $cacheNames = null, $ini = []) 
         && (is_dir(DRIVEAGE_TMP_DIR) || @mkdir(DRIVEAGE_TMP_DIR, 0700, true))) {
         @file_put_contents($memoFile, json_encode(['id' => $driveId, 'time' => time(), 'data' => $result]), LOCK_EX);
     }
-    return ['data' => $result, 'age' => $result === null ? null : 0];
+    $live = $result !== null && !$result['is_standby'];
+    return ['data' => $result, 'age' => $live ? 0 : null, 'source' => $live ? 'direct' : null];
 }
 
 /**
@@ -381,6 +385,7 @@ function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
     $read = readSmartData($deviceName, $iniStandby, $cacheNames, $ini);
     $smartData = $read['data'];
     $dataAge = $read['age'];
+    $dataSource = $read['source'] ?? null;
 
     // Size: Unraid's sectors x sector_size when available, blockdev last resort
     $size = getDriveSize($deviceName, $ini);
@@ -455,12 +460,14 @@ function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
         'power_on_hours' => $powerOnHours
     ]);
 
-    // Lifecycle category: wear-based for flash, age-based otherwise. A SATA
-    // SSD that reports no wear attribute falls back to its age.
+    // Lifecycle category: wear-based for flash, age-based otherwise. A flash
+    // drive that reports no wear metrics falls back to its age (N/A without
+    // power-on hours).
     $wearUsed = null;
     $ageBased = true;
-    if ($physicalType === 'nvme') {
-        $ageCategory = getNvmeRiskCategory($evalInfo) ?? getAgeCategory($powerOnHours, $config);
+    $nvmeWear = ($physicalType === 'nvme') ? getNvmeRiskCategory($evalInfo) : null;
+    if ($nvmeWear !== null) {
+        $ageCategory = $nvmeWear;
         $wearUsed = $smartData['nvme_percentage_used'] ?? null;
         $ageBased = false;
     } elseif ($physicalType === 'ssd' && ($smartData['ssd_percentage_used'] ?? null) !== null) {
@@ -556,6 +563,7 @@ function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
         'risk_label' => getRiskLabel($riskCategory, $ageCategory, $ageLabel, $healthStatus),
         'is_standby' => $isStandby,
         'data_age_seconds' => $dataAge,
+        'data_source' => $dataSource, // 'unraid_cache', 'direct', 'direct_memo' or null
         'is_stale' => $isStale,
         'poh_cached_at' => $cacheTimestamp, // set when POH came from drivecache (drive spun down)
         // TB/yr over recent weeks (drivecache samples), null until ~30 days of history

@@ -57,7 +57,7 @@ if (is_dir($smartDir)) {
 echo "\n4. Parse results:\n";
 foreach ($devices as $dev => $entry) {
     $iniStandby = (($entry['ini']['spundown'] ?? '0') === '1');
-    $read = readSmartData($dev, $iniStandby, getSmartCacheNames($dev, $entry['ini']));
+    $read = readSmartData($dev, $iniStandby, getSmartCacheNames($dev, $entry['ini']), $entry['ini']);
     $d = $read['data'];
     if ($d === null) {
         echo "   \u{2717} $dev: no data\n";
@@ -67,13 +67,15 @@ foreach ($devices as $dev => $entry) {
         echo "   \u{25CB} $dev: standby (cached values will be used)\n";
         continue;
     }
-    printf("   \u{2713} %s: POH=%s temp=%s status=%s%s%s\n",
+    printf("   \u{2713} %s: POH=%s temp=%s status=%s%s%s%s%s\n",
         $dev,
         $d['power_on_hours'] ?? 'n/a',
         $d['temperature'] ?? 'n/a',
         $d['smart_status'],
         $d['has_nvme_log'] ? ' [nvme-log]' : '',
-        $d['has_ata_attrs'] ? ' [ata-attrs]' : ''
+        $d['has_ata_attrs'] ? ' [ata-attrs]' : '',
+        ($d['ssd_percentage_used'] ?? null) !== null ? " [ssd-wear {$d['ssd_percentage_used']}% via {$d['ssd_wear_attribute']}]" : (!empty($d['is_ssd']) ? ' [ssd]' : ''),
+        ($d['scsi_grown_defects'] ?? null) !== null ? " [sas grown-defects={$d['scsi_grown_defects']}]" : ''
     );
 }
 
