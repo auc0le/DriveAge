@@ -113,7 +113,7 @@ dashboard.js renders summary + table (+ detail panels on demand); charts.js rend
 php tests/run.php
 ```
 
-Coverage: smartctl text parsing (ATA `-A` cache format with vendor raw values, full `-a`, NVMe health log, SCSI/SAS, standby), JSON parsing (universal fields), risk categories (incl. `unknown`), HDD/NVMe prediction math (targets, measured rates, caps, overrides), health warnings (5/187/188/197/198, composite-188 masking, FAILED), config validation, and an end-to-end `getAllDrives()` run against a fixture state directory.
+Coverage: smartctl text parsing (ATA `-A` cache format with vendor raw values, full `-a`, NVMe health log, SATA SSD wear/writes by attribute name, SCSI/SAS incl. defects and error counters, standby), JSON parsing (universal fields, SSD, SAS), cache-file naming, risk categories (lifecycle, health, overall, labels), HDD/SSD/NVMe prediction math (targets, wear indicator, measured and recent rates, horizon, overrides, critical-warning bits), health warnings with trends (5/187/188/197/198, SAS, SSD rules, composite-188 masking, FAILED), drive history (trends, write samples, write-on-change), pools/filters/grouping, Unraid temperature limits, smartctl controller options, config validation, and an end-to-end `getAllDrives()` run against a fixture state directory.
 
 Adding a test: drop a captured smartctl output into `tests/fixtures/`, assert in `tests/run.php` with `check()`/`checkEq()`.
 

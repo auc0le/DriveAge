@@ -348,10 +348,10 @@ Only real SMART readings are recorded - values filled in from the cache for a sp
 
 | Level | Meaning | Examples |
 |---|---|---|
-| **High** | Strong evidence of critical condition | SMART FAILED, pending sectors, media errors, spare below threshold |
-| **Medium** | Estimate from measured data or fleet statistics | age countdown, measured NVMe write rate, measured wear slope, caution warnings |
-| **Low** | Assumption-based fallback | assumed write rates (short history), spare depletion |
-| **None** | Cannot estimate | no power-on hours, brand-new NVMe with zero wear |
+| **High** | Strong evidence of critical condition | SMART FAILED, pending sectors, a growing defect count, media errors, spare below threshold |
+| **Medium** | Estimate from measured data or fleet statistics | age countdown (> 12 months out), wear indicator ≥ 5% at measured rate, new warning-level findings, endurance consumed |
+| **Low** | Coarse or assumption-based | wear indicator < 5%, TBW against an estimated rating, assumed rates (short history), spare depletion, stable warnings, countdown within 12 months |
+| **None** | Cannot estimate | no power-on hours, flash drive with no wear data yet |
 
 ---
 
@@ -368,8 +368,8 @@ Only real SMART readings are recorded - values filled in from the cache for a sp
 
 ## Recommended Actions
 
-1. **Don't panic on red**: High Risk means elevated probability and planning priority, not imminent death - except when driven by critical SMART warnings, which deserve immediate action.
-2. **Watch pending sectors**: any non-zero 197/198 is the strongest "act now" signal.
+1. **Read the label on red**: "High Risk (AFR ~4%+)" is an age band - a planning priority, not imminent death. "Failing (SMART)" is evidence from the drive itself and deserves immediate action.
+2. **Watch pending sectors and growth**: any non-zero 197/198, or a reallocated/defect count that keeps rising, is the strongest "act now" signal.
 3. **Have backups**: no prediction model substitutes for them.
 4. **Use conservative mode for critical data**; aggressive mode to maximize service life on replaceable data.
 
@@ -377,6 +377,7 @@ Only real SMART readings are recorded - values filled in from the cache for a sp
 
 ## Version History
 
+- **Unreleased (2026-10)**: Lifecycle (age/wear band) separated from SMART health; the replacement estimate no longer escalates the category (healthy HDDs turned red at ~7.5 years). HDD countdown made monotonic ("Due now" at the target). NVMe wear indicator ranked ahead of the capacity-based TBW guess (decimal TB); critical-warning bits decoded individually; 10-year display horizon for flash. SATA SSDs assessed by wear; SAS grown defects / uncorrected errors evaluated. Error-count trends (stable vs growing) and recent write rates from per-drive history. Temperatures use Unraid's own limits.
 - **v2026.07.16**: Recalibrated to Backblaze 2025 bathtub-curve revisit (4/6/8/10-year bands; 8yr/10yr targets). NVMe projections now use measured per-drive wear rates. Added 187/188 evaluation, SMART-FAILED surfacing/forcing, N/A category, data-freshness reporting, and a unit test suite covering every formula in this document.
 - **v1.0 (2025-12-26)**: Initial dual risk model and predictive replacement estimates.
 

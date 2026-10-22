@@ -4,26 +4,29 @@
 ![Unraid](https://img.shields.io/badge/unraid-6.12+-orange.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-DriveAge is an Unraid plugin that provides intelligent drive health monitoring with **dual risk assessment** and **predictive replacement estimates**. It uses age-based analysis for HDDs (calibrated to Backblaze's 2025 drive-stats data) and wear-based assessment for NVMe drives (projected from each drive's own measured write history), helping you proactively plan drive replacements before failures occur.
+DriveAge is an Unraid plugin that provides drive health monitoring with **dual risk assessment** and **predictive replacement estimates**. It uses age-based analysis for HDDs (calibrated to Backblaze's 2025 drive-stats data) and wear-based assessment for SSDs and NVMe drives (the drive's own wear indicator, projected at its measured wear rate), and keeps that separate from each drive's own SMART evidence - helping you plan replacements before failures occur.
 
 ## Features
 
 ### Core Features
-- **Dual Risk Assessment Model**:
-  - **HDD**: Age-based risk calibrated to Backblaze's 2025 bathtub-curve analysis (~317k drives)
-  - **NVMe**: Wear-based risk using Percentage Used and Available Spare metrics
+- **Two Separate Questions, Both Shown**:
+  - **Age / wear band**: HDDs by age, calibrated to Backblaze's 2025 bathtub-curve analysis (~317k drives); SSDs and NVMe by their own wear indicator
+  - **SMART health**: Healthy / Warning / Failing from the drive's own SMART data
+  - The row color is the worse of the two, and the label says which one decided it
 - **Predictive Replacement Estimates**:
-  - HDD: Critical SMART attributes override everything; otherwise a countdown to a target age (8 years conservative / 10 years aggressive)
-  - NVMe: Projections from the drive's **own measured wear rate** (TB written and wear% per power-on year), with assumed-rate fallbacks for drives with under ~3 months of history
-- **Health Warning Detection** - all five of the SMART attributes Google's disk study identified as the strongest failure predictors:
-  - Reallocated sectors (5), reported uncorrectable errors (187), command timeouts (188), pending sectors (197), uncorrectable sectors (198)
+  - HDD: SMART evidence first; otherwise a countdown to a target age (8 years conservative / 10 years aggressive), reading "Due now" at the target
+  - SSD/NVMe: the drive's wear indicator (NVMe Percentage Used, SATA SSD wear attribute) projected at its **own measured wear rate** - including the recent write rate once DriveAge has a month of history
+- **Health Warning Detection**:
+  - HDD: all five SMART attributes Google's disk study identified as the strongest failure predictors - reallocated sectors (5), reported uncorrectable errors (187), command timeouts (188), pending sectors (197), uncorrectable sectors (198)
+  - **Stable vs growing**: DriveAge remembers each drive's error counts - a count that is still rising is critical, one that has been stable for a month is a warning
+  - SAS: grown defect list and uncorrected error counters; SATA SSD: reallocated blocks and reported uncorrectable errors
+  - NVMe: media errors, spare below threshold and each critical-warning flag decoded (an over-temperature flag means "improve cooling", not "replace")
   - SMART overall-health **FAILED** is surfaced as a first-class warning and forces High Risk + "Replace Now"
-  - Media errors, available spare depletion, critical warnings (NVMe)
 - **Five-Tier Risk Categories** plus an explicit **N/A** category for devices without SMART data (e.g. the USB boot drive) - no more "brand new" USB sticks
 - **Confidence Levels**: All predictions include confidence ratings (High/Medium/Low/None) and the estimation method used (visible in tooltips)
-- **Conservative vs Aggressive Modes**: 8-year vs 10-year HDD targets; +25% vs no safety margin on measured NVMe wear rates
+- **Conservative vs Aggressive Modes**: 8-year vs 10-year HDD targets; +25% vs no safety margin on measured SSD/NVMe wear rates
 - **Human-Readable Time Format**: Displays drive age as years, months, days, and hours (e.g., "2y 10m 5d 20h")
-- **Multi-Array Support**: Full support for Unraid 6.12+ multi-pool configurations, unassigned devices, SAS drives behind HBAs, systems with more than 26 drives (`sdaa`+), and multi-digit NVMe names
+- **Multi-Array Support**: Full support for Unraid 6.12+ multi-pool configurations, unassigned devices, SAS drives behind HBAs, drives behind RAID controllers (Unraid's SMART controller type is honoured), systems with more than 26 drives (`sdaa`+), and multi-digit NVMe names
 - **Honest Data Freshness**: Shows how old the underlying SMART cache is and Unraid's actual refresh interval
 
 ### Display Options
@@ -80,9 +83,11 @@ Default categories are calibrated to Backblaze's 2025 bathtub-curve revisit: fle
 | 🔴 Red | High Risk | ≥ 10 years | ~4%+ | At/beyond the measured AFR peak |
 | ⬜ Gray | N/A | - | - | No SMART data (e.g. USB boot drive) |
 
-**Note**: Drives with critical SMART warnings (pending sectors, uncorrectable errors, SMART FAILED, etc.) are automatically categorized as High Risk regardless of age - category, color and label move together.
+#### SMART health overrides the band
 
-#### NVMe Wear-Based Risk
+A drive's row shows the worse of its band and its SMART health. A **SMART warning** raises it to at least Elevated, labelled "Warning (SMART)"; a **SMART failure** (FAILED, pending/uncorrectable sectors, a rising defect count, NVMe media errors...) raises it to High, labelled "Failing (SMART)". Click the row to see both parts.
+
+#### SSD / NVMe Wear-Based Risk
 
 | Color | Risk Category | Percentage Used | Available Spare |
 |-------|--------------|----------------|-----------------|
@@ -90,9 +95,9 @@ Default categories are calibrated to Backblaze's 2025 bathtub-curve revisit: fle
 | 🟢 Light Green | Low Risk | 50-79% | 60-80% |
 | 🟡 Amber | Moderate Risk | 80-99% | 40-60% |
 | 🟠 Orange | Elevated Risk | > 100% | Within 10 pts of threshold |
-| 🔴 Red | High Risk | Critical conditions | < vendor threshold |
+| 🔴 Red | High Risk | - | < vendor threshold |
 
-**Note**: NVMe drives with media errors, an active critical warning flag, or SMART FAILED are immediately High Risk.
+SATA SSDs use the same Percentage Used bands (from their wear attribute); available spare applies to NVMe only. An SSD that reports no wear attribute uses its age band, labelled "(age)".
 
 ### Understanding Drive Information
 
@@ -103,11 +108,11 @@ Default categories are calibrated to Backblaze's 2025 bathtub-curve revisit: fle
 **Temperature**: From Unraid's live state - identical to the Main page, and colored with Unraid's own warning/critical limits (per-disk overrides, SSD limits for SSD/NVMe)
 **SMART Status**: Overall health self-assessment (PASSED/FAILED)
 **Spin Status**: Active or standby, from Unraid's live state
-**Health Status**: SMART attribute warnings (click any warning for the built-in Help page):
-  - ⚠️ **Critical** (replace now): SMART FAILED, pending sectors, uncorrectable errors, >10 reallocated, >10 reported uncorrectable, >100 command timeouts, NVMe media errors
-  - ⚡ **Caution** (monitor): 1-10 reallocated sectors, 1-10 reported uncorrectable, 1-100 command timeouts
-  - ✓ **Healthy**: no warnings detected
-**Est. Replacement**: Predicted timeline until recommended replacement. Hover for confidence, method, and notes (including the measured wear rate used for NVMe drives).
+**Health**: SMART evidence (click any warning for the built-in Help page):
+  - **Failing** (replace now): SMART FAILED, pending sectors, uncorrectable errors, a reallocated/defect count that rose in the last 30 days, >10 reallocated or reported uncorrectable with no history yet, >100 command timeouts, NVMe media errors or degraded/read-only flags
+  - **Warning** (monitor): small or stable reallocated/defect counts, 1-100 command timeouts, NVMe over-temperature flag
+  - **Healthy**: no warnings detected
+**Est. Replacement**: Predicted timeline until recommended replacement - "Replace Now" for SMART evidence, "Due now" when a drive reaches its target age or rated endurance. Click the row for the method, confidence and reasoning.
 
 ### Data Freshness
 
@@ -135,6 +140,7 @@ The endpoint sits behind Unraid's webGUI authentication like every other webGUI 
   "drive_count": 27,
   "data_age_seconds": 412,
   "poll_interval": 1800,
+  "groups": [{ "name": "Main Array", "type": "array", "device_ids": ["sdc", "sdd"] }],
   "drives": [
     {
       "device_name": "Disk 20",
@@ -149,6 +155,10 @@ The endpoint sits behind Unraid's webGUI authentication like every other webGUI 
       "spin_status": "active",
       "age_category": "minimal_risk",
       "age_label": "Minimal Risk (AFR ~1%)",
+      "health_status": "ok",
+      "health_label": "Healthy",
+      "risk_category": "minimal_risk",
+      "risk_label": "Minimal Risk (AFR ~1%)",
       "health_warnings": [],
       "replacement_prediction": {
         "months_remaining": 61,
@@ -171,8 +181,8 @@ All fields are plain data (no HTML fragments), so the endpoint is directly consu
 - **Access control**: provided by Unraid's webGUI session authentication (all `/plugins/*` requests are authenticated). Settings are saved through Unraid's own `/update.php`, which enforces Unraid's native CSRF token.
 - **Validation on load**: every configuration value read from disk is validated (whitelists, ranges, threshold ordering, color format/uniqueness, label sanitization) before use.
 - **Output escaping**: all dynamic content is escaped in PHP (`esc()`/`e()`) and JavaScript (`escapeHtml()`).
-- **No shell exposure**: drive enumeration comes from Unraid's state files; the only shell calls are `smartctl`/`blockdev` fallbacks with `escapeshellarg()` on validated device names.
-- **Read-only by design**: the plugin never writes to your drives; its only writes are its own config and a small power-on-hours cache on the flash device (write-on-change).
+- **No shell exposure**: drive enumeration comes from Unraid's state files; the only shell calls are `smartctl`/`blockdev` fallbacks with `escapeshellarg()` on validated device names and whitelisted controller options.
+- **Read-only by design**: the plugin never writes to your drives; its only writes are its own config, a small drive cache on the flash device (last-known power-on hours plus error-count/write history, write-on-change), and short-lived smartctl results in RAM (`/tmp`).
 
 ## Configuration File
 
@@ -182,6 +192,7 @@ Settings are stored in `/boot/config/plugins/driveage/driveage.cfg`:
 # Display Configuration
 DEFAULT_SORT="replacement_months"
 DEFAULT_SORT_DIR="asc"
+ROW_STYLE="accent"               # accent (colored edge + badge) or full (whole row)
 
 # Refresh Configuration
 AUTO_REFRESH="false"
@@ -260,11 +271,11 @@ DriveAge/
 │       ├── include/
 │       │   ├── version.php       # Single version source (written by build.sh)
 │       │   ├── config.php        # Config load + validation (validated on load)
-│       │   ├── risk.php          # Risk category policy (age + NVMe wear)
+│       │   ├── risk.php          # Risk policy: age/wear band, SMART health, overall
 │       │   ├── smartparse.php    # smartctl parsers (ATA/NVMe/SCSI, text+JSON) - pure functions
 │       │   ├── smartdata.php     # Enumeration (disks.ini/devs.ini) + assembly + health warnings
-│       │   ├── predictions.php   # Replacement estimates (measured NVMe rates, 8/10yr HDD targets)
-│       │   ├── cache.php         # Persistent power-on-hours cache (flash, write-on-change)
+│       │   ├── predictions.php   # Replacement estimates (flash wear model, 8/10yr HDD targets)
+│       │   ├── cache.php         # Persistent drive cache: POH + error/write history (flash, write-on-change)
 │       │   ├── formatting.php    # Plain-text formatting + CSS class mapping
 │       │   └── helpers.php       # Escaping and form helpers
 │       ├── scripts/
@@ -277,7 +288,7 @@ DriveAge/
 │           └── settings.js        # Reset-to-defaults
 ├── tests/
 │   ├── run.php                    # Test runner (php tests/run.php)
-│   └── fixtures/                  # Captured smartctl outputs (ATA/NVMe/SAS/standby)
+│   └── fixtures/                  # Captured smartctl outputs (ATA/SSD/NVMe/SAS/standby)
 ├── METHODOLOGY.md                 # Technical documentation & research sources
 └── README.md
 ```
@@ -286,7 +297,7 @@ DriveAge/
 
 ### Future Enhancements
 - Email/agent notifications when drives reach critical thresholds
-- Historical tracking and trend graphs for drive wear over time
+- Trend graphs for drive wear over time (the history is already recorded)
 - Export reports to CSV
 - Multi-language support
 
