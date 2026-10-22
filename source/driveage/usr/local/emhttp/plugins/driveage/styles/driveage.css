@@ -517,7 +517,6 @@ tr.drive-row[data-risk="unknown"]       { --da-row-bg: #9E9E9E; --da-row-fg: #00
 }
 
 /* Status cells */
-.temp-elevated { color: var(--da-caution); font-weight: 600; }
 .temp-high     { color: var(--da-warning); font-weight: 700; }
 .temp-critical { color: var(--da-critical); font-weight: 700; }
 .temp-unknown  { opacity: 0.7; }

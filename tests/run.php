@@ -23,6 +23,7 @@ define('DRIVEAGE_STATE_DIR', "$TMP/state");
 define('DRIVEAGE_CONFIG_FILE', "$TMP/driveage.cfg");
 define('DRIVEAGE_POH_CACHE_FILE', "$TMP/drivecache.json");
 define('DRIVEAGE_TMP_DIR', "$TMP/tmp");
+define('DRIVEAGE_DYNAMIX_CONFIG_FILE', "$TMP/dynamix.cfg"); // absent -> dynamix defaults
 
 $BASE = dirname(__DIR__) . '/source/driveage/usr/local/emhttp/plugins/driveage/include';
 if (!is_dir($BASE)) {
@@ -433,6 +434,21 @@ checkEq('due drive with warnings reads Due now', 'Due now', $p['timeline_text'])
 checkEq('count level: growing', 'critical', driveage_count_level(1, 10, 'growing'));
 checkEq('count level: new under threshold', 'warning', driveage_count_level(5, 10, 'new'));
 checkEq('count level: no threshold', 'warning', driveage_count_level(5000, null, null));
+
+echo "\n== temperature limits (Unraid display settings) ==\n";
+$disp = ['unit' => 'C', 'hot' => 45, 'max' => 55, 'hotssd' => 60, 'maxssd' => 70];
+checkEq('HDD uses global limits', [45, 55], getTemperatureLimits([], 'hdd', $disp));
+checkEq('NVMe uses SSD limits', [60, 70], getTemperatureLimits([], 'nvme', $disp));
+checkEq('rotational=0 uses SSD limits', [60, 70], getTemperatureLimits(['rotational' => '0'], 'hdd', $disp));
+checkEq('SSD limits disabled (-1) -> HDD limits', [45, 55], getTemperatureLimits([], 'ssd', array_merge($disp, ['hotssd' => -1, 'maxssd' => -1])));
+checkEq('per-disk override wins', [40, 50], getTemperatureLimits(['hotTemp' => '40', 'maxTemp' => '50'], 'nvme', $disp));
+checkEq('blank per-disk value ignored', [45, 55], getTemperatureLimits(['hotTemp' => '', 'maxTemp' => '-1'], 'hdd', $disp));
+checkEq('at the limit is not over it', 'temp-normal', getTemperatureClass(45, 45, 55));
+checkEq('above warning', 'temp-high', getTemperatureClass(46, 45, 55));
+checkEq('above critical', 'temp-critical', getTemperatureClass(56, 45, 55));
+checkEq('limit 0 disables', 'temp-normal', getTemperatureClass(99, 0, 0));
+checkEq('no reading', 'temp-unknown', getTemperatureClass(null, 45, 55));
+checkEq('dynamix defaults without a config file', ['unit' => 'C', 'hot' => 45, 'max' => 55, 'hotssd' => 60, 'maxssd' => 70], getDisplaySettings());
 
 // ---------------------------------------------------------------------------
 echo "\n== config validation (enforced on load) ==\n";

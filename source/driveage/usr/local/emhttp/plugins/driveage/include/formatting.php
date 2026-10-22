@@ -222,39 +222,50 @@ function formatTimestamp($timestamp = null, $format = 'Y-m-d H:i:s') {
 }
 
 /**
+ * Temperature warning/critical limits (Celsius) for a drive, resolved the
+ * way dynamix's monitor does: per-disk override (Disk Settings) first, then
+ * the SSD limits for solid-state drives, then the global HDD limits.
+ *
+ * @param array $ini Ini entry (hotTemp / maxTemp / rotational)
+ * @param string $physicalType 'hdd', 'ssd', 'nvme' or 'usb'
+ * @param array $display Settings from getDisplaySettings()
+ * @return array [int $warning, int $critical]
+ */
+function getTemperatureLimits($ini, $physicalType, $display) {
+    $solidState = in_array($physicalType, ['ssd', 'nvme'], true) || (($ini['rotational'] ?? '1') === '0');
+    $hot = ($solidState && $display['hotssd'] >= 0) ? $display['hotssd'] : $display['hot'];
+    $max = ($solidState && $display['maxssd'] >= 0) ? $display['maxssd'] : $display['max'];
+    if (isset($ini['hotTemp']) && is_numeric($ini['hotTemp']) && intval($ini['hotTemp']) >= 0) {
+        $hot = intval($ini['hotTemp']);
+    }
+    if (isset($ini['maxTemp']) && is_numeric($ini['maxTemp']) && intval($ini['maxTemp']) >= 0) {
+        $max = intval($ini['maxTemp']);
+    }
+    return [$hot, $max];
+}
+
+/**
  * Get color-coded temperature class.
  * Single source of truth - the JSON API ships this class to the frontend.
+ * Like Unraid, a limit is exceeded when the temperature is ABOVE it, and a
+ * limit of 0 is disabled.
  *
  * @param int|null $temp Temperature in Celsius
- * @param string $physicalType Physical drive type ('hdd', 'nvme' or 'usb')
+ * @param int $warning Warning limit (Celsius)
+ * @param int $critical Critical limit (Celsius)
  * @return string CSS class name
  */
-function getTemperatureClass($temp, $physicalType = 'hdd') {
+function getTemperatureClass($temp, $warning, $critical) {
     if ($temp === null || $temp === '') {
         return 'temp-unknown';
     }
 
     $temp = intval($temp);
-
-    if ($physicalType === 'nvme') {
-        // NVMe thresholds: < 50°C, 50-64°C, 65-74°C, >= 75°C
-        if ($temp >= 75) {
-            return 'temp-critical';
-        } elseif ($temp >= 65) {
-            return 'temp-high';
-        } elseif ($temp >= 50) {
-            return 'temp-elevated';
-        }
-        return 'temp-normal';
-    }
-
-    // HDD thresholds: < 40°C, 40-49°C, 50-59°C, >= 60°C
-    if ($temp >= 60) {
+    if ($critical > 0 && $temp > $critical) {
         return 'temp-critical';
-    } elseif ($temp >= 50) {
+    }
+    if ($warning > 0 && $temp > $warning) {
         return 'temp-high';
-    } elseif ($temp >= 40) {
-        return 'temp-elevated';
     }
     return 'temp-normal';
 }

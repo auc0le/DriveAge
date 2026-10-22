@@ -491,6 +491,9 @@ function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
     $healthStatus = getHealthStatus($smartStatus, $healthWarnings, $hasSmartData);
     $riskCategory = getOverallRiskCategory($ageCategory, $healthStatus);
 
+    // Temperature limits: the same ones Unraid's Main page and notifications use
+    [$tempWarning, $tempCritical] = getTemperatureLimits($ini, $physicalType, getDisplaySettings());
+
     // Identification
     $formattedDeviceName = formatDeviceName($assignment['display_name']);
     if (!empty($assignment['disk_id'])) {
@@ -517,7 +520,9 @@ function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
         'power_on_human' => formatPowerOnHours($powerOnHours),
         'temperature' => $temperature,
         'temperature_formatted' => formatTemperature($temperature, $tempUnit),
-        'temperature_class' => getTemperatureClass($temperature, $physicalType),
+        'temperature_class' => getTemperatureClass($temperature, $tempWarning, $tempCritical),
+        'temperature_limits' => sprintf('Warning above %s, critical above %s (Unraid disk settings)',
+            formatTemperature($tempWarning, $tempUnit), formatTemperature($tempCritical, $tempUnit)),
         'smart_status' => $smartStatus,
         'smart_status_class' => getSmartStatusClass($smartStatus),
         'spin_status' => $spinStatus,

@@ -100,7 +100,7 @@ Default categories are calibrated to Backblaze's 2025 bathtub-curve revisit: fle
 **Identification**: Drive model and serial number (from Unraid's disk id)
 **Size**: Drive capacity (Unraid's own sectors × sector size)
 **Power On Hours**: Total powered-on hours (cached for spun-down drives, surviving reboots)
-**Temperature**: From Unraid's live state - identical to the Main page
+**Temperature**: From Unraid's live state - identical to the Main page, and colored with Unraid's own warning/critical limits (per-disk overrides, SSD limits for SSD/NVMe)
 **SMART Status**: Overall health self-assessment (PASSED/FAILED)
 **Spin Status**: Active or standby, from Unraid's live state
 **Health Status**: SMART attribute warnings (click any warning for the built-in Help page):

@@ -487,7 +487,7 @@ window.DriveAge = window.DriveAge || {};
             }
 
             case 'temp':
-                return `<td class="text-right ${escapeHtml(drive.temperature_class || 'temp-unknown')}">${escapeHtml(drive.temperature_formatted)}</td>`;
+                return `<td class="text-right ${escapeHtml(drive.temperature_class || 'temp-unknown')}" title="${escapeHtml(drive.temperature_limits)}">${escapeHtml(drive.temperature_formatted)}</td>`;
 
             case 'smart':
                 return `<td><span class="${escapeHtml(drive.smart_status_class || 'smart-unknown')}">${escapeHtml(drive.smart_status)}</span></td>`;
@@ -575,6 +575,7 @@ window.DriveAge = window.DriveAge || {};
             ['Serial', drive.serial !== 'Unknown' ? drive.serial : null],
             ['Size', drive.size_human],
             ['Power-on time', drive.power_on_hours !== null ? drive.power_on_human : null],
+            ['Temperature', drive.temperature !== null ? drive.temperature_formatted + ' \u2014 ' + drive.temperature_limits : null],
             ['Data source', source]
         ]);
 
