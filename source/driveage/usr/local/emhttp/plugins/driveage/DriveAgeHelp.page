@@ -297,13 +297,21 @@ $cacheVersion = DRIVEAGE_VERSION;
             NAND chip read/write errors indicate uncorrectable data errors. The SSD's reliability is compromised.
         </div>
 
-        <h3>Critical Warning Flag</h3>
+        <h3>Critical Warning Flags</h3>
         <div class="critical-box">
             <span class="severity-badge severity-critical">CRITICAL</span>
-            <strong>Active warning</strong><br>
-            <strong>Action:</strong> Check drive immediately<br><br>
-            The drive has raised a vendor-specific critical warning flag. This could indicate temperature issues,
-            spare capacity depletion, or other critical conditions.
+            <strong>Spare low (0x01), reliability degraded (0x04), read-only (0x08), backup failed (0x10), PMR read-only (0x20)</strong><br>
+            <strong>Action:</strong> Replace - a read-only drive immediately (copy data off first)<br><br>
+            The NVMe Critical Warning field is a set of independent flags. DriveAge decodes each one: these flags mean
+            the drive itself is degraded or out of spare capacity.
+        </div>
+        <div class="warning-box">
+            <span class="severity-badge severity-warning">WARNING</span>
+            <strong>Temperature over threshold (0x02)</strong><br>
+            <strong>Action:</strong> Improve cooling<br><br>
+            The drive got hotter (or colder) than its limits. This is a cooling problem, not wear - NVMe drives in
+            cache pools often trip it during heavy writes. Add airflow or a heatsink; it does not shorten the
+            replacement estimate.
         </div>
 
         <h3>Available Spare Below Threshold</h3>
@@ -338,8 +346,8 @@ $cacheVersion = DRIVEAGE_VERSION;
         <ul>
             <li>HDD SMART warnings: <strong>3 months</strong> replacement estimate</li>
             <li>Target HDD age: <strong>8 years</strong> - ahead of the failure-rate spike Backblaze measured near 10 years</li>
-            <li>NVMe wear projections: the drive's <strong>own measured wear rate +25% safety margin</strong>
-                (assumed 30 TB/year only when drive history is under ~3 months)</li>
+            <li>NVMe wear projections: the drive's <strong>own wear indicator (Percentage Used) and measured wear rate +25% safety margin</strong>
+                (a 5-year wear life is assumed only when drive history is under ~3 months)</li>
         </ul>
         <p><strong>Best for:</strong> Production systems, mission-critical data, risk-averse users</p>
 
@@ -348,8 +356,8 @@ $cacheVersion = DRIVEAGE_VERSION;
         <ul>
             <li>HDD SMART warnings: <strong>6 months</strong> replacement estimate</li>
             <li>Target HDD age: <strong>10 years</strong> - the AFR peak (~4.25%) in Backblaze's 2025 data</li>
-            <li>NVMe wear projections: the drive's <strong>own measured wear rate</strong>, no extra margin
-                (assumed 15 TB/year only when drive history is under ~3 months)</li>
+            <li>NVMe wear projections: the drive's <strong>own wear indicator and measured wear rate</strong>, no extra margin
+                (a 5-year wear life is assumed only when drive history is under ~3 months)</li>
         </ul>
         <p><strong>Best for:</strong> Home labs, non-critical storage, budget-conscious users</p>
 
@@ -384,8 +392,9 @@ $cacheVersion = DRIVEAGE_VERSION;
             </li>
             <li>
                 <strong>Consumer SSD Endurance Research</strong><br>
-                Vendor endurance ratings for consumer TLC drives typically run 300-600 TBW per TB of capacity;
-                DriveAge uses 500 TBW/TB as a mid-market estimate when projecting NVMe wear
+                NVMe drives report Percentage Used - their own estimate of rated endurance consumed - and DriveAge
+                projects that first. Vendor ratings for consumer TLC drives typically run 300-600 TBW per TB, so
+                500 TBW/TB is used only as a guess for drives that report no wear indicator
             </li>
         </ul>
 
@@ -414,7 +423,8 @@ $cacheVersion = DRIVEAGE_VERSION;
         <h3>Q: Why doesn't my NVMe drive show a replacement estimate?</h3>
         <p>
             <strong>A:</strong> NVMe estimates require either: (1) Percentage Used data, (2) Data Units Written, or (3) Available Spare
-            consumption. Very new drives with 0% wear may show "Unknown" until enough data is collected. This is normal.
+            consumption. Very new drives may show "Unknown" until enough data is collected. This is normal. Healthy drives
+            with light wear show "10+ years" - projections beyond ten years are not meaningful as dates.
             Drives with less than ~3 months of power-on history use assumed write rates instead of measured ones
             (shown in the estimate's tooltip), so early estimates carry lower confidence.
         </p>

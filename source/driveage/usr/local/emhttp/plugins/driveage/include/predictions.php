@@ -6,14 +6,15 @@
  *  - HDD/USB: SMART health overrides + linear countdown to a target age
  *             derived from Backblaze's 2025 bathtub-curve revisit
  *             (AFR roughly flat through mid-life, peaking ~4.25% at ~10.3 yr)
- *  - NVMe:    measured wear rates from the drive's own history
- *             (TB written / power-on years, wear%-per-year), with
- *             assumed-rate fallbacks when history is too short
+ *  - NVMe:    the vendor wear indicator (Percentage Used) projected at the
+ *             drive's own measured wear rate; a capacity-based TBW guess
+ *             only when no wear indicator exists
  *
  * Every estimate carries 'method', 'confidence' and human-readable notes.
  */
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/smartparse.php'; // NVMe critical-warning bit constants
 
 // Replacement target ages (years). Conservative replaces before the measured
 // end-of-life AFR ramp; aggressive rides drives to the measured ~4.25% peak.
@@ -26,22 +27,18 @@ define('DRIVEAGE_MIN_HISTORY_YEARS', 0.25); // ~3 months
 // Safety margin applied to measured rates in conservative mode
 define('DRIVEAGE_CONSERVATIVE_RATE_MARGIN', 1.25);
 
-/**
- * Get the target replacement age in months for a prediction mode.
- */
-function driveage_target_months($predictionMode) {
-    $years = ($predictionMode === 'conservative')
-        ? DRIVEAGE_TARGET_YEARS_CONSERVATIVE
-        : DRIVEAGE_TARGET_YEARS_AGGRESSIVE;
-    return intval(round($years * 12));
-}
+// Flash wear projections beyond this are displayed as "10+ years". This is a
+// display horizon, not a lifespan: Backblaze's age curve is HDD data and
+// says nothing about calendar limits for SSDs.
+define('DRIVEAGE_FLASH_HORIZON_MONTHS', 120);
 
 /**
- * Estimate generic TBW rating based on drive capacity.
+ * Estimate a generic TBW rating from capacity.
  *
- * Consumer TLC drives are typically rated 300-600 TBW per TB of capacity
- * (QLC budget drives lower, premium TLC higher); 500 TBW/TB is used as a
- * middle-of-market estimate since SMART does not expose the vendor rating.
+ * Only used when a drive exposes no wear indicator of its own (Percentage
+ * Used). Vendors rate endurance per DECIMAL terabyte; consumer TLC drives
+ * typically run 300-600 TBW/TB (QLC lower, premium TLC higher), so 500
+ * TBW/TB is a middle-of-market guess.
  *
  * @param int $sizeBytes Drive size in bytes
  * @return int Estimated TBW rating
@@ -51,41 +48,91 @@ function estimateNvmeTBW($sizeBytes) {
         return 300; // Default minimum (typical for 256GB-512GB drives)
     }
 
-    $sizeTB = $sizeBytes / (1024 * 1024 * 1024 * 1024);
+    $sizeTB = $sizeBytes / 1e12;
 
-    // Mid-market estimate: 500 TBW per TB
-    $estimatedTBW = round($sizeTB * 500);
+    // Mid-market estimate: 500 TBW per TB, minimum 250 TBW for small drives
+    return max(intval(round($sizeTB * 500)), 250);
+}
 
-    // Minimum 250 TBW for small drives
-    return max($estimatedTBW, 250);
+/**
+ * Build a flash-drive prediction result, applying the display horizon.
+ * Beyond DRIVEAGE_FLASH_HORIZON_MONTHS the projection is shown as "10+ years":
+ * a wear projection that far out says "not a concern", not a date.
+ */
+function driveage_flash_result($months, $confidence, $method, $notes, $extra = []) {
+    $months = max(0, intval(round($months)));
+    $capped = $months > DRIVEAGE_FLASH_HORIZON_MONTHS;
+    if ($capped) {
+        $months = DRIVEAGE_FLASH_HORIZON_MONTHS;
+        $timeline = ['text' => '10+ years', 'class' => 'timeline-healthy'];
+    } else {
+        $timeline = getReplacementTimelineText($months);
+    }
+    return array_merge([
+        'months_remaining' => $months,
+        'confidence' => $confidence,
+        'method' => $method,
+        'notes' => $notes,
+        'capped' => $capped,
+        'timeline_text' => $timeline['text'],
+        'timeline_class' => $timeline['class']
+    ], $extra);
 }
 
 /**
  * Calculate estimated remaining life for an NVMe drive.
  *
- * Method order (first applicable wins):
- *  0. Critical conditions (SMART FAILED, media errors, spare below threshold)
- *  1. TBW: measured write rate from drive history, assumed rate as fallback
- *  2. Percentage Used: measured wear slope, fixed-lifespan fallback
- *  3. Available Spare depletion: measured depletion rate, fallback assumption
- *
- * @param array $driveInfo Complete drive information array
+ * @param array $driveInfo Complete drive information array (nvme_* fields)
  * @param string $predictionMode 'conservative' or 'aggressive'
  * @return array Prediction data
  */
 function estimateNvmeRemainingLife($driveInfo, $predictionMode = 'conservative') {
-    $percentageUsed  = $driveInfo['nvme_percentage_used'] ?? null;
-    $availableSpare  = $driveInfo['nvme_available_spare'] ?? null;
-    $spareThreshold  = $driveInfo['nvme_available_spare_threshold'] ?? 10;
-    $tbwCalculated   = $driveInfo['nvme_tbw_calculated'] ?? null;
-    $mediaErrors     = $driveInfo['nvme_media_errors'] ?? 0;
-    $criticalWarning = $driveInfo['nvme_critical_warning'] ?? 0;
-    $sizeBytes       = $driveInfo['size_bytes'] ?? 0;
-    $powerOnHours    = $driveInfo['power_on_hours'] ?? null;
-    $smartStatus     = strtoupper($driveInfo['smart_status'] ?? 'UNKNOWN');
+    return estimateFlashRemainingLife([
+        'percentage_used'   => $driveInfo['nvme_percentage_used'] ?? null,
+        'available_spare'   => $driveInfo['nvme_available_spare'] ?? null,
+        'spare_threshold'   => $driveInfo['nvme_available_spare_threshold'] ?? null,
+        'tbw_written'       => $driveInfo['nvme_tbw_calculated'] ?? null,
+        'media_errors'      => $driveInfo['nvme_media_errors'] ?? 0,
+        'critical_warning'  => $driveInfo['nvme_critical_warning'] ?? 0,
+        'size_bytes'        => $driveInfo['size_bytes'] ?? 0,
+        'power_on_hours'    => $driveInfo['power_on_hours'] ?? null,
+        'smart_status'      => $driveInfo['smart_status'] ?? 'UNKNOWN',
+        'recent_write_rate' => $driveInfo['recent_write_rate_tb_yr'] ?? null
+    ], $predictionMode);
+}
 
-    $maxMonths = driveage_target_months($predictionMode);
+/**
+ * Calculate estimated remaining life for a flash (NVMe or SATA SSD) drive.
+ *
+ * Method order (first applicable wins):
+ *  0. Critical conditions (SMART FAILED, media errors, replace-class
+ *     critical-warning bits, spare below threshold)
+ *  1. Vendor wear indicator (Percentage Used): the drive's own estimate of
+ *     rated endurance consumed - it already knows its real rating and write
+ *     amplification, so it outranks any capacity-based guess
+ *  2. TBW against an ESTIMATED rating - only when no wear indicator exists
+ *  3. Available Spare depletion
+ *
+ * @param array $w Normalized wear data: percentage_used, available_spare,
+ *                 spare_threshold, tbw_written, media_errors, critical_warning,
+ *                 size_bytes, power_on_hours, smart_status, recent_write_rate
+ * @param string $predictionMode 'conservative' or 'aggressive'
+ * @return array Prediction data
+ */
+function estimateFlashRemainingLife($w, $predictionMode = 'conservative') {
+    $percentageUsed  = $w['percentage_used'] ?? null;
+    $availableSpare  = $w['available_spare'] ?? null;
+    $spareThreshold  = $w['spare_threshold'] ?? 10;
+    $tbwWritten      = $w['tbw_written'] ?? null;
+    $mediaErrors     = $w['media_errors'] ?? 0;
+    $criticalWarning = intval($w['critical_warning'] ?? 0);
+    $sizeBytes       = $w['size_bytes'] ?? 0;
+    $powerOnHours    = $w['power_on_hours'] ?? null;
+    $smartStatus     = strtoupper($w['smart_status'] ?? 'UNKNOWN');
+    $recentRate      = $w['recent_write_rate'] ?? null; // TB/yr from drivecache history
+
     $margin = ($predictionMode === 'conservative') ? DRIVEAGE_CONSERVATIVE_RATE_MARGIN : 1.0;
+    $marginNote = ($margin > 1.0) ? sprintf(' Conservative +%d%% margin applied.', round(($margin - 1) * 100)) : '';
 
     // Drive history in years (for measured wear rates)
     $ageYears = ($powerOnHours !== null && $powerOnHours > 0) ? $powerOnHours / 8760 : null;
@@ -103,8 +150,10 @@ function estimateNvmeRemainingLife($driveInfo, $predictionMode = 'conservative')
         ];
     }
 
-    // CRITICAL: media errors or critical warning flag
-    if ($mediaErrors > 0 || $criticalWarning > 0) {
+    // CRITICAL: media errors, or a critical-warning bit that means the drive
+    // is degraded (reliability, read-only, backup failed, PMR). The
+    // temperature bit is a cooling problem, not a replacement signal.
+    if ($mediaErrors > 0 || ($criticalWarning & DRIVEAGE_NVME_CW_REPLACE_MASK)) {
         return [
             'months_remaining' => 0,
             'confidence' => 'high',
@@ -116,7 +165,7 @@ function estimateNvmeRemainingLife($driveInfo, $predictionMode = 'conservative')
     }
 
     // CRITICAL: available spare below vendor threshold
-    if ($availableSpare !== null && $availableSpare < $spareThreshold) {
+    if (($availableSpare !== null && $availableSpare < $spareThreshold) || ($criticalWarning & DRIVEAGE_NVME_CW_SPARE)) {
         return [
             'months_remaining' => 1,
             'confidence' => 'high',
@@ -127,78 +176,91 @@ function estimateNvmeRemainingLife($driveInfo, $predictionMode = 'conservative')
         ];
     }
 
-    // Method 1: TBW - prefer the drive's own measured write rate
-    if ($tbwCalculated !== null && $tbwCalculated > 0 && $sizeBytes > 0) {
+    // Method 1: vendor wear indicator
+    if ($percentageUsed !== null && $percentageUsed >= 100) {
+        return [
+            'months_remaining' => 0,
+            'confidence' => 'medium',
+            'method' => 'endurance_exceeded',
+            'notes' => sprintf('Vendor wear indicator at %d%%: rated endurance consumed. Many drives run well past 100%%; plan replacement and watch spare and media errors.', $percentageUsed),
+            'percentage_used' => $percentageUsed,
+            'timeline_text' => 'Due now',
+            'timeline_class' => 'timeline-warning'
+        ];
+    }
+
+    if ($percentageUsed !== null && $percentageUsed >= 1) {
+        if ($hasHistory) {
+            $measured = $percentageUsed / $ageYears;
+            $wearPerYear = max($measured * $margin, 0.01);
+            $method = 'percentage_used_measured';
+            // The indicator moves in whole percent: below 5% it is coarse
+            $confidence = ($percentageUsed >= 5) ? 'medium' : 'low';
+            $notes = sprintf('Vendor wear indicator %d%% after %.1f power-on years (%.1f%%/yr).', $percentageUsed, $ageYears, $measured)
+                   . $marginNote
+                   . (($percentageUsed < 5) ? ' Low resolution: the indicator moves in whole percent.' : '');
+
+            // A recent write rate from drivecache history reflects workload
+            // changes the lifetime average hides: project the remaining wear
+            // at that rate, using this drive's own wear-per-TB calibration.
+            if ($recentRate !== null && $recentRate > 0 && $tbwWritten !== null && $tbwWritten > 0) {
+                $lifetimeRate = $tbwWritten / $ageYears;
+                $rate = ($predictionMode === 'conservative') ? max($recentRate, $lifetimeRate) : $recentRate;
+                $wearPerYear = max(($percentageUsed / $tbwWritten) * $rate * $margin, 0.01);
+                $notes .= sprintf(' Projected at %.1f TB/yr (recent writes; lifetime average %.1f TB/yr).', $rate, $lifetimeRate);
+            }
+
+            $months = ((100 - $percentageUsed) / $wearPerYear) * 12;
+        } else {
+            // Short history: assume a 5-year rated life (20% wear per year)
+            $wearMultiplier = ($predictionMode === 'conservative') ? 1.5 : 1.0;
+            $months = ((100 - $percentageUsed) / 20) * 12 / $wearMultiplier;
+            $method = 'percentage_used_linear';
+            $confidence = 'low';
+            $notes = 'Assumed 5-year wear life (drive history too short to measure). Actual lifespan may vary.';
+        }
+
+        return driveage_flash_result($months, $confidence, $method, $notes, ['percentage_used' => $percentageUsed]);
+    }
+
+    // Wear indicator still reads 0%: under 1% used in the drive's whole
+    // history, so at most ~1%/yr - a lower bound, far beyond the horizon
+    if ($percentageUsed === 0 && $hasHistory) {
+        $wearPerYear = (1 / $ageYears) * $margin;
+        return driveage_flash_result((99 / $wearPerYear) * 12, 'low', 'wear_below_resolution',
+            sprintf('Vendor wear indicator still 0%% after %.1f power-on years (under 1%% used); estimate is a lower bound.', $ageYears),
+            ['percentage_used' => 0]);
+    }
+
+    // Method 2: TBW against an estimated rating (no wear indicator)
+    if ($tbwWritten !== null && $tbwWritten > 0 && $sizeBytes > 0) {
         $estimatedMaxTBW = estimateNvmeTBW($sizeBytes);
-        $remainingTBW = $estimatedMaxTBW - $tbwCalculated;
+        $remainingTBW = $estimatedMaxTBW - $tbwWritten;
 
         if ($remainingTBW > 0) {
             if ($hasHistory) {
                 // Measured: TB written per power-on year, with safety margin
-                $measuredRate = $tbwCalculated / $ageYears;
+                $measuredRate = $recentRate ?? ($tbwWritten / $ageYears);
                 $writeRate = max($measuredRate * $margin, 0.01);
                 $method = 'tbw_measured_rate';
-                $confidence = 'medium';
                 $rateNote = sprintf('measured %.1f TB/yr from drive history', $measuredRate)
                           . (($margin > 1.0) ? sprintf(' (+%d%% safety margin)', round(($margin - 1) * 100)) : '');
             } else {
                 // Fallback: assumed home-NAS write rate
                 $writeRate = ($predictionMode === 'conservative') ? 30 : 15;
                 $method = 'tbw_assumed_rate';
-                $confidence = 'low';
                 $rateNote = sprintf('assumed %d TB/yr (drive history too short to measure)', $writeRate);
             }
 
-            $monthsRemaining = intval(min(round(($remainingTBW / $writeRate) * 12), $maxMonths));
-            $timeline = getReplacementTimelineText($monthsRemaining);
-
-            return [
-                'months_remaining' => $monthsRemaining,
-                'confidence' => $confidence,
-                'method' => $method,
-                'notes' => "Based on estimated {$estimatedMaxTBW} TBW rating; {$rateNote}. Capped at the " .
-                           ($predictionMode === 'conservative' ? '8' : '10') . '-year target age.',
+            // Low confidence either way: the endurance rating itself is a guess
+            return driveage_flash_result(($remainingTBW / $writeRate) * 12, 'low', $method,
+                "No wear indicator reported. Based on an ESTIMATED {$estimatedMaxTBW} TBW rating; {$rateNote}.", [
                 'estimated_tbw' => $estimatedMaxTBW,
-                'written_tbw' => $tbwCalculated,
+                'written_tbw' => $tbwWritten,
                 'remaining_tbw' => round($remainingTBW, 1),
-                'write_rate_tb_yr' => round($writeRate, 1),
-                'timeline_text' => $timeline['text'],
-                'timeline_class' => $timeline['class']
-            ];
+                'write_rate_tb_yr' => round($writeRate, 1)
+            ]);
         }
-    }
-
-    // Method 2: Percentage Used - prefer the drive's own measured wear slope
-    if ($percentageUsed !== null && $percentageUsed > 0 && $percentageUsed < 100) {
-        if ($hasHistory) {
-            // Measured: wear percent per power-on year, with safety margin
-            $wearPerYear = max(($percentageUsed / $ageYears) * $margin, 0.01);
-            $monthsRemaining = round(((100 - $percentageUsed) / $wearPerYear) * 12);
-            $method = 'percentage_used_measured';
-            $confidence = 'medium';
-            $notes = sprintf('Measured wear rate: %.1f%%/yr from drive history.', $percentageUsed / $ageYears)
-                   . (($margin > 1.0) ? sprintf(' Conservative +%d%% margin applied.', round(($margin - 1) * 100)) : '');
-        } else {
-            // Fallback: assume a 5-year rated life (20% wear per year)
-            $wearMultiplier = ($predictionMode === 'conservative') ? 1.5 : 1.0;
-            $monthsRemaining = round(((100 - $percentageUsed) / 20) * 12 / $wearMultiplier);
-            $method = 'percentage_used_linear';
-            $confidence = 'low';
-            $notes = 'Assumed 5-year wear life (drive history too short to measure). Actual lifespan may vary.';
-        }
-
-        $monthsRemaining = intval(min($monthsRemaining, $maxMonths));
-        $timeline = getReplacementTimelineText($monthsRemaining);
-
-        return [
-            'months_remaining' => $monthsRemaining,
-            'confidence' => $confidence,
-            'method' => $method,
-            'notes' => $notes,
-            'percentage_used' => $percentageUsed,
-            'timeline_text' => $timeline['text'],
-            'timeline_class' => $timeline['class']
-        ];
     }
 
     // Method 3: Available Spare depletion
@@ -210,27 +272,17 @@ function estimateNvmeRemainingLife($driveInfo, $predictionMode = 'conservative')
             if ($hasHistory) {
                 // Measured: spare consumed per power-on year, with safety margin
                 $depletionPerYear = max(($spareConsumed / $ageYears) * $margin, 0.01);
-                $monthsRemaining = round(($spareRemaining / $depletionPerYear) * 12);
+                $months = ($spareRemaining / $depletionPerYear) * 12;
                 $notes = sprintf('Measured spare depletion: %.1f%%/yr from drive history.', $spareConsumed / $ageYears);
             } else {
                 // Fallback: assume current consumption took 2 years
                 $wearMultiplier = ($predictionMode === 'conservative') ? 1.5 : 1.0;
-                $monthsRemaining = round(($spareRemaining / $spareConsumed) * 24 / $wearMultiplier);
+                $months = ($spareRemaining / $spareConsumed) * 24 / $wearMultiplier;
                 $notes = 'Assumed depletion rate (drive history too short to measure).';
             }
 
-            $monthsRemaining = intval(min($monthsRemaining, $maxMonths));
-            $timeline = getReplacementTimelineText($monthsRemaining);
-
-            return [
-                'months_remaining' => $monthsRemaining,
-                'confidence' => 'low',
-                'method' => 'spare_depletion',
-                'notes' => $notes . ' Spare depletion is often non-linear.',
-                'available_spare' => $availableSpare,
-                'timeline_text' => $timeline['text'],
-                'timeline_class' => $timeline['class']
-            ];
+            return driveage_flash_result($months, 'low', 'spare_depletion',
+                $notes . ' Spare depletion is often non-linear.', ['available_spare' => $availableSpare]);
         }
     }
 

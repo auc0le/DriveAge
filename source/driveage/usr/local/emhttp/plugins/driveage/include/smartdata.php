@@ -583,14 +583,16 @@ function getNvmeHealthWarnings($driveInfo) {
         ];
     }
 
-    if (($driveInfo['nvme_critical_warning'] ?? 0) > 0) {
+    // Each Critical Warning bit means something different: a hot drive
+    // (temperature bit) needs cooling, a read-only drive needs replacing
+    foreach (driveage_decode_nvme_critical_warning($driveInfo['nvme_critical_warning'] ?? 0) as $condition) {
         $warnings[] = [
-            'level' => 'critical',
-            'attribute' => 'critical_warning',
-            'value' => $driveInfo['nvme_critical_warning'],
-            'message' => 'Critical warning active',
-            'action' => 'Check drive immediately',
-            'tooltip' => 'Drive has raised a critical warning flag.'
+            'level' => $condition['level'],
+            'attribute' => $condition['attribute'],
+            'value' => $condition['bit'],
+            'message' => $condition['message'],
+            'action' => $condition['action'],
+            'tooltip' => $condition['tooltip']
         ];
     }
 

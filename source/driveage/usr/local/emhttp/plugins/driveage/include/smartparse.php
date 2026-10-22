@@ -16,6 +16,61 @@
  * and health from the .ssa files; the parser only fills what is present.
  */
 
+// NVMe SMART/Health log "Critical Warning" bits (NVMe base spec, Log 0x02)
+define('DRIVEAGE_NVME_CW_SPARE',       0x01); // available spare below threshold
+define('DRIVEAGE_NVME_CW_TEMPERATURE', 0x02); // temperature outside threshold
+define('DRIVEAGE_NVME_CW_RELIABILITY', 0x04); // reliability degraded (media/internal errors)
+define('DRIVEAGE_NVME_CW_READ_ONLY',   0x08); // media placed in read-only mode
+define('DRIVEAGE_NVME_CW_BACKUP',      0x10); // volatile memory backup device failed
+define('DRIVEAGE_NVME_CW_PMR',         0x20); // persistent memory region read-only/unreliable
+// Bits that mean the drive itself is degraded and should be replaced
+define('DRIVEAGE_NVME_CW_REPLACE_MASK', DRIVEAGE_NVME_CW_RELIABILITY | DRIVEAGE_NVME_CW_READ_ONLY
+    | DRIVEAGE_NVME_CW_BACKUP | DRIVEAGE_NVME_CW_PMR);
+
+/**
+ * Decode an NVMe Critical Warning value into individual conditions.
+ *
+ * @param int|null $value Critical Warning byte
+ * @return array List of ['bit','attribute','level','message','action','tooltip']
+ */
+function driveage_decode_nvme_critical_warning($value) {
+    $value = intval($value ?? 0);
+    $defs = [
+        DRIVEAGE_NVME_CW_SPARE => ['nvme_spare_low', 'critical', 'Spare capacity below threshold', 'Replace soon',
+            'The drive has used up its reserve of spare flash blocks - it is at the end of its wear life.'],
+        DRIVEAGE_NVME_CW_TEMPERATURE => ['nvme_temperature', 'warning', 'Temperature over threshold', 'Improve cooling',
+            'The drive reported a temperature outside its limits. This is a cooling problem, not a sign of wear - add airflow or a heatsink.'],
+        DRIVEAGE_NVME_CW_RELIABILITY => ['nvme_reliability', 'critical', 'Reliability degraded', 'Replace ASAP',
+            'The drive reports its reliability is degraded by media or internal errors.'],
+        DRIVEAGE_NVME_CW_READ_ONLY => ['nvme_read_only', 'critical', 'Drive is read-only', 'Replace immediately',
+            'The drive has switched its media to read-only mode, usually at end of life. Copy data off now.'],
+        DRIVEAGE_NVME_CW_BACKUP => ['nvme_backup_failed', 'critical', 'Power-loss backup failed', 'Replace ASAP',
+            'The volatile memory backup device (power-loss protection) has failed.'],
+        DRIVEAGE_NVME_CW_PMR => ['nvme_pmr_read_only', 'critical', 'Persistent memory region read-only', 'Replace ASAP',
+            'The persistent memory region has become read-only or unreliable.'],
+    ];
+
+    $conditions = [];
+    $known = 0;
+    foreach ($defs as $bit => [$attribute, $level, $message, $action, $tooltip]) {
+        $known |= $bit;
+        if ($value & $bit) {
+            $conditions[] = compact('bit', 'attribute', 'level', 'message', 'action', 'tooltip');
+        }
+    }
+    if ($value & ~$known & 0xFF) {
+        $conditions[] = [
+            'bit' => $value & ~$known & 0xFF,
+            'attribute' => 'critical_warning',
+            'level' => 'warning',
+            'message' => sprintf('Critical warning 0x%02X', $value),
+            'action' => 'Check drive',
+            'tooltip' => 'The drive set a critical-warning bit DriveAge does not recognize.'
+        ];
+    }
+    return $conditions;
+}
+
 /**
  * Extract the leading integer from a smartctl RAW_VALUE field.
  * Handles vendor formats like "34 (Min/Max 21/49)", "33477h+12m+30.271s",

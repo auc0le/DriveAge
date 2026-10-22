@@ -245,7 +245,13 @@ function renderDriveRow(drive) {
             'reported_uncorrectable': 'other-smart-warnings',
             'command_timeout': 'other-smart-warnings',
             'media_errors': 'nvme-warnings',
-            'critical_warning': 'nvme-warnings'
+            'critical_warning': 'nvme-warnings',
+            'nvme_spare_low': 'nvme-warnings',
+            'nvme_temperature': 'nvme-warnings',
+            'nvme_reliability': 'nvme-warnings',
+            'nvme_read_only': 'nvme-warnings',
+            'nvme_backup_failed': 'nvme-warnings',
+            'nvme_pmr_read_only': 'nvme-warnings'
         };
 
         drive.health_warnings.forEach(warning => {

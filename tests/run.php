@@ -207,8 +207,8 @@ $p = estimateHddRemainingLife([
 ], 'conservative');
 checkEq('critical warning without POH still Replace Now', 0, $p['months_remaining']);
 
-echo "\n== predictions: NVMe measured wear rates ==\n";
-// User's real-world case: 2TB, 24.5 TBW written over ~2.84 years
+echo "\n== predictions: NVMe (vendor wear indicator first) ==\n";
+// User's real-world case: 2TB, 24.5 TBW written over ~2.84 years, 3% used
 $drive = [
     'physical_type' => 'nvme',
     'smart_status' => 'PASSED',
@@ -222,25 +222,53 @@ $drive = [
     'nvme_critical_warning' => 0
 ];
 $p = estimateNvmeRemainingLife($drive, 'conservative');
-checkEq('light writes -> capped at 8yr target', 96, $p['months_remaining']);
-checkEq('measured method used', 'tbw_measured_rate', $p['method']);
-checkEq('measured confidence medium', 'medium', $p['confidence']);
+checkEq('wear indicator used when reported', 'percentage_used_measured', $p['method']);
+checkEq('light wear -> 10-year display horizon', 120, $p['months_remaining']);
+check('horizon flagged as capped', ($p['capped'] ?? false) === true);
+checkEq('capped shows 10+ years', '10+ years', $p['timeline_text']);
+checkEq('3% is coarse -> low confidence', 'low', $p['confidence']);
 
 $p = estimateNvmeRemainingLife($drive, 'aggressive');
-checkEq('aggressive cap 120 months', 120, $p['months_remaining']);
+checkEq('aggressive also capped at horizon', 120, $p['months_remaining']);
 
-// Heavy writer: 800 of ~909 TBW gone in 1 year
-$heavy = array_merge($drive, ['nvme_tbw_calculated' => 800.0, 'power_on_hours' => 8760]);
+// QLC drive: ~200 TBW rated, 200 TB written in 3 years, 90% used. The old
+// capacity-based guess (500 TBW/TB) said ~3 years left; the drive says 10%.
+$qlc = array_merge($drive, [
+    'size_bytes' => 1000204886016, 'power_on_hours' => 26280,
+    'nvme_tbw_calculated' => 200.0, 'nvme_percentage_used' => 90
+]);
+$p = estimateNvmeRemainingLife($qlc, 'conservative');
+// 30%/yr * 1.25 = 37.5%/yr -> 10 / 37.5 * 12 = 3.2 -> 3 months
+checkEq('QLC: wear indicator wins over TBW guess -> 3 months', 3, $p['months_remaining']);
+checkEq('QLC: medium confidence at >=5%', 'medium', $p['confidence']);
+
+$p = estimateNvmeRemainingLife(array_merge($drive, ['nvme_percentage_used' => 104]), 'conservative');
+checkEq('>=100% used -> due now', 0, $p['months_remaining']);
+checkEq('>=100% used -> endurance_exceeded', 'endurance_exceeded', $p['method']);
+checkEq('>=100% used -> Due now (warning, not critical)', 'Due now', $p['timeline_text']);
+
+$p = estimateNvmeRemainingLife(array_merge($drive, ['nvme_percentage_used' => 0]), 'conservative');
+checkEq('0% after years -> lower bound method', 'wear_below_resolution', $p['method']);
+checkEq('0% after years -> horizon', 120, $p['months_remaining']);
+
+// No wear indicator at all: fall back to TBW vs an ESTIMATED rating
+$heavy = array_merge($drive, ['nvme_percentage_used' => null, 'nvme_tbw_calculated' => 800.0, 'power_on_hours' => 8760]);
 $p = estimateNvmeRemainingLife($heavy, 'conservative');
-// remaining ~109.5 TBW / (800*1.25 TB/yr) = 0.1095 yr -> ~1 month
-check('heavy writer -> ~1 month', $p['months_remaining'] >= 1 && $p['months_remaining'] <= 2,
-    'got ' . $p['months_remaining']);
+// 2.0004 TB (decimal) * 500 = 1000 TBW; 200 left / (800*1.25 TB/yr) = 0.2 yr -> 2 months
+checkEq('rating estimate uses decimal TB', 1000, $p['estimated_tbw'] ?? null);
+checkEq('heavy writer, no indicator -> 2 months', 2, $p['months_remaining']);
+checkEq('TBW guess -> measured method', 'tbw_measured_rate', $p['method']);
+checkEq('TBW guess is always low confidence', 'low', $p['confidence']);
 
-// Short history falls back to assumed rate
+// Short history with a wear indicator: 5-year assumption
 $young = array_merge($drive, ['power_on_hours' => 1000, 'nvme_tbw_calculated' => 2.0]);
 $p = estimateNvmeRemainingLife($young, 'conservative');
-checkEq('short history -> assumed rate method', 'tbw_assumed_rate', $p['method']);
-checkEq('assumed rate confidence low', 'low', $p['confidence']);
+checkEq('short history -> linear wear assumption', 'percentage_used_linear', $p['method']);
+checkEq('short history -> low confidence', 'low', $p['confidence']);
+
+// Short history, no indicator: assumed write rate
+$p = estimateNvmeRemainingLife(array_merge($young, ['nvme_percentage_used' => null]), 'conservative');
+checkEq('short history, no indicator -> assumed rate', 'tbw_assumed_rate', $p['method']);
 
 // Percentage-used measured slope (no TBW available)
 $puOnly = [
@@ -257,11 +285,34 @@ $p = estimateNvmeRemainingLife($puOnly, 'conservative');
 checkEq('measured wear slope -> 58 months', 58, $p['months_remaining']);
 checkEq('measured slope method', 'percentage_used_measured', $p['method']);
 
+// A recent write rate (from drivecache history) re-projects the remaining
+// wear: 40% over 160 TB = 0.25%/TB; 80 TB/yr recent -> 20%/yr * 1.25 = 25%/yr
+$p = estimateNvmeRemainingLife(array_merge($puOnly, ['nvme_tbw_calculated' => 160.0, 'recent_write_rate_tb_yr' => 80.0]), 'conservative');
+checkEq('recent write rate shortens the projection', 29, $p['months_remaining']);
+
 $p = estimateNvmeRemainingLife(array_merge($drive, ['smart_status' => 'FAILED']), 'conservative');
 checkEq('NVMe SMART FAILED -> 0', 0, $p['months_remaining']);
 
 $p = estimateNvmeRemainingLife(array_merge($drive, ['nvme_media_errors' => 3]), 'conservative');
 checkEq('media errors -> 0', 0, $p['months_remaining']);
+
+echo "\n== NVMe critical warning bits ==\n";
+$p = estimateNvmeRemainingLife(array_merge($drive, ['nvme_critical_warning' => 0x02]), 'conservative');
+checkEq('temperature bit alone does not force replacement', 'percentage_used_measured', $p['method']);
+$p = estimateNvmeRemainingLife(array_merge($drive, ['nvme_critical_warning' => 0x08]), 'conservative');
+checkEq('read-only bit -> Replace Now', 'critical_error', $p['method']);
+$p = estimateNvmeRemainingLife(array_merge($drive, ['nvme_critical_warning' => 0x01]), 'conservative');
+checkEq('spare bit -> spare_below_threshold', 'spare_below_threshold', $p['method']);
+$w = getNvmeHealthWarnings(['nvme_critical_warning' => 0x02, 'nvme_media_errors' => 0]);
+checkEq('temperature bit -> one warning', 1, count($w));
+checkEq('temperature bit -> warning level', 'warning', $w[0]['level'] ?? null);
+checkEq('temperature bit -> cooling advice', 'Improve cooling', $w[0]['action'] ?? null);
+checkEq('temperature bit -> health watch, not failing', 'watch', getHealthStatus('PASSED', $w, true));
+$w = getNvmeHealthWarnings(['nvme_critical_warning' => 0x0C, 'nvme_media_errors' => 0]);
+checkEq('0x0C -> two conditions', ['nvme_reliability', 'nvme_read_only'], array_column($w, 'attribute'));
+checkEq('reliability bit critical', 'critical', $w[0]['level'] ?? null);
+$w = getNvmeHealthWarnings(['nvme_critical_warning' => 0x80, 'nvme_media_errors' => 0]);
+checkEq('unknown bit -> generic warning', 'critical_warning', $w[0]['attribute'] ?? null);
 
 // ---------------------------------------------------------------------------
 echo "\n== health warnings: 5/187/188/197/198 + FAILED ==\n";
@@ -450,7 +501,8 @@ check('standby flagged', ($byDev['sdc']['is_standby'] ?? false) === true);
 
 checkEq('NVMe POH parsed from text cache (no direct smartctl)', 24845, $byDev['nvme0n1']['power_on_hours'] ?? null);
 checkEq('NVMe wear category minimal', 'minimal_risk', $byDev['nvme0n1']['age_category'] ?? null);
-checkEq('NVMe measured-rate prediction', 'tbw_measured_rate', $byDev['nvme0n1']['replacement_prediction']['method'] ?? null);
+checkEq('NVMe prediction from wear indicator', 'percentage_used_measured', $byDev['nvme0n1']['replacement_prediction']['method'] ?? null);
+checkEq('NVMe lifecycle label shows wear', 'Minimal Risk (wear 3%)', $byDev['nvme0n1']['age_label'] ?? null);
 
 checkEq('SAS unassigned POH parsed', 33822, $byDev['sdd']['device_id'] === 'sdd' ? $byDev['sdd']['power_on_hours'] : null);
 checkEq('unassigned type', 'unassigned', $byDev['sdd']['drive_type'] ?? null);

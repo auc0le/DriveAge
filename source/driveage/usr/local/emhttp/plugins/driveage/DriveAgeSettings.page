@@ -606,8 +606,8 @@ const DRIVEAGE_DEFAULTS = <?= json_encode(getDefaultConfig()); ?>;
                             Uses measured NVMe wear rates as-is. Maximizes drive lifespan.<br><br>
                             <strong>How it works:</strong><br>
                             &bull; <strong>HDDs:</strong> Critical SMART attributes override everything; otherwise a countdown to the target age.<br>
-                            &bull; <strong>NVMe:</strong> Wear projections from the drive's own history (TB written and wear% per power-on year).
-                            The target age acts as the <em>maximum calendar limit</em> - heavily-written drives show earlier dates.
+                            &bull; <strong>NVMe:</strong> The drive's own wear indicator (Percentage Used) projected at its measured wear rate.
+                            Projections beyond 10 years show as "10+ years"; the HDD target ages do not apply to SSDs.
                         </div>
                     </div>
                 </div>

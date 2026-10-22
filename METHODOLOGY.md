@@ -54,7 +54,7 @@ Both models produce **predictive replacement estimates** carrying an explicit me
 
 ### NVMe Endurance & TBW Data
 
-Vendor endurance ratings for consumer NVMe drives typically run **~220 TBW/TB (QLC budget) to ~600-750 TBW/TB (premium TLC)**. Since SMART does not expose the vendor rating, DriveAge uses **500 TBW per TB of capacity** as a mid-market estimate when projecting endurance.
+Vendor endurance ratings for consumer NVMe drives typically run **~220 TBW/TB (QLC budget) to ~600-750 TBW/TB (premium TLC)**. SMART does not expose the vendor rating, but NVMe drives report **Percentage Used** - the drive's own endurance estimate - and DriveAge uses that first. Only drives without a wear indicator fall back to **500 TBW per (decimal) TB of capacity** as a mid-market guess.
 
 Write rates are **measured per drive** from SMART data (see below); fixed write-rate assumptions (30/15 TB/year) are used only as a fallback for drives with less than ~3 months of history.
 
@@ -174,35 +174,53 @@ Drives without power-on hours (and not FAILED) return Unknown / Confidence: None
 
 ## NVMe Predictive Replacement Estimation
 
-All three methods prefer the drive's **own measured history**. A measured rate is used when the drive has at least **~3 months (0.25 years) of power-on time**; otherwise the legacy assumptions apply as a fallback. In conservative mode, measured rates get a **+25% safety margin**. All results are capped at the mode's target age (96/120 months).
+Evaluated in order; the first match wins. A measured rate is used when the drive has at least **~3 months (0.25 years) of power-on time**; otherwise fallback assumptions apply. In conservative mode, measured rates get a **+25% safety margin**.
 
-### Method 1: TBW Projection (`tbw_measured_rate` / `tbw_assumed_rate`)
+**Display horizon**: projections beyond **120 months are shown as "10+ years"** (`capped: true`) in both modes. This is a display horizon, not a lifespan - Backblaze's age curve is HDD data and implies no calendar limit for SSDs. (Earlier versions capped the *remaining* months at the HDD target age, which made a 9-year-old NVMe show "8 years left".)
 
-```
-tbw_written        = data_units_written × 512,000 bytes
-estimated_max_tbw  = capacity_TB × 500          (mid-market TLC estimate)
-measured_rate      = tbw_written / (POH / 8760)              [TB per year]
-write_rate         = measured_rate × 1.25 (conservative) or × 1.0 (aggressive)
-months_remaining   = (estimated_max_tbw − tbw_written) / write_rate × 12
-```
+### Critical overrides (before all methods)
 
-Fallback (short history): assumed 30 TB/yr (conservative) or 15 TB/yr (aggressive).
-**Confidence**: Medium (measured) / Low (assumed).
+| Condition | Estimate | Method |
+|---|---|---|
+| SMART overall-health FAILED | 0 months, "Replace Now" | `smart_failed` |
+| Media Errors > 0, or Critical Warning bit 0x04 / 0x08 / 0x10 / 0x20 | 0 months, "Replace Now" | `critical_error` |
+| Available Spare < threshold, or Critical Warning bit 0x01 | 1 month, "Replace Now" | `spare_below_threshold` |
 
-**Example** (2 TB drive, 24.5 TB written over 24,845 hours ≈ 2.84 years):
-- measured rate = 24.5 / 2.84 ≈ 8.6 TB/yr → conservative rate ≈ 10.8 TB/yr
-- remaining ≈ 909 − 24.5 ≈ 884 TBW → ≈ 82 years of endurance
-- capped at the 8-year conservative target → "8 years"
+Critical Warning bit **0x02 (temperature)** does *not* trigger replacement - it raises a "watch" health warning advising better cooling. All overrides are High confidence.
 
-### Method 2: Percentage Used Slope (`percentage_used_measured` / `percentage_used_linear`)
+### Method 1: Vendor wear indicator (`percentage_used_measured` / `percentage_used_linear`)
+
+Percentage Used is the drive's own estimate of rated endurance consumed. It already reflects the vendor's real endurance rating and the drive's write amplification, so it **outranks any capacity-based guess**.
 
 ```
 wear_per_year    = percentage_used / (POH / 8760)  [× 1.25 in conservative mode]
 months_remaining = (100 − percentage_used) / wear_per_year × 12
 ```
 
-Fallback (short history): assume a 5-year wear life (20%/year), reduced ×1.5 in conservative mode.
-**Confidence**: Medium (measured) / Low (assumed).
+- **≥ 100% used** (`endurance_exceeded`): 0 months, shown as "Due now" (warning style). Many drives run well past 100%.
+- **Recent write rate** (when drivecache history has one): the remaining wear is re-projected at the recent rate using the drive's own wear-per-TB calibration - `wear_per_year = (percentage_used / tbw_written) × rate × margin`, where `rate = max(recent, lifetime)` in conservative mode and `recent` in aggressive mode.
+- **Confidence**: Medium at ≥ 5% used; Low below 5% (the indicator moves in whole percent).
+- **Fallback** (short history): assume a 5-year wear life (20%/year), reduced ×1.5 in conservative mode. Low confidence.
+- **0% after ≥ 3 months** (`wear_below_resolution`): under 1% used so far, so at most ~1%/yr - a lower bound, far beyond the horizon. Low confidence.
+
+**Example** (2 TB drive, 3% used after 24,845 hours ≈ 2.84 years): 1.06%/yr × 1.25 = 1.32%/yr → 97 / 1.32 ≈ 73 years → **"10+ years"**.
+
+**Example** (1 TB QLC drive, 90% used after 3 years, 200 TB written): 30%/yr × 1.25 = 37.5%/yr → 10 / 37.5 × 12 ≈ **3 months**. (The previous TBW-first order estimated ~3 years from a guessed 500 TBW/TB rating.)
+
+### Method 2: TBW against an estimated rating (`tbw_measured_rate` / `tbw_assumed_rate`)
+
+Only when the drive reports **no** wear indicator.
+
+```
+tbw_written        = data_units_written × 512,000 bytes
+estimated_max_tbw  = capacity_TB (decimal) × 500          (mid-market TLC guess, min 250)
+measured_rate      = recent rate, else tbw_written / (POH / 8760)   [TB per year]
+write_rate         = measured_rate × 1.25 (conservative) or × 1.0 (aggressive)
+months_remaining   = (estimated_max_tbw − tbw_written) / write_rate × 12
+```
+
+Fallback (short history): assumed 30 TB/yr (conservative) or 15 TB/yr (aggressive).
+**Confidence**: always Low - the endurance rating itself is a guess.
 
 ### Method 3: Available Spare Depletion (`spare_depletion`)
 
@@ -214,11 +232,8 @@ months_remaining   = (available_spare − spare_threshold) / depletion_per_year 
 Fallback (short history): assume current consumption took 2 years.
 **Confidence**: Low (spare depletion is often non-linear).
 
-### Critical overrides (before all methods)
-SMART FAILED, media errors, or an active critical warning → 0 months; spare below threshold → 1 month. All High confidence.
-
 ### Fallback: Insufficient Data (`insufficient_data`)
-New drives with 0% wear, no write data and full spare show "Unknown" until history accumulates.
+New drives with no wear indicator, no write data and full spare show "Unknown" until history accumulates.
 
 ---
 
@@ -230,7 +245,7 @@ New drives with 0% wear, no write data and full spare show "Unknown" until histo
 | HDD caution-warning estimate | 3 months | 6 months |
 | NVMe measured-rate margin | **+25%** | none |
 | NVMe fallback write rate | 30 TB/yr | 15 TB/yr |
-| NVMe estimate cap | 96 months | 120 months |
+| NVMe display horizon | 120 months ("10+ years") | 120 months ("10+ years") |
 | Best for | production / critical data | home labs / maximize drive life |
 
 ---
@@ -259,7 +274,7 @@ New drives with 0% wear, no write data and full spare show "Unknown" until histo
 | **Percentage Used** | ≥ 80% | > 100% |
 | **Available Spare** | ≤ 60% | < Spare Threshold |
 | **Media Errors** | - | > 0 |
-| **Critical Warning** | - | > 0 |
+| **Critical Warning** | bit 0x02 (temperature): watch | bits 0x01, 0x04, 0x08, 0x10, 0x20 |
 | **SMART overall-health** | - | FAILED |
 
 ---
