@@ -332,7 +332,7 @@ function estimateHddRemainingLife($driveInfo, $predictionMode = 'conservative') 
         : DRIVEAGE_TARGET_YEARS_AGGRESSIVE;
 
     $remainingYears = $targetAge - $ageYears;
-    $monthsRemaining = intval(round($remainingYears * 12));
+    $monthsRemaining = max(0, intval(round($remainingYears * 12)));
 
     if ($monthsRemaining > 60) {
         $confidence = 'medium';
@@ -351,14 +351,18 @@ function estimateHddRemainingLife($driveInfo, $predictionMode = 'conservative') 
         $reason = sprintf('Drive is %.1f years old, near recommended replacement age', $ageYears);
         $action = 'Plan replacement within the year';
     } else {
-        // Past target age - graceful degradation: 6 -> 0 months
-        $monthsRemaining = intval(max(0, round(6 + ($remainingYears * 12))));
+        // At or past the target age: due now. (An earlier 6-month grace
+        // period here made the countdown jump from 1 month back up to 6.)
         $confidence = 'low';
-        $reason = sprintf('Drive is %.1f years old, exceeds the %d-year target age', $ageYears, intval($targetAge));
-        $action = 'Replace soon';
+        $reason = sprintf('Drive is %.1f years old, at or past the %d-year target age', $ageYears, intval($targetAge));
+        $action = 'Plan replacement now';
     }
 
-    $timeline = getReplacementTimelineText($monthsRemaining);
+    // Reaching the target age is a planning milestone, not a failure signal:
+    // "Due now" in warning style; "Replace Now" stays reserved for SMART evidence
+    $timeline = ($monthsRemaining === 0)
+        ? ['text' => 'Due now', 'class' => 'timeline-warning']
+        : getReplacementTimelineText($monthsRemaining);
 
     return [
         'months_remaining' => $monthsRemaining,

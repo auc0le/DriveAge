@@ -119,9 +119,9 @@ checkEq('unknown label', 'N/A (no SMART data)', getAgeLabel('unknown'));
 checkEq('high label', 'High Risk (AFR ~4%+)', getAgeLabel('high_risk', $config));
 
 echo "\n== risk: NVMe wear categories ==\n";
-checkEq('media errors -> high', 'high_risk',
+checkEq('media errors are health, not wear', 'minimal_risk',
     getNvmeRiskCategory(['physical_type' => 'nvme', 'nvme_media_errors' => 1]));
-checkEq('SMART FAILED -> high', 'high_risk',
+checkEq('SMART FAILED is health, not wear', 'minimal_risk',
     getNvmeRiskCategory(['physical_type' => 'nvme', 'smart_status' => 'FAILED']));
 checkEq('85% used -> moderate', 'moderate_risk',
     getNvmeRiskCategory(['physical_type' => 'nvme', 'nvme_percentage_used' => 85, 'nvme_available_spare' => 100]));
@@ -129,6 +129,22 @@ checkEq('worse-of-two wins (spare 45 -> moderate)', 'moderate_risk',
     getNvmeRiskCategory(['physical_type' => 'nvme', 'nvme_percentage_used' => 10, 'nvme_available_spare' => 45]));
 checkEq('spare below threshold -> high', 'high_risk',
     getNvmeRiskCategory(['physical_type' => 'nvme', 'nvme_available_spare' => 5, 'nvme_available_spare_threshold' => 10]));
+
+echo "\n== risk: health + lifecycle -> overall ==\n";
+checkEq('FAILED status -> failing', 'failing', getHealthStatus('FAILED', [], true));
+checkEq('critical warning -> failing', 'failing', getHealthStatus('PASSED', [['level' => 'critical']], true));
+checkEq('warning -> watch', 'watch', getHealthStatus('PASSED', [['level' => 'warning']], true));
+checkEq('no warnings -> ok', 'ok', getHealthStatus('PASSED', [], true));
+checkEq('no SMART data -> unknown', 'unknown', getHealthStatus('UNKNOWN', [], false));
+checkEq('failing forces high', 'high_risk', getOverallRiskCategory('minimal_risk', 'failing'));
+checkEq('watch raises to elevated', 'elevated_risk', getOverallRiskCategory('low_risk', 'watch'));
+checkEq('watch never lowers', 'high_risk', getOverallRiskCategory('high_risk', 'watch'));
+checkEq('ok keeps lifecycle', 'moderate_risk', getOverallRiskCategory('moderate_risk', 'ok'));
+checkEq('failing label says SMART', 'Failing (SMART)', getRiskLabel('high_risk', 'minimal_risk', 'Minimal Risk (AFR ~1%)', 'failing'));
+checkEq('raised-by-warning label', 'Warning (SMART)', getRiskLabel('elevated_risk', 'low_risk', 'Low Risk (AFR ~1.5%)', 'watch'));
+checkEq('lifecycle label otherwise', 'Moderate Risk (AFR ~2%)', getRiskLabel('moderate_risk', 'moderate_risk', 'Moderate Risk (AFR ~2%)', 'ok'));
+checkEq('NVMe lifecycle label shows wear, not HDD AFR', 'Minimal Risk (wear 3%)', getLifecycleLabel('minimal_risk', 'nvme', 3, $config));
+checkEq('HDD lifecycle label keeps AFR', 'Minimal Risk (AFR ~1%)', getLifecycleLabel('minimal_risk', 'hdd', null, $config));
 
 // ---------------------------------------------------------------------------
 echo "\n== predictions: HDD targets (8yr conservative / 10yr aggressive) ==\n";
@@ -140,10 +156,27 @@ $p = estimateHddRemainingLife(['power_on_hours' => 17520, 'smart_status' => 'PAS
 checkEq('2yr drive aggressive -> 96 months', 96, $p['months_remaining']);
 
 $p = estimateHddRemainingLife(['power_on_hours' => 78840, 'smart_status' => 'PASSED'], 'conservative');
-checkEq('9yr conservative -> past target, graceful 0', 0, $p['months_remaining']);
+checkEq('9yr conservative -> past target, 0', 0, $p['months_remaining']);
+checkEq('past target -> "Due now" (not Replace Now)', 'Due now', $p['timeline_text']);
+checkEq('past target -> warning style, not critical', 'timeline-warning', $p['timeline_class']);
 
 $p = estimateHddRemainingLife(['power_on_hours' => 78840, 'smart_status' => 'PASSED'], 'aggressive');
 checkEq('9yr aggressive -> 12 months', 12, $p['months_remaining']);
+
+// Countdown must never increase as the drive ages (an old 6-month grace
+// period made it jump from 1 month back to 6 at the target age)
+foreach (['conservative' => 70080, 'aggressive' => 87600] as $mode => $targetHours) {
+    $prev = PHP_INT_MAX;
+    $monotonic = true;
+    for ($h = $targetHours - 2000; $h <= $targetHours + 6000; $h += 25) {
+        $m = estimateHddRemainingLife(['power_on_hours' => $h, 'smart_status' => 'PASSED'], $mode)['months_remaining'];
+        if ($m > $prev) { $monotonic = false; break; }
+        $prev = $m;
+    }
+    check("$mode countdown is monotonic through the target age", $monotonic, "rose at POH $h");
+}
+$p = estimateHddRemainingLife(['power_on_hours' => 69780, 'smart_status' => 'PASSED'], 'conservative');
+checkEq('7.97yr conservative -> 0 (was 6)', 0, $p['months_remaining']);
 
 $p = estimateHddRemainingLife(['power_on_hours' => 30000, 'smart_status' => 'FAILED'], 'conservative');
 checkEq('SMART FAILED -> 0 months', 0, $p['months_remaining']);
@@ -403,8 +436,14 @@ if (PHP_INT_SIZE >= 8) { // 14 TB overflows 32-bit ints (e.g. php-wasm); Unraid 
 }
 // sdb has 5 reallocated + 187=2 + masked 188=3 -> warnings, no criticals -> 3 months
 checkEq('parity: warnings -> 3 month estimate', 3, $byDev['sdb']['replacement_prediction']['months_remaining'] ?? null);
-checkEq('parity escalated to high risk (<6 months)', 'high_risk', $byDev['sdb']['age_category'] ?? null);
-checkEq('parity label matches escalated category', getAgeLabel('high_risk', $config), $byDev['sdb']['age_label'] ?? null);
+// 3.8 years -> lifecycle stays Minimal; the warnings make health "watch",
+// which raises the overall risk to Elevated (not High - nothing critical,
+// and a short replacement estimate no longer escalates the category)
+checkEq('parity lifecycle not escalated', 'minimal_risk', $byDev['sdb']['age_category'] ?? null);
+checkEq('parity health watch', 'watch', $byDev['sdb']['health_status'] ?? null);
+checkEq('parity overall risk elevated', 'elevated_risk', $byDev['sdb']['risk_category'] ?? null);
+checkEq('parity risk class matches category', 'age-elevated_risk', $byDev['sdb']['risk_class'] ?? null);
+checkEq('parity risk label names SMART', 'Warning (SMART)', $byDev['sdb']['risk_label'] ?? null);
 
 checkEq('standby drive POH from persistent cache', 39111, $byDev['sdc']['power_on_hours'] ?? null);
 check('standby flagged', ($byDev['sdc']['is_standby'] ?? false) === true);
@@ -444,12 +483,31 @@ $byDev = [];
 foreach ($drives as $d) { $byDev[$d['device_id']] = $d; }
 checkEq('FAILED .ssa -> smart_status FAILED', 'FAILED', $byDev['sdb']['smart_status'] ?? null);
 checkEq('FAILED -> Replace Now', 0, $byDev['sdb']['replacement_prediction']['months_remaining'] ?? null);
-checkEq('FAILED -> high risk', 'high_risk', $byDev['sdb']['age_category'] ?? null);
+checkEq('FAILED -> high risk', 'high_risk', $byDev['sdb']['risk_category'] ?? null);
+checkEq('FAILED -> health failing', 'failing', $byDev['sdb']['health_status'] ?? null);
+checkEq('FAILED -> label Failing (SMART)', 'Failing (SMART)', $byDev['sdb']['risk_label'] ?? null);
+checkEq('FAILED leaves lifecycle untouched', 'minimal_risk', $byDev['sdb']['age_category'] ?? null);
 $failedWarning = null;
 foreach (($byDev['sdb']['health_warnings'] ?? []) as $warning) {
     if ($warning['attribute'] === 'smart_overall_failed') { $failedWarning = $warning; }
 }
 check('FAILED surfaced as first-class health warning', $failedWarning !== null);
+
+// Healthy 7.6-year-old HDD, conservative mode: ~5 months to the 8-year
+// target, but it must stay Moderate (6-8 yr band) - not High Risk "AFR ~4%+"
+$ata = "ID# ATTRIBUTE_NAME          FLAG     VALUE WORST THRESH TYPE      UPDATED  WHEN_FAILED RAW_VALUE\n"
+     . "  5 Reallocated_Sector_Ct   0x0033   100   100   005    Pre-fail  Always       -       0\n"
+     . "  9 Power_On_Hours          0x0012   090   090   000    Old_age   Always       -       66600\n"
+     . "197 Current_Pending_Sector  0x0022   100   100   000    Old_age   Always       -       0\n";
+file_put_contents(DRIVEAGE_STATE_DIR . '/smart/disk7', $ata);
+$old = getDriveInfo('sdx', ['ini' => [
+    'name' => 'disk7', '_slot' => 'disk7', 'device' => 'sdx', 'id' => 'TEST_OLD_1', 'type' => 'Data',
+    'sectors' => '1000', 'sector_size' => '512', 'temp' => '30', 'spundown' => '0'
+], 'source' => 'disks'], getDefaultConfig(), 'C', []);
+checkEq('7.6yr healthy: ~5 months to target', 5, $old['replacement_prediction']['months_remaining']);
+checkEq('7.6yr healthy: stays moderate (no escalation)', 'moderate_risk', $old['risk_category']);
+checkEq('7.6yr healthy: health ok', 'ok', $old['health_status']);
+checkEq('7.6yr healthy: AFR label of its real band', 'Moderate Risk (AFR ~2%)', $old['risk_label']);
 
 // ---------------------------------------------------------------------------
 // Cleanup

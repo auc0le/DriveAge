@@ -48,9 +48,9 @@ Spun-down drives are **never queried**. Their last-known power-on hours live in 
 
 ### Key Invariants (do not regress these)
 
-- **Category, color class and label always move together.** Any code path that escalates `age_category` must also update `color_class` and `age_label` (a desync here shipped once as a visible bug).
+- **Lifecycle vs health vs overall.** `age_category`/`age_label` is the age (HDD) or wear (NVMe) band and is never escalated. `health_status` comes from SMART evidence. `risk_category`/`risk_class`/`risk_label` (the worse of the two, used for row color, charts and sorting) are derived together in one place in `getDriveInfo()` - never set them separately (a desync shipped once as a visible bug). The replacement estimate must not feed back into any category.
 - **Devices without SMART data are `unknown` / "N/A"**, never Minimal Risk.
-- **SMART overall-health FAILED** forces High Risk, a "Replace Now" prediction, and a first-class health warning.
+- **SMART overall-health FAILED** forces health `failing` (overall High Risk, label "Failing (SMART)"), a "Replace Now" prediction, and a first-class health warning. "Replace Now" is reserved for SMART evidence; reaching the age target shows "Due now".
 - All five Google-study attributes are evaluated: 5, 187, 188, 197, 198. Attribute 188 raw values above 0xFFFF are masked to the low 16 bits (composite vendor encoding).
 - Every prediction result includes `method` and `confidence`.
 - Every setting shown on the Settings page must actually do something (drive-type filters, auto-refresh, default sort are all implemented in `dashboard.js`/`get_drive_data.php`).

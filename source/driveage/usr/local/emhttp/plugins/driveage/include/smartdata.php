@@ -144,12 +144,6 @@ function getAllDrives($config) {
         return intval($b['power_on_hours'] ?? -1) <=> intval($a['power_on_hours'] ?? -1);
     });
 
-    // Mark high risk drives for bold formatting
-    foreach ($drives as &$drive) {
-        $drive['is_oldest'] = ($drive['age_category'] === 'high_risk');
-    }
-    unset($drive);
-
     return $drives;
 }
 
@@ -362,12 +356,13 @@ function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
         'power_on_hours' => $powerOnHours
     ]);
 
-    // Risk category: wear-based for NVMe, age-based otherwise
+    // Lifecycle category: wear-based for NVMe, age-based otherwise
     if ($physicalType === 'nvme') {
         $ageCategory = getNvmeRiskCategory($evalInfo) ?? getAgeCategory($powerOnHours, $config);
     } else {
         $ageCategory = getAgeCategory($powerOnHours, $config);
     }
+    $ageLabel = getLifecycleLabel($ageCategory, $physicalType, $smartData['nvme_percentage_used'] ?? null, $config);
 
     // Health warnings
     $healthWarnings = [];
@@ -388,8 +383,16 @@ function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
             'action' => 'Replace immediately',
             'tooltip' => 'The drive reports its own SMART overall-health self-assessment as FAILED. Failure may be imminent.'
         ]);
-        $ageCategory = 'high_risk';
     }
+
+    // Health (this drive's SMART evidence) and the overall risk shown in the
+    // UI. Overall category, class and label are derived together here and
+    // nowhere else, so they cannot desync.
+    $hasSmartData = !empty($smartData['has_ata_attrs']) || !empty($smartData['has_nvme_log'])
+        || ($smartData['power_on_hours'] ?? null) !== null
+        || in_array(strtoupper($smartStatus), ['PASSED', 'FAILED'], true);
+    $healthStatus = getHealthStatus($smartStatus, $healthWarnings, $hasSmartData);
+    $riskCategory = getOverallRiskCategory($ageCategory, $healthStatus);
 
     // Identification
     $formattedDeviceName = formatDeviceName($assignment['display_name']);
@@ -422,10 +425,17 @@ function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
         'smart_status_class' => getSmartStatusClass($smartStatus),
         'spin_status' => $spinStatus,
         'spin_status_class' => getSpinStatusClass($spinStatus),
+        // Lifecycle (age/wear band - never escalated by SMART)
         'age_category' => $ageCategory,
-        'color_class' => getAgeColorClass($ageCategory),
-        'age_label' => getAgeLabel($ageCategory, $config),
-        'is_oldest' => false, // set later
+        'age_label' => $ageLabel,
+        // Health (SMART evidence)
+        'health_status' => $healthStatus,
+        'health_class' => 'health-' . $healthStatus,
+        'health_label' => getHealthLabel($healthStatus),
+        // Overall (worse of the two) - row color, chart, sorting
+        'risk_category' => $riskCategory,
+        'risk_class' => getAgeColorClass($riskCategory),
+        'risk_label' => getRiskLabel($riskCategory, $ageCategory, $ageLabel, $healthStatus),
         'is_standby' => $isStandby,
         'data_age_seconds' => $dataAge,
         'is_stale' => $isStale,
@@ -448,31 +458,10 @@ function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
         'hdd_command_timeout' => $smartData['hdd_command_timeout'] ?? null
     ];
 
-    // Predictive replacement estimate
-    $prediction = getPredictiveReplacement($driveInfo, $config);
-    $driveInfo['replacement_prediction'] = $prediction;
-
-    // Escalate to high risk on: any critical health warning (incl. SMART
-    // FAILED, which was inserted above), or a replacement estimate under
-    // 6 months on a drive with known age.
-    // Category, color AND label move together (they must never desync).
-    $hasCriticalWarning = false;
-    foreach ($healthWarnings as $warning) {
-        if (($warning['level'] ?? '') === 'critical') {
-            $hasCriticalWarning = true;
-            break;
-        }
-    }
-
-    if ($hasCriticalWarning ||
-        (isset($prediction['months_remaining']) &&
-         $prediction['months_remaining'] !== null &&
-         $prediction['months_remaining'] < 6 &&
-         $driveInfo['age_category'] !== 'unknown')) {
-        $driveInfo['age_category'] = 'high_risk';
-        $driveInfo['color_class'] = getAgeColorClass('high_risk');
-        $driveInfo['age_label'] = getAgeLabel('high_risk', $config);
-    }
+    // Predictive replacement estimate. It does NOT feed back into the risk
+    // category: a replacement countdown is a planning target, and escalating
+    // on it turned healthy drives "High Risk (AFR ~4%+)" at ~7.5 years.
+    $driveInfo['replacement_prediction'] = getPredictiveReplacement($driveInfo, $config);
 
     return $driveInfo;
 }

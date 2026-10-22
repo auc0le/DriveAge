@@ -2,8 +2,15 @@
 /**
  * DriveAge Plugin - Risk Category Policy
  *
- * Maps drive age (HDD) or wear metrics (NVMe) to the five risk categories.
- * AFR references are calibrated to Backblaze's 2025 bathtub-curve revisit
+ * Two independent dimensions, combined for display:
+ *  - Lifecycle (age_category): drive age (HDD) or wear (NVMe) mapped to the
+ *    five risk categories. Fleet statistics - never escalated by SMART.
+ *  - Health (health_status): this drive's own SMART evidence
+ *    (ok / watch / failing / unknown).
+ *  - Overall (risk_category): the worse of the two; drives row color, the
+ *    distribution chart and sorting. Failing health forces high_risk.
+ *
+ * HDD AFR references are calibrated to Backblaze's 2025 bathtub-curve revisit
  * (~317k drives): AFR holds roughly flat (~1-1.5%) through most of drive
  * life, rises near end of life, and peaks at ~4.25% around 10 years 3 months.
  * https://www.backblaze.com/blog/are-hard-drives-getting-better-lets-revisit-the-bathtub-curve/
@@ -36,9 +43,11 @@ function getAgeCategory($hours, $config) {
 }
 
 /**
- * Determine NVMe risk category based on wear metrics
+ * Determine NVMe lifecycle (wear) category
  *
  * Uses Percentage Used and Available Spare; the more severe of the two wins.
+ * Error conditions (media errors, critical warning, SMART FAILED) are HEALTH
+ * evidence and handled by getHealthStatus(), not here.
  *
  * @param array $driveInfo Drive information array with NVMe SMART attributes
  * @return string|null Risk category, or null if not applicable (not NVMe)
@@ -51,18 +60,8 @@ function getNvmeRiskCategory($driveInfo) {
     $percentageUsed = $driveInfo['nvme_percentage_used'] ?? null;
     $availableSpare = $driveInfo['nvme_available_spare'] ?? null;
     $spareThreshold = $driveInfo['nvme_available_spare_threshold'] ?? 10;
-    $mediaErrors    = $driveInfo['nvme_media_errors'] ?? 0;
-    $criticalWarning = $driveInfo['nvme_critical_warning'] ?? 0;
 
-    // CRITICAL: media errors, critical warning flag, or SMART FAILED
-    if ($mediaErrors > 0 || $criticalWarning > 0) {
-        return 'high_risk';
-    }
-    if (strtoupper($driveInfo['smart_status'] ?? '') === 'FAILED') {
-        return 'high_risk';
-    }
-
-    // CRITICAL: available spare below vendor threshold
+    // Spare exhausted below the vendor threshold: end of wear life
     if ($availableSpare !== null && $availableSpare < $spareThreshold) {
         return 'high_risk';
     }
@@ -92,17 +91,96 @@ function getNvmeRiskCategory($driveInfo) {
     }
 
     // Return the more severe of the two
-    $riskLevels = [
+    return getRiskRank($riskByPercentage) >= getRiskRank($riskBySpare) ? $riskByPercentage : $riskBySpare;
+}
+
+/**
+ * Severity rank of a risk category (unknown sorts below minimal).
+ */
+function getRiskRank($category) {
+    $ranks = [
+        'unknown'       => -1,
         'minimal_risk'  => 0,
         'low_risk'      => 1,
         'moderate_risk' => 2,
         'elevated_risk' => 3,
         'high_risk'     => 4
     ];
+    return $ranks[$category] ?? -1;
+}
 
-    $maxRisk = max($riskLevels[$riskByPercentage], $riskLevels[$riskBySpare]);
+/**
+ * Health status from this drive's own SMART evidence.
+ *
+ * @param string $smartStatus Overall SMART status (PASSED/FAILED/UNKNOWN/N/A)
+ * @param array $warnings Health warnings (each with 'level')
+ * @param bool $hasSmartData True if any SMART data was read for the drive
+ * @return string 'failing', 'watch', 'ok' or 'unknown'
+ */
+function getHealthStatus($smartStatus, $warnings, $hasSmartData) {
+    if (strtoupper((string)$smartStatus) === 'FAILED') {
+        return 'failing';
+    }
+    $levels = array_map(fn($w) => $w['level'] ?? '', $warnings);
+    if (in_array('critical', $levels, true)) {
+        return 'failing';
+    }
+    if (in_array('warning', $levels, true)) {
+        return 'watch';
+    }
+    return $hasSmartData ? 'ok' : 'unknown';
+}
 
-    return array_search($maxRisk, $riskLevels);
+/**
+ * Human-readable health label.
+ */
+function getHealthLabel($healthStatus) {
+    $labels = [
+        'ok'      => 'Healthy',
+        'watch'   => 'Warning',
+        'failing' => 'Failing',
+        'unknown' => 'N/A'
+    ];
+    return $labels[$healthStatus] ?? 'N/A';
+}
+
+/**
+ * Overall risk: the worse of lifecycle and health.
+ * Failing health forces high_risk; a warning raises the drive to at least
+ * elevated_risk.
+ *
+ * @param string $lifecycle Lifecycle category (age/wear band)
+ * @param string $healthStatus Health status from getHealthStatus()
+ * @return string Risk category
+ */
+function getOverallRiskCategory($lifecycle, $healthStatus) {
+    if ($healthStatus === 'failing') {
+        return 'high_risk';
+    }
+    if ($healthStatus === 'watch' && getRiskRank($lifecycle) < getRiskRank('elevated_risk')) {
+        return 'elevated_risk';
+    }
+    return $lifecycle;
+}
+
+/**
+ * Label for the overall risk. When SMART evidence decided the category the
+ * label says so - an age band's AFR figure would misdescribe it.
+ *
+ * @param string $overall Overall risk category
+ * @param string $lifecycle Lifecycle category
+ * @param string $lifecycleLabel Label of the lifecycle category
+ * @param string $healthStatus Health status
+ * @return string Label
+ */
+function getRiskLabel($overall, $lifecycle, $lifecycleLabel, $healthStatus) {
+    if ($healthStatus === 'failing') {
+        return 'Failing (SMART)';
+    }
+    if ($overall !== $lifecycle) {
+        return 'Warning (SMART)';
+    }
+    return $lifecycleLabel;
 }
 
 /**
@@ -141,4 +219,29 @@ function getAgeLabel($category, $config = null) {
     ];
 
     return $labels[$category] ?? 'Unknown';
+}
+
+/**
+ * Label for a drive's lifecycle category.
+ *
+ * HDD bands carry Backblaze AFR figures; those describe spinning drives
+ * only, so wear-rated flash drives get the category name plus their wear.
+ *
+ * @param string $category Lifecycle category
+ * @param string $physicalType 'hdd', 'ssd', 'nvme' or 'usb'
+ * @param int|null $percentageUsed Flash wear (Percentage Used), if known
+ * @param array|null $config Configuration (custom labels)
+ * @return string Label
+ */
+function getLifecycleLabel($category, $physicalType, $percentageUsed, $config = null) {
+    $label = getAgeLabel($category, $config);
+    if ($category === 'unknown' || !in_array($physicalType, ['nvme', 'ssd'], true)) {
+        return $label;
+    }
+    // "Minimal Risk (AFR ~1%)" -> "Minimal Risk"
+    $name = trim(preg_replace('/\s*\([^)]*\)\s*$/', '', $label));
+    if ($name === '') {
+        $name = $label;
+    }
+    return $percentageUsed !== null ? sprintf('%s (wear %d%%)', $name, $percentageUsed) : $name . ' (wear)';
 }

@@ -85,13 +85,23 @@ HDDs are assessed using **power-on hours** converted to age (1 year = 8,760 hour
 
 The AFR figures are approximate interpolations of the 2025 fleet curve (Backblaze publishes year-1 and peak values precisely; mid-life values are read from the published curve). They describe fleet-average behavior, not any individual drive.
 
-### Risk Overrides
+### Lifecycle, Health and Overall Risk
 
-A drive is escalated to **High Risk regardless of age** when any of the following hold - and the category, row color, and label are updated together:
+DriveAge keeps two independent dimensions and combines them only for display:
 
-- SMART overall-health self-assessment = **FAILED**
-- Any critical SMART attribute warning (see below)
-- Replacement estimate under 6 months
+| Dimension | Field | Source | Meaning |
+|---|---|---|---|
+| **Lifecycle** | `age_category` | HDD age bands above; NVMe wear bands below | Fleet statistics for a drive of this age/wear. **Never escalated** by SMART or by the replacement estimate. |
+| **Health** | `health_status` | This drive's SMART evidence | `failing` (SMART FAILED or any critical attribute), `watch` (warning-level attributes), `ok`, `unknown` (no SMART data) |
+| **Overall** | `risk_category` | Worse of the two | Row color, distribution chart, sorting |
+
+Combination rules:
+
+- Health **failing** forces overall **High Risk**, labelled "Failing (SMART)".
+- Health **watch** raises the overall category to at least **Elevated Risk**, labelled "Warning (SMART)" when it was the deciding factor.
+- Otherwise the overall category is the lifecycle category with its own label (AFR figure for HDDs, wear percentage for NVMe).
+
+The replacement estimate does **not** feed back into the category. (Earlier versions escalated any drive with < 6 months remaining to High Risk, which turned every healthy HDD red - labelled "AFR ~4%+" - at ~7.5 years in conservative mode.)
 
 Devices with no SMART data at all (typically the USB boot drive) are categorized **N/A**, not Minimal Risk.
 
@@ -115,11 +125,14 @@ NVMe drives are assessed on two wear metrics; the **more severe of the two wins*
 | **Elevated Risk** | > 100% | within 10 pts of threshold |
 | **High Risk** | critical conditions below | < vendor threshold |
 
-### Critical Conditions (immediate High Risk)
+### Health Conditions (health `failing` → overall High Risk)
 
 - SMART overall-health FAILED
 - Media Errors > 0
 - Critical Warning flag > 0
+
+### End of Wear Life (lifecycle High Risk)
+
 - Available Spare < Available Spare Threshold (typically 10%)
 
 ---
@@ -152,7 +165,7 @@ months_remaining = (target_age_years − POH/8760) × 12
 | Conservative | **8 years** | Replace before the end-of-life AFR ramp begins in earnest |
 | Aggressive | **10 years** | Ride drives to the measured fleet AFR peak (~4.25% @ 10.3y) |
 
-Drives past the target age degrade gracefully from 6 months down to "Replace Now". This is deliberately a **replacement-planning countdown**, not a survival model - the AFR data informs *where the targets sit*, and the SMART overrides catch individual drives that deviate from fleet behavior.
+At or past the target age the estimate is 0 months, shown as **"Due now"** in warning style - "Replace Now" is reserved for SMART evidence. The countdown is monotonic; an earlier 6-month grace period made it jump from 1 month back up to 6 at the target age. This is deliberately a **replacement-planning countdown**, not a survival model - the AFR data informs *where the targets sit*, and the SMART overrides catch individual drives that deviate from fleet behavior.
 
 #### No data (`no_data`)
 Drives without power-on hours (and not FAILED) return Unknown / Confidence: None.

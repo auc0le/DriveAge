@@ -82,12 +82,13 @@ $config = loadConfig();
 $drives = getAllDrives($config);
 echo '   Assembled ' . count($drives) . " drives\n";
 foreach ($drives as $d) {
-    printf("   - %-12s %-10s %-14s POH=%-7s %s -> %s\n",
+    printf("   - %-12s %-10s %-14s POH=%-7s %s/%s -> %s\n",
         $d['device_id'],
         $d['physical_type'],
         $d['drive_type'],
         $d['power_on_hours'] ?? 'n/a',
         $d['age_category'],
+        $d['health_status'],
         $d['replacement_prediction']['timeline_text'] ?? '?'
     );
 }

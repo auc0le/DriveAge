@@ -204,7 +204,7 @@ function renderTableView() {
  * Render a single drive row
  */
 function renderDriveRow(drive) {
-    let rowClass = escapeHtml(drive.color_class) + (drive.is_oldest ? ' oldest-drive' : '');
+    let rowClass = escapeHtml(drive.risk_class) + (drive.risk_category === 'high_risk' ? ' oldest-drive' : '');
 
     if (drive.is_standby) {
         rowClass += ' drive-standby';
@@ -232,7 +232,7 @@ function renderDriveRow(drive) {
         html += `<td><span class="${escapeHtml(drive.spin_status_class || 'spin-unknown')}">${escapeHtml(formatSpinStatus(drive.spin_status))}</span></td>`;
     }
 
-    html += `<td>${escapeHtml(drive.age_label)}</td>`;
+    html += `<td>${escapeHtml(drive.risk_label)}</td>`;
 
     // Health Status column
     html += '<td class="health-status-cell">';
@@ -257,8 +257,7 @@ function renderDriveRow(drive) {
             html += `${icon} ${escapeHtml(warning.message)}`;
             html += '</a><br>';
         });
-    } else if (drive.power_on_hours === null || drive.power_on_hours === 0 ||
-               drive.smart_status === 'UNKNOWN' || drive.smart_status === 'N/A') {
+    } else if (drive.health_status === 'unknown') {
         html += '<span class="health-unknown" title="No SMART data available">N/A</span>';
     } else {
         html += '<span class="health-ok" title="No warnings detected">✓ Healthy</span>';

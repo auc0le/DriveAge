@@ -77,7 +77,7 @@ function aggregateRiskData(drives) {
     };
 
     drives.forEach(drive => {
-        const category = drive.age_category;
+        const category = drive.risk_category;
         if (Object.prototype.hasOwnProperty.call(categories, category)) {
             categories[category]++;
         } else {
