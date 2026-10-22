@@ -210,25 +210,31 @@ $cacheVersion = DRIVEAGE_VERSION;
         </p>
 
         <h3>Severity Levels</h3>
+        <p>
+            What matters most is whether the count is <strong>still growing</strong>. DriveAge remembers each drive's
+            counts (in its small cache file on the flash drive) and compares every new reading with that history.
+        </p>
         <div class="warning-box">
             <span class="severity-badge severity-warning">WARNING</span>
-            <strong>1-10 Reallocated Sectors</strong><br>
-            <strong>Action:</strong> Backup data immediately, monitor closely<br>
+            <strong>A few reallocated sectors, not increasing</strong><br>
+            1-10 sectors while there is under 30 days of history, or any count up to 100 that has not changed for 30+ days.<br>
+            <strong>Action:</strong> Back up data, keep an eye on the count<br>
             <strong>Estimated Replacement:</strong>
             <ul>
-                <li>Conservative Mode: 3 months</li>
-                <li>Aggressive Mode: 6 months</li>
+                <li>While the history is new: 3 months (conservative) / 6 months (aggressive)</li>
+                <li>Once the count has been stable for 30+ days: 12 months / 24 months</li>
             </ul>
-            The drive has physical damage but may continue working. Some drives with a few reallocated sectors
-            continue running for years, but the risk of failure is significantly elevated.
+            Many drives keep a small, stable number of reallocated sectors for years.
         </div>
 
         <div class="critical-box">
             <span class="severity-badge severity-critical">CRITICAL</span>
-            <strong>>10 Reallocated Sectors</strong><br>
-            <strong>Action:</strong> Replace immediately<br>
+            <strong>Increasing - or a large count</strong><br>
+            Any increase within the last 30 days (shown as "+N since &lt;date&gt;"), more than 10 sectors with no history yet,
+            or more than 100.<br>
+            <strong>Action:</strong> Replace as soon as possible<br>
             <strong>Estimated Replacement:</strong> Now (0 months)<br><br>
-            The drive has extensive physical damage and is at high risk of imminent failure. Replace as soon as possible.
+            A rising count means the surface is still deteriorating - the strongest single warning sign.
         </div>
 
         <h3>Why These Time Estimates?</h3>
@@ -239,8 +245,9 @@ $cacheVersion = DRIVEAGE_VERSION;
         </p>
 
         <p>
-            According to their data, <strong>ANY</strong> reallocated sectors significantly increase failure risk. The 3-month
-            (conservative) or 6-month (aggressive) estimates provide a planning guideline for drives with 1-10 reallocated sectors.
+            According to their data, <strong>ANY</strong> reallocated sectors significantly increase failure risk, and drives were
+            about 14 times more likely to fail within 60 days of their <em>first</em> reallocation. That is why a growing count is
+            treated as critical, while a count that has stayed put for a month gets a longer planning window.
         </p>
 
         <div class="info-box">
@@ -258,8 +265,8 @@ $cacheVersion = DRIVEAGE_VERSION;
         </ol>
 
         <p>
-            If you want a longer estimate, you can switch to "Aggressive Mode" in <a href="/Settings/DriveAgeSettings">DriveAge Settings</a>,
-            which gives 6 months instead of 3 months for warning-level reallocations.
+            Aggressive mode in <a href="/Settings/DriveAgeSettings">DriveAge Settings</a> doubles these planning windows
+            (6 instead of 3 months, 24 instead of 12 once stable).
         </p>
     </div>
 
@@ -445,8 +452,9 @@ $cacheVersion = DRIVEAGE_VERSION;
 
         <h3>Q: Should I replace a drive immediately if it has reallocated sectors?</h3>
         <p>
-            <strong>A:</strong> For 1-10 reallocated sectors, you have time to plan (3-6 months depending on mode).
-            Back up your data immediately and monitor the drive. If the count increases rapidly or exceeds 10, replace as soon as possible.
+            <strong>A:</strong> Not if the count is small and stable - back up your data and plan a replacement (DriveAge shows
+            3-6 months while it is still learning the drive's history, 12-24 months once the count has been stable for 30 days).
+            If the count is <strong>increasing</strong>, replace the drive as soon as possible.
         </p>
 
         <h3>Q: Why doesn't my NVMe drive show a replacement estimate?</h3>

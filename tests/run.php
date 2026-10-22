@@ -450,6 +450,66 @@ checkEq('limit 0 disables', 'temp-normal', getTemperatureClass(99, 0, 0));
 checkEq('no reading', 'temp-unknown', getTemperatureClass(null, 45, 55));
 checkEq('dynamix defaults without a config file', ['unit' => 'C', 'hot' => 45, 'max' => 55, 'hotssd' => 60, 'maxssd' => 70], getDisplaySettings());
 
+echo "\n== drive history: trends and write samples ==\n";
+$t0 = 1700000000;
+$day = 86400;
+$rec = recordAttributeValue(null, 5, $t0);
+checkEq('first reading recorded', ['value' => 5, 'since' => $t0, 'prev' => null, 'prev_since' => null], $rec);
+check('unchanged reading -> identical record (no write)', recordAttributeValue($rec, 5, $t0 + $day) === $rec);
+$up = recordAttributeValue($rec, 8, $t0 + 40 * $day);
+checkEq('increase keeps previous value + date', [8, 5, $t0], [$up['value'], $up['prev'], $up['prev_since']]);
+checkEq('decrease resets', null, recordAttributeValue($up, 0, $t0 + 41 * $day)['prev']);
+
+checkEq('no record -> new', 'new', getAttributeTrend(null, 5, $t0)['trend']);
+checkEq('no reading -> no trend', null, getAttributeTrend($rec, null, $t0)['trend']);
+$g = getAttributeTrend($rec, 7, $t0 + 10 * $day);
+checkEq('higher than stored -> growing', ['growing', 5, $t0], [$g['trend'], $g['previous'], $g['since']]);
+checkEq('held < 30 days, no increase -> new', 'new', getAttributeTrend($rec, 5, $t0 + 10 * $day)['trend']);
+checkEq('held 30+ days -> stable', 'stable', getAttributeTrend($rec, 5, $t0 + 31 * $day)['trend']);
+checkEq('rose 5 days ago -> still growing', 'growing', getAttributeTrend($up, 8, $t0 + 45 * $day)['trend']);
+checkEq('rose 35 days ago, unchanged since -> stable', 'stable', getAttributeTrend($up, 8, $t0 + 75 * $day)['trend']);
+
+$w = recordWriteSample([], 10.0, $t0);
+check('a day later: no new sample', recordWriteSample($w, 10.5, $t0 + $day) === $w);
+$w = recordWriteSample($w, 12.0, $t0 + 7 * $day);
+checkEq('weekly sample appended', 2, count($w));
+checkEq('counter reset starts over', 1, count(recordWriteSample($w, 1.0, $t0 + 30 * $day)));
+$many = [];
+for ($i = 0; $i < 40; $i++) { $many = recordWriteSample($many, $i, $t0 + $i * 7 * $day); }
+checkEq('samples capped at ~6 months', DRIVEAGE_WRITE_SAMPLES_MAX, count($many));
+checkEq('recent rate needs 30 days', null, getRecentWriteRate([[$t0, 10.0]], 11.0, $t0 + 20 * $day));
+// 10 TB written in the last ~91 days -> ~40 TB/yr
+$rate = getRecentWriteRate([[$t0, 100.0], [$t0 + 7 * $day, 101.0]], 110.0, $t0 + 91.3125 * $day);
+check('recent rate from oldest sample in window', abs($rate - 40.0) < 0.1, "got $rate");
+checkEq('samples older than the window ignored', null, getRecentWriteRate([[$t0, 100.0]], 110.0, $t0 + 200 * $day));
+
+// updatePohCache: history changes are persisted, unchanged readings are not
+$histFile = DRIVEAGE_POH_CACHE_FILE;
+@unlink($histFile);
+$c = updatePohCache([], ['ID_A' => ['attrs' => ['hdd_reallocated_sectors' => 3], 'tbw' => 5.0]], $t0);
+check('attrs-only update written', file_exists($histFile));
+checkEq('attr stored', 3, $c['ID_A']['attrs']['hdd_reallocated_sectors']['value'] ?? null);
+checkEq('write sample stored', [[$t0, 5.0]], $c['ID_A']['writes'] ?? null);
+@unlink($histFile);
+updatePohCache($c, ['ID_A' => ['attrs' => ['hdd_reallocated_sectors' => 3, 'hdd_pending_sectors' => null], 'tbw' => 5.1]], $t0 + $day);
+check('nothing new -> no write', !file_exists($histFile));
+
+// A growing count found by getDriveInfo() via the cache entry
+$ataGrow = "ID# ATTRIBUTE_NAME          FLAG     VALUE WORST THRESH TYPE      UPDATED  WHEN_FAILED RAW_VALUE\n"
+         . "  5 Reallocated_Sector_Ct   0x0033   100   100   005    Pre-fail  Always       -       4\n"
+         . "  9 Power_On_Hours          0x0012   090   090   000    Old_age   Always       -       20000\n";
+file_put_contents(DRIVEAGE_STATE_DIR . '/smart/disk8', $ataGrow);
+$growIni = ['ini' => ['name' => 'disk8', '_slot' => 'disk8', 'device' => 'sdq', 'id' => 'GROW_1', 'type' => 'Data',
+    'sectors' => '1000', 'sector_size' => '512', 'temp' => '30', 'spundown' => '0'], 'source' => 'disks'];
+$hist = ['GROW_1' => ['attrs' => ['hdd_reallocated_sectors' => ['value' => 2, 'since' => time() - 90 * $day, 'prev' => null, 'prev_since' => null]]]];
+$g = getDriveInfo('sdq', $growIni, getDefaultConfig(), 'C', $hist);
+checkEq('2 -> 4 reallocated: failing', 'failing', $g['health_status']);
+check('message shows the increase', strpos($g['health_warnings'][0]['message'] ?? '', '(+2 since') !== false, $g['health_warnings'][0]['message'] ?? '');
+$hist['GROW_1']['attrs']['hdd_reallocated_sectors']['value'] = 4;
+$g = getDriveInfo('sdq', $growIni, getDefaultConfig(), 'C', $hist);
+checkEq('4 for 90 days: watch, not failing', 'watch', $g['health_status']);
+checkEq('stable warning -> 12 months', 12, $g['replacement_prediction']['months_remaining']);
+
 // ---------------------------------------------------------------------------
 echo "\n== config validation (enforced on load) ==\n";
 $v = validateConfig(array_merge(getDefaultConfig(), [
@@ -693,6 +753,8 @@ checkEq('poll interval read from var.ini', 1800, $byDev['sdb']['poll_interval'] 
 // POH cache write-on-change: fresh values should now be persisted
 $cacheAfter = json_decode(file_get_contents(DRIVEAGE_POH_CACHE_FILE), true);
 checkEq('POH cache updated for parity (keyed by disk id)', 33477, $cacheAfter['WDC_WD140EDGZ-11B1PA0_Y5KVTEST']['power_on_hours'] ?? null);
+checkEq('error-count history recorded for parity', 5, $cacheAfter['WDC_WD140EDGZ-11B1PA0_Y5KVTEST']['attrs']['hdd_reallocated_sectors']['value'] ?? null);
+checkEq('NVMe write sample recorded', 1, count($cacheAfter['Sabrent_Rocket_4.0_2TB_TESTSER']['writes'] ?? []));
 check('legacy device-name key pruned', !isset($cacheAfter['sdc']));
 checkEq('standby entry kept under its id', 39111, $cacheAfter['WDC_WD140EDGZ-11B1PA0_Y5KVSLPY']['power_on_hours'] ?? null);
 checkEq('cache key: disk id', 'WDC_X_1', getDriveCacheKey('sdb', ['id' => 'WDC_X_1']));

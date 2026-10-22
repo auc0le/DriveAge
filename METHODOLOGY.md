@@ -333,6 +333,15 @@ DriveAge does not poll drives itself. Sources, in order of authority:
 
 Spun-down drives are **never woken**. Their last-known power-on hours persist in `/boot/config/plugins/driveage/drivecache.json` (single file, rewritten only when a value changes, keyed by Unraid's disk id so a drive keeps its own values even if its `sdX` letter changes), so they survive reboots.
 
+### Drive history (same file)
+
+| What | Stored | Used for |
+|---|---|---|
+| Error counts: 5, 187, 197, 198, SAS grown defects, SAS uncorrected errors | current value, when it was set, the value before the last increase and since when | **growing** (rose within 30 days) vs **stable** (unchanged 30+ days) - see [Critical SMART Attributes](#critical-smart-attributes) |
+| SSD/NVMe host writes | one sample per week, ~6 months kept | **recent write rate**: TB per calendar year from the oldest sample in the last 120 days (needs ≥ 30 days) |
+
+Only real SMART readings are recorded - values filled in from the cache for a spun-down drive are never written back. Writes stay rare: error counts change seldom and write samples are weekly; power-on hours (hourly) remain the most frequent change, as before.
+
 ---
 
 ## Confidence Levels

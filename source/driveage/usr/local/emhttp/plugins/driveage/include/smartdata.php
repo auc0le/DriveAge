@@ -172,14 +172,21 @@ function getAllDrives($config) {
     foreach (enumerateDrives() as $deviceName => $entry) {
         $driveInfo = getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache);
         if ($driveInfo) {
-            // Collect fresh POH readings for the write-on-change cache
+            // Collect fresh readings for the write-on-change cache: POH from
+            // awake drives, error counts and host writes from any real SMART
+            // read (values filled in FROM the cache are never written back)
+            $update = ['attrs' => [], 'tbw' => $driveInfo['nvme_tbw_calculated'] ?? $driveInfo['ssd_tbw_calculated'] ?? null];
             if (!$driveInfo['is_standby'] && $driveInfo['power_on_hours'] !== null && $driveInfo['power_on_hours'] > 0) {
-                $pohUpdates[getDriveCacheKey($deviceName, $entry['ini'])] = [
+                $update += [
                     'power_on_hours' => $driveInfo['power_on_hours'],
                     'model' => $driveInfo['model'],
                     'serial' => $driveInfo['serial']
                 ];
             }
+            foreach (DRIVEAGE_TREND_FIELDS as $field) {
+                $update['attrs'][$field] = $driveInfo[$field] ?? null;
+            }
+            $pohUpdates[getDriveCacheKey($deviceName, $entry['ini'])] = $update;
             $driveInfo['poll_interval'] = $pollInterval;
             $drives[] = $driveInfo;
         }
@@ -418,10 +425,14 @@ function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
         }
     }
 
+    // This drive's persistent cache entry: last-known POH + history
+    $cacheKey = getDriveCacheKey($deviceName, $ini);
+    $history = is_array($pohCache[$cacheKey] ?? null) ? $pohCache[$cacheKey] : [];
+
     // Standby drives: fill POH/model/serial from the persistent cache
     $cacheTimestamp = null;
     if ($isStandby && $powerOnHours === null) {
-        $cached = getPohCacheEntry($pohCache, getDriveCacheKey($deviceName, $ini));
+        $cached = getPohCacheEntry($pohCache, $cacheKey);
         if ($cached !== null) {
             $powerOnHours = intval($cached['power_on_hours']);
             $model = $model ?? ($cached['model'] ?? null);
@@ -464,7 +475,12 @@ function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
     // Health warnings
     $healthWarnings = [];
     if (($physicalType === 'hdd' || $physicalType === 'ssd') && $smartData) {
-        $healthWarnings = getHddHealthWarnings($evalInfo);
+        // Stable vs growing error counts, from the drivecache history
+        $trends = [];
+        foreach (DRIVEAGE_TREND_FIELDS as $field) {
+            $trends[$field] = getAttributeTrend($history['attrs'][$field] ?? null, $smartData[$field] ?? null);
+        }
+        $healthWarnings = getHddHealthWarnings($evalInfo, $trends);
     }
     if ($physicalType === 'nvme' && $smartData) {
         $healthWarnings = array_merge($healthWarnings, getNvmeHealthWarnings($evalInfo));
@@ -542,6 +558,9 @@ function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
         'data_age_seconds' => $dataAge,
         'is_stale' => $isStale,
         'poh_cached_at' => $cacheTimestamp, // set when POH came from drivecache (drive spun down)
+        // TB/yr over recent weeks (drivecache samples), null until ~30 days of history
+        'recent_write_rate_tb_yr' => getRecentWriteRate($history['writes'] ?? [],
+            $smartData['nvme_tbw_calculated'] ?? $smartData['ssd_tbw_calculated'] ?? null),
         'health_warnings' => $healthWarnings,
         'has_warnings' => count($healthWarnings) > 0,
         // NVMe health metrics (null for non-NVMe drives)
