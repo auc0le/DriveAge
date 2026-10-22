@@ -33,6 +33,12 @@ if (!defined('DRIVEAGE_STATE_DIR')) {
     define('DRIVEAGE_STATE_DIR', '/var/local/emhttp');
 }
 
+// RAM-backed scratch space for direct smartctl results (/tmp is tmpfs on
+// Unraid - never the flash device)
+if (!defined('DRIVEAGE_TMP_DIR')) {
+    define('DRIVEAGE_TMP_DIR', '/tmp/driveage');
+}
+
 /**
  * Validate a device NAME (not path) against the expected patterns.
  * Supports sda..sdzzz and multi-digit NVMe controllers/namespaces.
@@ -46,14 +52,57 @@ function isValidDeviceName($name) {
  * This is how often the smart/ cache files are refreshed at most.
  */
 function getPollInterval() {
+    static $interval = null; // constant for the request; read var.ini once
+    if ($interval !== null) {
+        return $interval;
+    }
+    $interval = 1800; // Unraid default: 30 minutes
     $varFile = DRIVEAGE_STATE_DIR . '/var.ini';
     if (file_exists($varFile)) {
         $vars = @parse_ini_file($varFile) ?: [];
-        if (isset($vars['poll_attributes']) && is_numeric($vars['poll_attributes'])) {
-            return intval($vars['poll_attributes']);
+        if (isset($vars['poll_attributes']) && is_numeric($vars['poll_attributes']) && intval($vars['poll_attributes']) > 0) {
+            $interval = intval($vars['poll_attributes']);
         }
     }
-    return 1800; // Unraid default: 30 minutes
+    return $interval;
+}
+
+/**
+ * smartctl target for a device, honouring Unraid's per-disk SMART settings
+ * (Disk Settings -> "SMART controller type"): smType holds a "-d <type>"
+ * option, smPort1..4 + smGlue the controller ports (megaraid,N / areca,N/E),
+ * smDevice an alternate device node. Mirrors dynamix's get_ctlr_options().
+ * Every piece is whitelisted and shell-escaped.
+ *
+ * @param string $deviceName Validated device name
+ * @param array $ini Ini entry for this device
+ * @return array [string $typeArgs (leading space or ''), string $devicePath]
+ */
+function getSmartctlTarget($deviceName, $ini) {
+    $typeArgs = '';
+    $smType = trim((string)($ini['smType'] ?? ''));
+    if ($smType !== '' && preg_match('/^(?:-d\s+)?([A-Za-z0-9_+\-]+)$/', $smType, $m)) {
+        $type = $m[1];
+        $ports = [];
+        foreach (['smPort1', 'smPort2', 'smPort3', 'smPort4'] as $key) {
+            $port = trim((string)($ini[$key] ?? ''));
+            if ($port !== '' && preg_match('/^[A-Za-z0-9]+$/', $port)) {
+                $ports[] = $port;
+            }
+        }
+        $glue = in_array($ini['smGlue'] ?? ',', [',', '/'], true) ? ($ini['smGlue'] ?? ',') : ',';
+        if ($ports) {
+            $type .= ',' . implode($glue, $ports);
+        }
+        $typeArgs = ' -d ' . escapeshellarg($type);
+    }
+
+    $device = $deviceName;
+    $smDevice = trim((string)($ini['smDevice'] ?? ''));
+    if ($smDevice !== '' && preg_match('/^(sd[a-z]{1,3}|sg\d+|nvme\d+(n\d+)?)$/', $smDevice)) {
+        $device = $smDevice;
+    }
+    return [$typeArgs, '/dev/' . $device];
 }
 
 /**
@@ -181,9 +230,10 @@ function getSmartCacheNames($deviceName, $ini) {
  * @param bool $iniStandby True if Unraid reports the drive spun down
  * @param array|null $cacheNames Cache basenames to try, in order (see
  *                               getSmartCacheNames()); defaults to the device name
- * @return array ['data' => array|null, 'age' => int|null] data + cache age (s)
+ * @param array $ini Ini entry (SMART controller settings for direct queries)
+ * @return array ['data' => array|null, 'age' => int|null] data + data age (s)
  */
-function readSmartData($deviceName, $iniStandby, $cacheNames = null) {
+function readSmartData($deviceName, $iniStandby, $cacheNames = null, $ini = []) {
     // Primary: Unraid's cached smartctl output
     foreach ($cacheNames ?? [$deviceName] as $cacheName) {
         $smartFile = DRIVEAGE_STATE_DIR . '/smart/' . $cacheName;
@@ -199,42 +249,76 @@ function readSmartData($deviceName, $iniStandby, $cacheNames = null) {
 
     // No cache file. Never touch a spun-down drive.
     if ($iniStandby) {
-        $standby = driveage_empty_smart_data();
-        $standby['is_standby'] = true;
-        $standby['spin_status'] = 'standby';
-        return ['data' => $standby, 'age' => null];
+        return ['data' => driveage_standby_smart_data(), 'age' => null];
     }
 
-    // Last resort: query the drive directly (first run before the cache
-    // exists). -n standby guards against spinning up a sleeping drive.
-    $devicePath = '/dev/' . $deviceName;
-    if (!isValidDeviceName($deviceName) || !file_exists($devicePath)) {
+    // Last resort: query the drive directly (e.g. first run before Unraid's
+    // cache exists, or a device Unraid does not poll)
+    if (!isValidDeviceName($deviceName) || !file_exists('/dev/' . $deviceName)) {
         return ['data' => null, 'age' => null];
     }
 
-    exec('smartctl -n standby ' . escapeshellarg($devicePath) . ' >/dev/null 2>&1', $out, $exitCode);
-    if ($exitCode === 2) {
-        $standby = driveage_empty_smart_data();
-        $standby['is_standby'] = true;
-        $standby['spin_status'] = 'standby';
-        return ['data' => $standby, 'age' => null];
+    // A recent direct result (or failure - e.g. a USB stick smartctl cannot
+    // read) is reused for one poll interval, so the dashboard never queries
+    // a drive more often than Unraid itself does
+    $memoFile = DRIVEAGE_TMP_DIR . '/smart-' . $deviceName . '.json';
+    $driveId = (string)($ini['id'] ?? '');
+    $memo = @json_decode((string)@file_get_contents($memoFile), true);
+    if (is_array($memo) && ($memo['id'] ?? null) === $driveId && array_key_exists('data', $memo)
+        && time() - intval($memo['time'] ?? 0) < getPollInterval()) {
+        $data = is_array($memo['data']) ? $memo['data'] : null;
+        return ['data' => $data, 'age' => $data === null ? null : max(0, time() - intval($memo['time']))];
     }
 
-    $jsonOutput = shell_exec('smartctl -a -j ' . escapeshellarg($devicePath) . ' 2>/dev/null');
-    if ($jsonOutput) {
-        $decoded = json_decode($jsonOutput, true);
-        $parsed = driveage_parse_smart_json($decoded);
-        if ($parsed !== null) {
-            return ['data' => $parsed, 'age' => 0];
-        }
+    $result = queryDriveDirectly($deviceName, $ini);
+    // Standby is not remembered: data should appear as soon as the drive wakes
+    if (($result === null || !$result['is_standby'])
+        && (is_dir(DRIVEAGE_TMP_DIR) || @mkdir(DRIVEAGE_TMP_DIR, 0700, true))) {
+        @file_put_contents($memoFile, json_encode(['id' => $driveId, 'time' => time(), 'data' => $result]), LOCK_EX);
+    }
+    return ['data' => $result, 'age' => $result === null ? null : 0];
+}
+
+/**
+ * Normalized data for a drive known to be spun down.
+ */
+function driveage_standby_smart_data() {
+    $standby = driveage_empty_smart_data();
+    $standby['is_standby'] = true;
+    $standby['spin_status'] = 'standby';
+    return $standby;
+}
+
+/**
+ * Query a drive with smartctl. ONE call: "-n standby" makes smartctl exit
+ * (status bit 1) instead of waking a sleeping drive, with no gap between a
+ * separate standby check and the query.
+ *
+ * @param string $deviceName Validated device name
+ * @param array $ini Ini entry (SMART controller type / device overrides)
+ * @return array|null Normalized data (standby stub if asleep), null on failure
+ */
+function queryDriveDirectly($deviceName, $ini) {
+    [$typeArgs, $devicePath] = getSmartctlTarget($deviceName, $ini);
+    $target = $typeArgs . ' ' . escapeshellarg($devicePath);
+
+    $lines = [];
+    exec('smartctl -n standby -a -j' . $target . ' 2>/dev/null', $lines, $exitCode);
+    $output = implode("\n", $lines);
+
+    // Exit status bit 1: device open failed OR in a low-power mode
+    if ($exitCode & 2) {
+        return preg_match('/STANDBY|SLEEP/i', $output) ? driveage_standby_smart_data() : null;
     }
 
-    $textOutput = shell_exec('smartctl -a ' . escapeshellarg($devicePath) . ' 2>/dev/null');
-    if ($textOutput) {
-        return ['data' => driveage_parse_smart_text($textOutput), 'age' => 0];
+    $decoded = json_decode($output, true);
+    if (is_array($decoded)) {
+        return driveage_parse_smart_json($decoded);
     }
 
-    return ['data' => null, 'age' => null];
+    // smartctl too old for JSON output (-j arrived in 7.0): plain text
+    $text = shell_exec('smartctl -n standby -a' . $target . ' 2>/dev/null');
+    return $text ? driveage_parse_smart_text($text) : null;
 }
 
 /**
@@ -287,7 +371,7 @@ function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
 
     // SMART data (cache file -> standby stub -> direct query)
     $cacheNames = getSmartCacheNames($deviceName, $ini);
-    $read = readSmartData($deviceName, $iniStandby, $cacheNames);
+    $read = readSmartData($deviceName, $iniStandby, $cacheNames, $ini);
     $smartData = $read['data'];
     $dataAge = $read['age'];
 

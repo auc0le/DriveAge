@@ -22,6 +22,7 @@ $TMP = sys_get_temp_dir() . '/driveage-test-' . getmypid();
 define('DRIVEAGE_STATE_DIR', "$TMP/state");
 define('DRIVEAGE_CONFIG_FILE', "$TMP/driveage.cfg");
 define('DRIVEAGE_POH_CACHE_FILE', "$TMP/drivecache.json");
+define('DRIVEAGE_TMP_DIR', "$TMP/tmp");
 
 $BASE = dirname(__DIR__) . '/source/driveage/usr/local/emhttp/plugins/driveage/include';
 if (!is_dir($BASE)) {
@@ -396,6 +397,36 @@ file_put_contents(DRIVEAGE_STATE_DIR . '/smart/sdz.ssa', 'FAILED');
 file_put_contents(DRIVEAGE_STATE_DIR . '/smart/disk9.ssa', 'PASSED');
 checkEq('disk-name .ssa preferred', 'PASSED', readSsaHealth(getSmartCacheNames('sdz', ['name' => 'disk9'])));
 foreach (['sdz', 'sdz.ssa', 'disk9', 'disk9.ssa'] as $f) { @unlink(DRIVEAGE_STATE_DIR . "/smart/$f"); }
+
+// ---------------------------------------------------------------------------
+echo "\n== direct smartctl fallback ==\n";
+checkEq('plain device', ['', '/dev/sdb'], getSmartctlTarget('sdb', []));
+checkEq('Unraid controller type + port', [" -d 'megaraid,5'", '/dev/sdb'],
+    getSmartctlTarget('sdb', ['smType' => '-d megaraid', 'smPort1' => '5']));
+checkEq('areca ports joined with smGlue', [" -d 'areca,3/1'", '/dev/sdb'],
+    getSmartctlTarget('sdb', ['smType' => '-d areca', 'smPort1' => '3', 'smPort2' => '1', 'smGlue' => '/']));
+checkEq('bare type accepted', [" -d 'sat'", '/dev/sdb'], getSmartctlTarget('sdb', ['smType' => 'sat']));
+checkEq('shell metacharacters rejected', ['', '/dev/sdb'], getSmartctlTarget('sdb', ['smType' => '-d sat; rm -rf /']));
+checkEq('bad port ignored', [" -d 'megaraid'", '/dev/sdb'], getSmartctlTarget('sdb', ['smType' => '-d megaraid', 'smPort1' => '5;id']));
+checkEq('smDevice override', ['', '/dev/sg5'], getSmartctlTarget('sdb', ['smDevice' => 'sg5']));
+checkEq('bad smDevice ignored', ['', '/dev/sdb'], getSmartctlTarget('sdb', ['smDevice' => '../etc/passwd']));
+
+// The RAM memo short-circuits repeat queries. Needs a fake /dev node, so it
+// only runs where /dev is writable (php-wasm); skipped on a real system.
+if (is_writable('/dev') && @touch('/dev/sdzz')) {
+    @mkdir(DRIVEAGE_TMP_DIR, 0700, true);
+    $memoData = array_merge(driveage_empty_smart_data(), ['power_on_hours' => 4242, 'spin_status' => 'active']);
+    file_put_contents(DRIVEAGE_TMP_DIR . '/smart-sdzz.json', json_encode(['id' => 'X_1', 'time' => time() - 60, 'data' => $memoData]));
+    $r = readSmartData('sdzz', false, ['nothing-here'], ['id' => 'X_1']);
+    checkEq('fresh direct-query memo reused', 4242, $r['data']['power_on_hours'] ?? null);
+    checkEq('memo age reported', true, ($r['age'] ?? 0) >= 60);
+    file_put_contents(DRIVEAGE_TMP_DIR . '/smart-sdzz.json', json_encode(['id' => 'OTHER', 'time' => time() - 60, 'data' => $memoData]));
+    $r = readSmartData('sdzz', false, ['nothing-here'], ['id' => 'X_1']);
+    check('memo for a different drive ignored', ($r['data']['power_on_hours'] ?? null) !== 4242);
+    @unlink('/dev/sdzz');
+} else {
+    echo "skip  direct-query memo (needs a writable /dev)\n";
+}
 
 // ---------------------------------------------------------------------------
 echo "\n== assignment: pools, filters, grouping ==\n";

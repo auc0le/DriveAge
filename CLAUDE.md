@@ -42,7 +42,7 @@ Pure-PHP test suite - no Unraid or smartmontools required. Covers the smartctl p
 1. `/var/local/emhttp/disks.ini` + `devs.ini` - device enumeration, ids, sizes, live temp/spin state. **Never enumerate from `/dev` globs** (breaks >26 drives); the glob path exists only as a last-resort fallback when both inis are missing.
 2. `/var/local/emhttp/smart/<name>` - Unraid's cached smartctl output. **`<name>` is the Unraid disk name** (`parity`, `disk1`, `cache`, `cache2`, `dev1`...), not the kernel device - emhttpd and dynamix's monitor use `$disk['name']`. `getSmartCacheNames()` tries the ini `name`, then the section name, then the device name as a fallback. **Refreshed on the Disk Settings `poll_attributes` interval (default 1800s = 30 minutes)** - do not claim or assume faster freshness. Cache files written with `smartctl -A` have NO model/serial/health lines for ATA drives.
 3. `/var/local/emhttp/smart/<name>.ssa` - cached overall-health verdict (PASSED/FAILED).
-4. Direct `smartctl -a -j` - last resort only (no cache file, drive not spun down). Parse the universal `power_on_time`/`temperature`/`smart_status` JSON fields first (covers SAS), then type-specific tables.
+4. Direct `smartctl -n standby -a -j` - last resort only (no cache file, drive not spun down). One call (no separate standby check), honouring Unraid's per-disk SMART controller type (`getSmartctlTarget()`: `smType`, `smPort1-4`, `smGlue`, `smDevice`). Results - including failures - are memoized in `DRIVEAGE_TMP_DIR` (`/tmp`, RAM) for one poll interval; never on flash. Parse the universal `power_on_time`/`temperature`/`smart_status` JSON fields first (covers SAS), then type-specific tables.
 
 Spun-down drives are **never queried**. Their last-known power-on hours live in `/boot/config/plugins/driveage/drivecache.json` (single JSON file on flash, rewritten only when a value changes - keep it write-on-change to protect the flash device). Entries are keyed by Unraid's disk id (`getDriveCacheKey()`), never by `sdX` - device letters change between boots.
 
@@ -77,7 +77,7 @@ Thresholds must be ascending; `validateConfig()` resets to defaults otherwise.
 - **Access control is Unraid's**: the webGUI authenticates every `/plugins/*` request. Do NOT add plugin-level auth layers, rate limiters, API-enable switches, or custom CSRF tokens - the settings form posts to Unraid's `/update.php`, which enforces Unraid's own CSRF token. A previous custom CSRF implementation conflicted with it and was removed.
 - **Validation happens on load** (`loadConfig()` → `validateConfig()`), because `/update.php` writes POSTed values verbatim. Any new config key needs validation there, a default in `getDefaultConfig()`, and a form field in `DriveAgeSettings.page`.
 - **Escape all output**: `esc()`/`e()` in PHP templates, `escapeHtml()` in JS.
-- **Shell rules**: no shell execution except the `smartctl`/`blockdev` fallbacks, always with `escapeshellarg()` on device names that passed `isValidDeviceName()` (`sd[a-z]{1,3}` or `nvme\d+n\d+`).
+- **Shell rules**: no shell execution except the `smartctl`/`blockdev` fallbacks, always with `escapeshellarg()` on device names that passed `isValidDeviceName()` (`sd[a-z]{1,3}` or `nvme\d+n\d+`). Unraid's SMART controller settings are whitelisted by regex in `getSmartctlTarget()` and escaped too.
 
 ## Common Development Workflows
 
@@ -116,5 +116,5 @@ Release checklist:
 - **No npm/node/composer**: plain PHP 8.x + vanilla JS, no third-party libraries (charts are inline SVG/CSS in `charts.js`)
 - **Theme-aware UI**: Unraid ships white/black/azure/gray themes. Use translucent `rgba(128,128,128,x)` surfaces and `color: inherit`; never hardcode light backgrounds with dark text. Category colors are CSS custom properties `--da-<category>-bg/-fg` written by `DriveAgeDashboard.page` from Settings; use them with a fallback at the use site (`var(--da-high_risk-bg, #F44336)`) and never define them on `:root` in `driveage.css`.
 - **One document, one PHP scope**: Unraid renders all `Tabs="true"` pages (Dashboard, Settings, Help) into a single HTML document in a single PHP request. JS lives in closures under `window.DriveAge`; scope DOM queries to your own container/form (never `document.querySelector('form')`); prefix PHP variables/functions defined in `.page` files (`$da...`) to avoid collisions; scripts must not rely on `DOMContentLoaded` still being pending (check `document.readyState`).
-- **Unraid-specific paths** are guarded defines (`DRIVEAGE_STATE_DIR`, `DRIVEAGE_CONFIG_FILE`, `DRIVEAGE_POH_CACHE_FILE`) so tests can redirect them to fixtures - preserve that pattern for any new path.
+- **Unraid-specific paths** are guarded defines (`DRIVEAGE_STATE_DIR`, `DRIVEAGE_CONFIG_FILE`, `DRIVEAGE_POH_CACHE_FILE`, `DRIVEAGE_TMP_DIR`) so tests can redirect them to fixtures - preserve that pattern for any new path.
 - **Slackware packaging**: `.txz` via `build.sh`; `tests/` and repo docs are outside `source/` and never ship.
