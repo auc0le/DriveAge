@@ -27,6 +27,29 @@ define('DRIVEAGE_NVME_CW_PMR',         0x20); // persistent memory region read-o
 define('DRIVEAGE_NVME_CW_REPLACE_MASK', DRIVEAGE_NVME_CW_RELIABILITY | DRIVEAGE_NVME_CW_READ_ONLY
     | DRIVEAGE_NVME_CW_BACKUP | DRIVEAGE_NVME_CW_PMR);
 
+// SATA SSD wear indicators by smartctl attribute NAME (IDs are vendor
+// specific). 'remaining' = normalized VALUE is life left (100 -> 0);
+// 'used' = RAW value is percent of rated life used. Listed by preference.
+const DRIVEAGE_SSD_WEAR_ATTRS = [
+    'Percent_Lifetime_Remain' => 'remaining', // Crucial/Micron (202)
+    'Percent_Lifetime_Used'   => 'used',
+    'Perc_Rated_Life_Used'    => 'used',      // SanDisk/WD
+    'SSD_Life_Left'           => 'remaining', // (231) Kingston, others
+    'Remaining_Lifetime_Perc' => 'remaining', // WD/SanDisk (169)
+    'Media_Wearout_Indicator' => 'remaining', // Intel, WD (233)
+    'Wear_Leveling_Count'     => 'remaining', // Samsung (177)
+];
+
+// SATA SSD host-writes attributes by NAME => bytes per raw unit
+const DRIVEAGE_SSD_WRITE_ATTRS = [
+    'Total_LBAs_Written'  => 512,
+    'Host_Writes_32MiB'   => 33554432,
+    'Host_Writes_GiB'     => 1073741824,
+    'Lifetime_Writes_GiB' => 1073741824,
+    'Total_Writes_GiB'    => 1073741824,
+    'Host_Writes_MiB'     => 1048576,
+];
+
 /**
  * Decode an NVMe Critical Warning value into individual conditions.
  *
@@ -141,7 +164,15 @@ function driveage_empty_smart_data() {
         'nvme_data_units_read'          => null,
         'nvme_media_errors'             => null,
         'nvme_critical_warning'         => null,
-        'nvme_tbw_calculated'           => null
+        'nvme_tbw_calculated'           => null,
+        // SATA SSD wear (by attribute name)
+        'is_ssd'              => false,
+        'ssd_percentage_used' => null,
+        'ssd_wear_attribute'  => null,
+        'ssd_tbw_calculated'  => null,
+        // SCSI/SAS error indicators
+        'scsi_grown_defects'      => null,
+        'scsi_uncorrected_errors' => null
     ];
 }
 
@@ -183,6 +214,9 @@ function driveage_parse_smart_text($output) {
     if (preg_match('/^Serial [Nn]umber:\s+(.+)$/m', $output, $m)) {
         $data['serial'] = trim($m[1]);
     }
+    if (preg_match('/^Rotation Rate:\s+Solid State Device/mi', $output)) {
+        $data['is_ssd'] = true;
+    }
 
     // Overall health (ATA/NVMe full output)
     if (preg_match('/SMART overall-health self-assessment test result:\s+(\S+)/i', $output, $m)) {
@@ -196,6 +230,7 @@ function driveage_parse_smart_text($output) {
     // ---- ATA attribute table ----
     // Format: ID# ATTRIBUTE_NAME FLAG VALUE WORST THRESH TYPE UPDATED WHEN_FAILED RAW_VALUE
     $temp190 = null;
+    $ssdWear = [];
     foreach (explode("\n", $output) as $line) {
         if (!preg_match('/^\s*\d{1,3}\s+\S+\s+/', $line)) {
             continue;
@@ -214,6 +249,22 @@ function driveage_parse_smart_text($output) {
 
         $data['has_ata_attrs'] = true;
 
+        // SSD wear / host writes, recognized by attribute name
+        $attrName = $cols[1];
+        if (array_key_exists($attrName, DRIVEAGE_SSD_WEAR_ATTRS)) {
+            $used = (DRIVEAGE_SSD_WEAR_ATTRS[$attrName] === 'used')
+                ? $rawInt
+                : (ctype_digit($cols[3]) ? 100 - intval($cols[3]) : null);
+            if ($used !== null) {
+                $ssdWear[$attrName] = max(0, $used);
+            }
+        }
+        if (array_key_exists($attrName, DRIVEAGE_SSD_WRITE_ATTRS) && $data['ssd_tbw_calculated'] === null
+            && preg_match('/^(\d+)/', $rawField, $wm)) {
+            // float: LBA counts overflow 32-bit ints
+            $data['ssd_tbw_calculated'] = round(floatval($wm[1]) * DRIVEAGE_SSD_WRITE_ATTRS[$attrName] / 1e12, 2);
+        }
+
         switch ($attrId) {
             case 5:   $data['hdd_reallocated_sectors'] = $rawInt; break;
             case 9:   $data['power_on_hours'] = $rawInt; break;
@@ -228,6 +279,15 @@ function driveage_parse_smart_text($output) {
     // Prefer 194 (Temperature_Celsius); fall back to 190 (Airflow_Temperature)
     if ($data['temperature'] === null && $temp190 !== null) {
         $data['temperature'] = $temp190;
+    }
+    // Most-preferred wear attribute present wins
+    foreach (array_keys(DRIVEAGE_SSD_WEAR_ATTRS) as $attrName) {
+        if (isset($ssdWear[$attrName])) {
+            $data['ssd_percentage_used'] = $ssdWear[$attrName];
+            $data['ssd_wear_attribute'] = $attrName;
+            $data['is_ssd'] = true;
+            break;
+        }
     }
 
     // ---- NVMe text health log ----
@@ -278,6 +338,14 @@ function driveage_parse_smart_text($output) {
         preg_match('/Current Drive Temperature:\s+(\d+)\s*C/i', $output, $m)) {
         $data['temperature'] = intval($m[1]);
     }
+    if (preg_match('/^Elements in grown defect list:\s+(\d+)/mi', $output, $m)) {
+        $data['scsi_grown_defects'] = intval($m[1]);
+    }
+    // Error counter log: the last column of read/write/verify is "Total
+    // uncorrected errors"
+    if (preg_match_all('/^\s*(?:read|write|verify):\s+.*?(\d+)\s*$/mi', $output, $mm)) {
+        $data['scsi_uncorrected_errors'] = array_sum(array_map('intval', $mm[1]));
+    }
 
     // If the attribute table parsed and we have no explicit power mode,
     // the drive answered a query - treat as active
@@ -321,14 +389,34 @@ function driveage_parse_smart_json($json) {
         $data['temperature'] = intval($json['temperature']['current']);
     }
 
+    // rotation_rate 0 = solid state
+    if (isset($json['rotation_rate']) && $json['rotation_rate'] === 0) {
+        $data['is_ssd'] = true;
+    }
+
     // ATA attribute table
     if (isset($json['ata_smart_attributes']['table']) && is_array($json['ata_smart_attributes']['table'])) {
         $data['has_ata_attrs'] = true;
+        $ssdWear = [];
         foreach ($json['ata_smart_attributes']['table'] as $attr) {
             $id = $attr['id'] ?? null;
             $rawInt = driveage_extract_leading_int($attr['raw']['string'] ?? ($attr['raw']['value'] ?? null));
             if ($id === null || $rawInt === null) {
                 continue;
+            }
+
+            $attrName = (string)($attr['name'] ?? '');
+            if (array_key_exists($attrName, DRIVEAGE_SSD_WEAR_ATTRS)) {
+                $used = (DRIVEAGE_SSD_WEAR_ATTRS[$attrName] === 'used')
+                    ? $rawInt
+                    : (isset($attr['value']) ? 100 - intval($attr['value']) : null);
+                if ($used !== null) {
+                    $ssdWear[$attrName] = max(0, $used);
+                }
+            }
+            if (array_key_exists($attrName, DRIVEAGE_SSD_WRITE_ATTRS) && $data['ssd_tbw_calculated'] === null
+                && isset($attr['raw']['value'])) {
+                $data['ssd_tbw_calculated'] = round(floatval($attr['raw']['value']) * DRIVEAGE_SSD_WRITE_ATTRS[$attrName] / 1e12, 2);
             }
             switch ($id) {
                 case 5:   $data['hdd_reallocated_sectors'] = $rawInt; break;
@@ -348,6 +436,26 @@ function driveage_parse_smart_json($json) {
                 case 198: $data['hdd_uncorrectable_sectors'] = $rawInt; break;
             }
         }
+        foreach (array_keys(DRIVEAGE_SSD_WEAR_ATTRS) as $attrName) {
+            if (isset($ssdWear[$attrName])) {
+                $data['ssd_percentage_used'] = $ssdWear[$attrName];
+                $data['ssd_wear_attribute'] = $attrName;
+                $data['is_ssd'] = true;
+                break;
+            }
+        }
+    }
+
+    // SCSI/SAS defect list and error counters
+    if (isset($json['scsi_grown_defect_list'])) {
+        $data['scsi_grown_defects'] = intval($json['scsi_grown_defect_list']);
+    }
+    if (isset($json['scsi_error_counter_log']) && is_array($json['scsi_error_counter_log'])) {
+        $total = 0;
+        foreach (['read', 'write', 'verify'] as $kind) {
+            $total += intval($json['scsi_error_counter_log'][$kind]['total_uncorrected_errors'] ?? 0);
+        }
+        $data['scsi_uncorrected_errors'] = $total;
     }
 
     // NVMe health log

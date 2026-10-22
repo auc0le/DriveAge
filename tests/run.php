@@ -90,6 +90,45 @@ checkEq('temperature', 34, $d['temperature']);
 checkEq('health OK -> PASSED', 'PASSED', $d['smart_status']);
 checkEq('model from Product line', 'HUH721212AL5200', $d['model']);
 
+echo "\n== smartparse: SATA SSD wear by attribute name ==\n";
+$d = driveage_parse_smart_text(file_get_contents("$FIXTURES/ssd_sata.txt"));
+check('SSD detected from wear attribute', $d['is_ssd'] === true);
+checkEq('Wear_Leveling_Count VALUE 91 -> 9% used', 9, $d['ssd_percentage_used']);
+checkEq('wear attribute recorded', 'Wear_Leveling_Count', $d['ssd_wear_attribute']);
+checkEq('Total_LBAs_Written x 512 -> 24 TB', 24.0, $d['ssd_tbw_calculated']);
+checkEq('airflow temp (190) used when 194 missing', 34, $d['temperature']);
+$crucial = "ID# ATTRIBUTE_NAME          FLAG     VALUE WORST THRESH TYPE      UPDATED  WHEN_FAILED RAW_VALUE\n"
+         . "  9 Power_On_Hours          0x0032   100   100   000    Old_age   Always       -       9000\n"
+         . "173 Ave_Block-Erase_Count   0x0032   095   095   000    Old_age   Always       -       77\n"
+         . "202 Percent_Lifetime_Remain 0x0030   095   095   001    Old_age   Offline      -       5\n"
+         . "246 Total_Host_Sector_Write 0x0032   100   100   000    Old_age   Always       -       12345\n";
+$d = driveage_parse_smart_text($crucial);
+checkEq('Percent_Lifetime_Remain preferred, VALUE 95 -> 5%', 5, $d['ssd_percentage_used']);
+checkEq('unknown write attribute ignored', null, $d['ssd_tbw_calculated']);
+$d = driveage_parse_smart_text("Rotation Rate:    Solid State Device\n" . file_get_contents("$FIXTURES/ata_cache.txt"));
+check('Rotation Rate line marks SSD', $d['is_ssd'] === true);
+$d = driveage_parse_smart_json(['rotation_rate' => 0, 'ata_smart_attributes' => ['table' => [
+    ['id' => 9, 'name' => 'Power_On_Hours', 'value' => 95, 'raw' => ['value' => 5000, 'string' => '5000']],
+    ['id' => 231, 'name' => 'SSD_Life_Left', 'value' => 88, 'raw' => ['value' => 88, 'string' => '88']],
+    ['id' => 241, 'name' => 'Host_Writes_GiB', 'value' => 100, 'raw' => ['value' => 10000, 'string' => '10000']]
+]]]);
+checkEq('JSON: SSD_Life_Left 88 -> 12% used', 12, $d['ssd_percentage_used']);
+checkEq('JSON: Host_Writes_GiB -> TB', 10.74, $d['ssd_tbw_calculated']);
+check('JSON: rotation_rate 0 -> SSD', $d['is_ssd'] === true);
+
+echo "\n== smartparse: SAS defects and error counters ==\n";
+$d = driveage_parse_smart_text(file_get_contents("$FIXTURES/scsi_sas_errors.txt"));
+checkEq('grown defect list', 12, $d['scsi_grown_defects']);
+checkEq('uncorrected read+write+verify', 3, $d['scsi_uncorrected_errors']);
+checkEq('SAS POH still parsed', 51234, $d['power_on_hours']);
+$d = driveage_parse_smart_text(file_get_contents("$FIXTURES/scsi_sas.txt"));
+checkEq('clean SAS: zero defects', 0, $d['scsi_grown_defects']);
+checkEq('no error counter log -> null', null, $d['scsi_uncorrected_errors']);
+$d = driveage_parse_smart_json(['scsi_grown_defect_list' => 4, 'scsi_error_counter_log' => [
+    'read' => ['total_uncorrected_errors' => 2], 'write' => ['total_uncorrected_errors' => 1], 'verify' => ['total_uncorrected_errors' => 0]]]);
+checkEq('JSON: grown defects', 4, $d['scsi_grown_defects']);
+checkEq('JSON: uncorrected errors summed', 3, $d['scsi_uncorrected_errors']);
+
 echo "\n== smartparse: standby ==\n";
 $d = driveage_parse_smart_text(file_get_contents("$FIXTURES/standby.txt"));
 check('standby detected', $d['is_standby'] === true);
@@ -343,6 +382,57 @@ foreach ($w as $warning) { $byAttr[$warning['attribute']] = $warning; }
 checkEq('pending=1 -> critical', 'critical', $byAttr['pending_sectors']['level'] ?? null);
 checkEq('187>10 -> critical', 'critical', $byAttr['reported_uncorrectable']['level'] ?? null);
 checkEq('188>100 -> critical', 'critical', $byAttr['command_timeout']['level'] ?? null);
+
+echo "\n== health warnings: SSD, SAS, trends ==\n";
+$w = getHddHealthWarnings(['physical_type' => 'ssd', 'hdd_pending_sectors' => 1, 'hdd_uncorrectable_sectors' => 1,
+    'hdd_command_timeout' => 9, 'hdd_reallocated_sectors' => 2]);
+checkEq('SSD: 197/198/188 ignored, 5 evaluated', ['reallocated_sectors'], array_column($w, 'attribute'));
+checkEq('SSD: 2 retired blocks -> warning', 'warning', $w[0]['level'] ?? null);
+$w = getHddHealthWarnings(['physical_type' => 'hdd', 'scsi_grown_defects' => 12, 'scsi_uncorrected_errors' => 3]);
+$byAttr = array_column($w, null, 'attribute');
+checkEq('SAS grown defects -> warning', 'warning', $byAttr['grown_defects']['level'] ?? null);
+checkEq('SAS uncorrected 3 -> warning', 'warning', $byAttr['scsi_uncorrected']['level'] ?? null);
+$w = getHddHealthWarnings(['physical_type' => 'hdd', 'scsi_grown_defects' => 500]);
+checkEq('large but stable-or-unknown defect list never critical by count', 'warning', $w[0]['level'] ?? null);
+$w = getHddHealthWarnings(['physical_type' => 'hdd', 'scsi_grown_defects' => 14],
+    ['scsi_grown_defects' => ['trend' => 'growing', 'since' => strtotime('2026-10-01'), 'previous' => 12]]);
+checkEq('growing defect list -> critical', 'critical', $w[0]['level'] ?? null);
+checkEq('growth shown in message', '14 grown defects (+2 since Oct 1)', $w[0]['message'] ?? null);
+$w = getHddHealthWarnings(['physical_type' => 'hdd', 'hdd_reallocated_sectors' => 24], ['hdd_reallocated_sectors' => ['trend' => 'stable']]);
+checkEq('24 reallocated but stable -> warning', 'warning', $w[0]['level'] ?? null);
+checkEq('stable shown in message', '24 reallocated sectors (stable)', $w[0]['message'] ?? null);
+$w = getHddHealthWarnings(['physical_type' => 'hdd', 'hdd_reallocated_sectors' => 24]);
+checkEq('24 reallocated, no history -> critical', 'critical', $w[0]['level'] ?? null);
+$w = getHddHealthWarnings(['physical_type' => 'hdd', 'hdd_reallocated_sectors' => 2], ['hdd_reallocated_sectors' => ['trend' => 'growing']]);
+checkEq('2 reallocated but rising -> critical', 'critical', $w[0]['level'] ?? null);
+$w = getHddHealthWarnings(['physical_type' => 'hdd', 'hdd_reallocated_sectors' => 2000], ['hdd_reallocated_sectors' => ['trend' => 'stable']]);
+checkEq('stable but huge (>100) -> critical', 'critical', $w[0]['level'] ?? null);
+
+echo "\n== predictions: SSD + warning trends ==\n";
+$ssd = ['physical_type' => 'ssd', 'smart_status' => 'PASSED', 'size_bytes' => 1000204886016,
+    'power_on_hours' => 21000, 'ssd_percentage_used' => 9, 'ssd_tbw_calculated' => 24.0, 'health_warnings' => []];
+$p = getPredictiveReplacement($ssd, getDefaultConfig());
+checkEq('SATA SSD uses wear indicator', 'percentage_used_measured', $p['method']);
+checkEq('SATA SSD light wear -> horizon', 120, $p['months_remaining']);
+$p = getPredictiveReplacement(array_merge($ssd, ['health_warnings' => [['level' => 'critical']]]), getDefaultConfig());
+checkEq('SSD critical warning -> Replace Now', 'critical_smart', $p['method']);
+$p = getPredictiveReplacement(array_merge($ssd, ['ssd_percentage_used' => null, 'ssd_tbw_calculated' => null]), getDefaultConfig());
+checkEq('SSD without wear data -> insufficient data', 'insufficient_data', $p['method']);
+$hdd = ['physical_type' => 'hdd', 'smart_status' => 'PASSED', 'power_on_hours' => 17520];
+$p = estimateHddRemainingLife(array_merge($hdd, ['health_warnings' => [['level' => 'warning', 'trend' => 'stable']]]), 'conservative');
+checkEq('stable warnings -> 12 months (conservative)', 12, $p['months_remaining']);
+checkEq('stable warnings method', 'smart_warnings_stable', $p['method']);
+$p = estimateHddRemainingLife(array_merge($hdd, ['health_warnings' => [['level' => 'warning', 'trend' => 'stable']]]), 'aggressive');
+checkEq('stable warnings -> 24 months (aggressive)', 24, $p['months_remaining']);
+$p = estimateHddRemainingLife(array_merge($hdd, ['health_warnings' => [['level' => 'warning', 'trend' => 'stable'], ['level' => 'warning', 'trend' => 'new']]]), 'conservative');
+checkEq('any new warning -> 3 months', 3, $p['months_remaining']);
+$p = estimateHddRemainingLife(['physical_type' => 'hdd', 'smart_status' => 'PASSED', 'power_on_hours' => 78840,
+    'health_warnings' => [['level' => 'warning']]], 'conservative');
+checkEq('warnings never extend a due drive', 0, $p['months_remaining']);
+checkEq('due drive with warnings reads Due now', 'Due now', $p['timeline_text']);
+checkEq('count level: growing', 'critical', driveage_count_level(1, 10, 'growing'));
+checkEq('count level: new under threshold', 'warning', driveage_count_level(5, 10, 'new'));
+checkEq('count level: no threshold', 'warning', driveage_count_level(5000, null, null));
 
 // ---------------------------------------------------------------------------
 echo "\n== config validation (enforced on load) ==\n";
@@ -630,6 +720,23 @@ checkEq('7.6yr healthy: ~5 months to target', 5, $old['replacement_prediction'][
 checkEq('7.6yr healthy: stays moderate (no escalation)', 'moderate_risk', $old['risk_category']);
 checkEq('7.6yr healthy: health ok', 'ok', $old['health_status']);
 checkEq('7.6yr healthy: AFR label of its real band', 'Moderate Risk (AFR ~2%)', $old['risk_label']);
+
+// SATA SSD flagged non-rotational by Unraid -> flash wear model
+copy("$FIXTURES/ssd_sata.txt", DRIVEAGE_STATE_DIR . '/smart/media');
+$ssdInfo = getDriveInfo('sdm', ['ini' => [
+    'name' => 'media', '_slot' => 'media', 'device' => 'sdm', 'id' => 'Samsung_SSD_870_EVO_1TB_X', 'type' => 'Cache',
+    'rotational' => '0', 'sectors' => '1000', 'sector_size' => '512', 'temp' => '34', 'spundown' => '0'
+], 'source' => 'disks'], getDefaultConfig(), 'C', []);
+checkEq('rotational=0 -> ssd', 'ssd', $ssdInfo['physical_type']);
+checkEq('SSD lifecycle label shows wear', 'Minimal Risk (wear 9%)', $ssdInfo['age_label']);
+checkEq('SSD prediction from wear indicator', 'percentage_used_measured', $ssdInfo['replacement_prediction']['method']);
+checkEq('SSD wear exposed to the UI', 9, $ssdInfo['ssd_percentage_used']);
+copy("$FIXTURES/ata_cache.txt", DRIVEAGE_STATE_DIR . '/smart/media');
+$ssdInfo = getDriveInfo('sdm', ['ini' => [
+    'name' => 'media', '_slot' => 'media', 'device' => 'sdm', 'id' => 'Generic_SSD_X', 'type' => 'Cache',
+    'rotational' => '0', 'sectors' => '1000', 'sector_size' => '512', 'temp' => '34', 'spundown' => '0'
+], 'source' => 'disks'], getDefaultConfig(), 'C', []);
+checkEq('SSD without wear attribute: age-based label', 'Minimal Risk (age)', $ssdInfo['age_label']);
 
 // ---------------------------------------------------------------------------
 // Cleanup

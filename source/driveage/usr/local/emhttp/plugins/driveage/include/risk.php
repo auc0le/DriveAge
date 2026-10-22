@@ -56,10 +56,23 @@ function getNvmeRiskCategory($driveInfo) {
     if (($driveInfo['physical_type'] ?? '') !== 'nvme') {
         return null;
     }
+    return getWearRiskCategory(
+        $driveInfo['nvme_percentage_used'] ?? null,
+        $driveInfo['nvme_available_spare'] ?? null,
+        $driveInfo['nvme_available_spare_threshold'] ?? null
+    );
+}
 
-    $percentageUsed = $driveInfo['nvme_percentage_used'] ?? null;
-    $availableSpare = $driveInfo['nvme_available_spare'] ?? null;
-    $spareThreshold = $driveInfo['nvme_available_spare_threshold'] ?? 10;
+/**
+ * Flash (NVMe / SATA SSD) lifecycle category from wear metrics.
+ *
+ * @param int|null $percentageUsed Rated endurance used (%), if known
+ * @param int|null $availableSpare Available spare (%), if known (NVMe)
+ * @param int|null $spareThreshold Vendor spare threshold (%), default 10
+ * @return string Risk category (the more severe of the two metrics)
+ */
+function getWearRiskCategory($percentageUsed, $availableSpare, $spareThreshold) {
+    $spareThreshold = $spareThreshold ?? 10;
 
     // Spare exhausted below the vendor threshold: end of wear life
     if ($availableSpare !== null && $availableSpare < $spareThreshold) {
@@ -231,9 +244,11 @@ function getAgeLabel($category, $config = null) {
  * @param string $physicalType 'hdd', 'ssd', 'nvme' or 'usb'
  * @param int|null $percentageUsed Flash wear (Percentage Used), if known
  * @param array|null $config Configuration (custom labels)
+ * @param bool $ageBased True when a flash drive's band came from its age
+ *                       (SATA SSD without a wear attribute)
  * @return string Label
  */
-function getLifecycleLabel($category, $physicalType, $percentageUsed, $config = null) {
+function getLifecycleLabel($category, $physicalType, $percentageUsed, $config = null, $ageBased = false) {
     $label = getAgeLabel($category, $config);
     if ($category === 'unknown' || !in_array($physicalType, ['nvme', 'ssd'], true)) {
         return $label;
@@ -242,6 +257,9 @@ function getLifecycleLabel($category, $physicalType, $percentageUsed, $config = 
     $name = trim(preg_replace('/\s*\([^)]*\)\s*$/', '', $label));
     if ($name === '') {
         $name = $label;
+    }
+    if ($ageBased) {
+        return $name . ' (age)';
     }
     return $percentageUsed !== null ? sprintf('%s (wear %d%%)', $name, $percentageUsed) : $name . ' (wear)';
 }

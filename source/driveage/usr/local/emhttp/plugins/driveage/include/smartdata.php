@@ -384,11 +384,15 @@ function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
 
     $isStandby = $iniStandby || (($smartData['is_standby'] ?? false) === true);
 
-    // Physical type
+    // Physical type. SATA SSDs: Unraid's rotational flag (what dynamix uses
+    // for its SSD temperature limits), else smartctl's rotation rate / an
+    // SSD wear attribute
     if ($assignment['drive_type'] === 'flash') {
         $physicalType = 'usb';
     } elseif (strpos($deviceName, 'nvme') === 0) {
         $physicalType = 'nvme';
+    } elseif (($ini['rotational'] ?? null) === '0' || !empty($smartData['is_ssd'])) {
+        $physicalType = 'ssd';
     } else {
         $physicalType = 'hdd';
     }
@@ -440,17 +444,26 @@ function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
         'power_on_hours' => $powerOnHours
     ]);
 
-    // Lifecycle category: wear-based for NVMe, age-based otherwise
+    // Lifecycle category: wear-based for flash, age-based otherwise. A SATA
+    // SSD that reports no wear attribute falls back to its age.
+    $wearUsed = null;
+    $ageBased = true;
     if ($physicalType === 'nvme') {
         $ageCategory = getNvmeRiskCategory($evalInfo) ?? getAgeCategory($powerOnHours, $config);
+        $wearUsed = $smartData['nvme_percentage_used'] ?? null;
+        $ageBased = false;
+    } elseif ($physicalType === 'ssd' && ($smartData['ssd_percentage_used'] ?? null) !== null) {
+        $wearUsed = $smartData['ssd_percentage_used'];
+        $ageCategory = getWearRiskCategory($wearUsed, null, null);
+        $ageBased = false;
     } else {
         $ageCategory = getAgeCategory($powerOnHours, $config);
     }
-    $ageLabel = getLifecycleLabel($ageCategory, $physicalType, $smartData['nvme_percentage_used'] ?? null, $config);
+    $ageLabel = getLifecycleLabel($ageCategory, $physicalType, $wearUsed, $config, $ageBased);
 
     // Health warnings
     $healthWarnings = [];
-    if ($physicalType === 'hdd' && $smartData) {
+    if (($physicalType === 'hdd' || $physicalType === 'ssd') && $smartData) {
         $healthWarnings = getHddHealthWarnings($evalInfo);
     }
     if ($physicalType === 'nvme' && $smartData) {
@@ -540,7 +553,14 @@ function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
         'hdd_pending_sectors' => $smartData['hdd_pending_sectors'] ?? null,
         'hdd_uncorrectable_sectors' => $smartData['hdd_uncorrectable_sectors'] ?? null,
         'hdd_reported_uncorrectable' => $smartData['hdd_reported_uncorrectable'] ?? null,
-        'hdd_command_timeout' => $smartData['hdd_command_timeout'] ?? null
+        'hdd_command_timeout' => $smartData['hdd_command_timeout'] ?? null,
+        // SATA SSD wear (null unless the drive reports a known wear attribute)
+        'ssd_percentage_used' => $smartData['ssd_percentage_used'] ?? null,
+        'ssd_wear_attribute' => $smartData['ssd_wear_attribute'] ?? null,
+        'ssd_tbw_calculated' => $smartData['ssd_tbw_calculated'] ?? null,
+        // SCSI/SAS error indicators
+        'scsi_grown_defects' => $smartData['scsi_grown_defects'] ?? null,
+        'scsi_uncorrected_errors' => $smartData['scsi_uncorrected_errors'] ?? null
     ];
 
     // Predictive replacement estimate. It does NOT feed back into the risk
@@ -552,95 +572,141 @@ function getDriveInfo($deviceName, $entry, $config, $tempUnit, $pohCache) {
 }
 
 /**
- * Detect HDD pre-failure conditions based on critical SMART attributes.
+ * Severity for an error count that can grow over a drive's life.
+ *
+ * With drivecache history: rising within the last 30 days -> critical;
+ * unchanged for 30+ days -> warning (unless the count is enormous). Without
+ * history yet, plain count thresholds apply.
+ *
+ * @param int $count Current count (> 0)
+ * @param int|null $criticalAbove Count above which a drive with no history
+ *                                is critical (null: never by count alone)
+ * @param string|null $trend 'growing', 'stable', 'new' or null
+ * @return string 'critical' or 'warning'
+ */
+function driveage_count_level($count, $criticalAbove, $trend) {
+    if ($trend === 'growing') {
+        return 'critical';
+    }
+    if ($criticalAbove === null) {
+        return 'warning';
+    }
+    if ($trend === 'stable') {
+        return $count > $criticalAbove * 10 ? 'critical' : 'warning';
+    }
+    return $count > $criticalAbove ? 'critical' : 'warning';
+}
+
+/**
+ * Detect pre-failure conditions from SMART attributes (HDD, SATA SSD, SAS).
  *
  * Google's disk study and Backblaze's SMART analyses identify attributes
  * 5, 187, 188, 197 and 198 as the strongest failure predictors - all five
- * are evaluated here.
+ * are evaluated for hard drives. SAS drives report the equivalent grown
+ * defect list and uncorrected error counters. SATA SSDs are checked for 5
+ * and 187 only: 188/197/198 carry vendor-specific (sometimes buggy)
+ * meanings on SSDs - Crucial's 197, for one, flips between 0 and 1.
  *
- * @param array $driveInfo Drive information with HDD SMART attributes
+ * @param array $driveInfo Drive information with SMART attributes
+ * @param array $trends Field => ['trend' => 'growing'|'stable'|'new',
+ *                      'since' => int|null, 'previous' => int|null]
+ *                      from the drivecache history (see getAttributeTrend())
  * @return array Health warnings
  */
-function getHddHealthWarnings($driveInfo) {
+function getHddHealthWarnings($driveInfo, $trends = []) {
+    $type = $driveInfo['physical_type'] ?? '';
+    if ($type !== 'hdd' && $type !== 'ssd') {
+        return [];
+    }
+    $isSsd = ($type === 'ssd');
     $warnings = [];
 
-    if (($driveInfo['physical_type'] ?? '') !== 'hdd') {
-        return $warnings;
-    }
+    $add = function ($field, $attribute, $value, $level, $noun, $action, $tooltip) use (&$warnings, $trends) {
+        $trend = $trends[$field] ?? [];
+        $message = $value . ' ' . $noun . ($value > 1 ? 's' : '');
+        if (($trend['trend'] ?? null) === 'growing') {
+            $message .= (isset($trend['previous'], $trend['since']) && $value > $trend['previous'])
+                ? sprintf(' (+%d since %s)', $value - $trend['previous'], date('M j', $trend['since']))
+                : ' (increasing)';
+        } elseif (($trend['trend'] ?? null) === 'stable') {
+            $message .= ' (stable)';
+        }
+        $warnings[] = [
+            'level' => $level,
+            'attribute' => $attribute,
+            'value' => $value,
+            'message' => $message,
+            'action' => $action,
+            'tooltip' => $tooltip,
+            'trend' => $trend['trend'] ?? null
+        ];
+    };
+    $trendOf = fn($field) => $trends[$field]['trend'] ?? null;
 
-    $reallocated   = $driveInfo['hdd_reallocated_sectors'] ?? 0;
-    $pending       = $driveInfo['hdd_pending_sectors'] ?? 0;
-    $uncorrectable = $driveInfo['hdd_uncorrectable_sectors'] ?? 0;
-    $reported      = $driveInfo['hdd_reported_uncorrectable'] ?? 0;
-    $timeouts      = $driveInfo['hdd_command_timeout'] ?? 0;
-
+    $reallocated   = intval($driveInfo['hdd_reallocated_sectors'] ?? 0);
+    $pending       = intval($driveInfo['hdd_pending_sectors'] ?? 0);
+    $uncorrectable = intval($driveInfo['hdd_uncorrectable_sectors'] ?? 0);
+    $reported      = intval($driveInfo['hdd_reported_uncorrectable'] ?? 0);
     // SMART 188 composite raw values (already masked by the parser; values
     // supplied from elsewhere get the same treatment)
-    $timeouts = driveage_mask_command_timeout($timeouts);
+    $timeouts      = driveage_mask_command_timeout(intval($driveInfo['hdd_command_timeout'] ?? 0));
+    $grownDefects  = intval($driveInfo['scsi_grown_defects'] ?? 0);
+    $uncorrected   = intval($driveInfo['scsi_uncorrected_errors'] ?? 0);
 
-    // CRITICAL: pending sectors = imminent reallocation (SMART 197)
-    if ($pending > 0) {
-        $warnings[] = [
-            'level' => 'critical',
-            'attribute' => 'pending_sectors',
-            'value' => $pending,
-            'message' => $pending . ' pending sector' . ($pending > 1 ? 's' : ''),
-            'action' => 'Replace ASAP',
-            'tooltip' => 'Pending sectors are waiting to be reallocated. Drive is actively failing.'
-        ];
+    // CRITICAL: pending sectors = unreadable right now (SMART 197)
+    if (!$isSsd && $pending > 0) {
+        $add('hdd_pending_sectors', 'pending_sectors', $pending, 'critical', 'pending sector', 'Replace ASAP',
+            'Pending sectors could not be read and are waiting to be reallocated. The drive is actively failing.');
     }
 
-    // CRITICAL: uncorrectable sectors = data loss risk (SMART 198)
-    if ($uncorrectable > 0) {
-        $warnings[] = [
-            'level' => 'critical',
-            'attribute' => 'uncorrectable_sectors',
-            'value' => $uncorrectable,
-            'message' => $uncorrectable . ' uncorrectable error' . ($uncorrectable > 1 ? 's' : ''),
-            'action' => 'Replace immediately',
-            'tooltip' => 'Uncorrectable errors indicate permanent data loss. Replace drive now.'
-        ];
+    // CRITICAL: offline uncorrectable sectors = data loss (SMART 198)
+    if (!$isSsd && $uncorrectable > 0) {
+        $add('hdd_uncorrectable_sectors', 'uncorrectable_sectors', $uncorrectable, 'critical', 'uncorrectable error', 'Replace immediately',
+            'Uncorrectable errors indicate permanent data loss. Replace drive now.');
     }
 
-    // WARNING/CRITICAL: reallocated sectors = physical damage (SMART 5)
+    // Reallocated sectors / retired flash blocks (SMART 5)
     if ($reallocated > 0) {
-        $severity = $reallocated > 10 ? 'critical' : 'warning';
-        $action = $reallocated > 10 ? 'Replace immediately' : 'Backup data, monitor closely';
-
-        $warnings[] = [
-            'level' => $severity,
-            'attribute' => 'reallocated_sectors',
-            'value' => $reallocated,
-            'message' => $reallocated . ' reallocated sector' . ($reallocated > 1 ? 's' : ''),
-            'action' => $action,
-            'tooltip' => 'Reallocated sectors indicate physical damage. Drive may fail soon.'
-        ];
+        $level = driveage_count_level($reallocated, 10, $trendOf('hdd_reallocated_sectors'));
+        $action = ($level === 'critical')
+            ? ($trendOf('hdd_reallocated_sectors') === 'growing' ? 'Replace ASAP - count is rising' : 'Replace immediately')
+            : 'Back up data, monitor closely';
+        $add('hdd_reallocated_sectors', 'reallocated_sectors', $reallocated, $level, 'reallocated sector', $action, $isSsd
+            ? 'The SSD has retired flash blocks. A stable count is common; a rising count means the flash is failing.'
+            : 'Reallocated sectors indicate physical damage. A stable count can last years; a rising count means the drive is deteriorating.');
     }
 
-    // WARNING/CRITICAL: reported uncorrectable errors (SMART 187)
+    // Reported uncorrectable errors (SMART 187)
     if ($reported > 0) {
-        $severity = $reported > 10 ? 'critical' : 'warning';
-        $warnings[] = [
-            'level' => $severity,
-            'attribute' => 'reported_uncorrectable',
-            'value' => $reported,
-            'message' => $reported . ' reported uncorrectable error' . ($reported > 1 ? 's' : ''),
-            'action' => $severity === 'critical' ? 'Replace ASAP' : 'Monitor closely, plan replacement',
-            'tooltip' => 'Read errors during normal operation. Strong failure predictor (Google study).'
-        ];
+        $level = driveage_count_level($reported, 10, $trendOf('hdd_reported_uncorrectable'));
+        $add('hdd_reported_uncorrectable', 'reported_uncorrectable', $reported, $level, 'reported uncorrectable error',
+            $level === 'critical' ? 'Replace ASAP' : 'Monitor closely, plan replacement',
+            'Read errors during normal operation. Strong failure predictor (Google study).');
     }
 
-    // WARNING/CRITICAL: command timeouts (SMART 188)
-    if ($timeouts > 0) {
-        $severity = $timeouts > 100 ? 'critical' : 'warning';
-        $warnings[] = [
-            'level' => $severity,
-            'attribute' => 'command_timeout',
-            'value' => $timeouts,
-            'message' => $timeouts . ' command timeout' . ($timeouts > 1 ? 's' : ''),
-            'action' => $severity === 'critical' ? 'Replace ASAP' : 'Monitor closely',
-            'tooltip' => 'Commands timed out - the drive is becoming unresponsive or has cabling/controller issues.'
-        ];
+    // Command timeouts (SMART 188) - often cabling/controller related
+    if (!$isSsd && $timeouts > 0) {
+        $level = $timeouts > 100 ? 'critical' : 'warning';
+        $add('hdd_command_timeout', 'command_timeout', $timeouts, $level, 'command timeout',
+            $level === 'critical' ? 'Replace ASAP' : 'Monitor closely',
+            'Commands timed out - the drive is becoming unresponsive or has cabling/controller issues.');
+    }
+
+    // SAS: grown defect list (the SCSI counterpart of reallocations). Many
+    // healthy SAS drives carry a few entries - only growth is critical.
+    if ($grownDefects > 0) {
+        $level = driveage_count_level($grownDefects, null, $trendOf('scsi_grown_defects'));
+        $add('scsi_grown_defects', 'grown_defects', $grownDefects, $level, 'grown defect',
+            $level === 'critical' ? 'Replace ASAP - defects are increasing' : 'Monitor for growth',
+            'Blocks the drive has remapped since leaving the factory. A stable list is common on SAS drives; a growing one means the media is deteriorating.');
+    }
+
+    // SAS: total uncorrected read/write/verify errors
+    if ($uncorrected > 0) {
+        $level = driveage_count_level($uncorrected, 10, $trendOf('scsi_uncorrected_errors'));
+        $add('scsi_uncorrected_errors', 'scsi_uncorrected', $uncorrected, $level, 'uncorrected error',
+            $level === 'critical' ? 'Replace ASAP' : 'Monitor closely, plan replacement',
+            'Read/write/verify errors the drive could not correct (SCSI error counter log).');
     }
 
     return $warnings;

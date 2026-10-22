@@ -25,7 +25,7 @@ This document describes the risk assessment and predictive replacement methodolo
 DriveAge implements a **dual risk model**:
 
 - **HDDs (and USB devices)**: Age-based risk calibrated to Backblaze's 2025 fleet data, combined with critical SMART attribute monitoring that overrides age when pre-failure indicators appear
-- **NVMe SSDs**: Wear-based risk using Percentage Used and Available Spare, with replacement projections computed from the drive's **own measured write history**
+- **NVMe and SATA SSDs**: Wear-based risk using the drive's own wear indicator (NVMe Percentage Used / Available Spare, or the SATA SSD's wear attribute), with replacement projections computed from the drive's **own measured wear rate**
 
 Both models produce **predictive replacement estimates** carrying an explicit method and confidence level.
 
@@ -137,6 +137,31 @@ NVMe drives are assessed on two wear metrics; the **more severe of the two wins*
 
 ---
 
+## SATA SSD Wear Assessment
+
+### Detection
+
+A drive is treated as a SATA SSD when Unraid marks it non-rotational (`rotational="0"` in `disks.ini` - the flag dynamix uses for its SSD temperature limits), when smartctl reports `Rotation Rate: Solid State Device` (JSON: `rotation_rate: 0`), or when it reports a known SSD wear attribute.
+
+### Wear indicator (by smartctl attribute name - IDs are vendor-specific)
+
+| Attribute name | Typical ID / vendor | Reading |
+|---|---|---|
+| `Percent_Lifetime_Remain` | 202 Crucial/Micron | used = 100 − normalized VALUE |
+| `Percent_Lifetime_Used`, `Perc_Rated_Life_Used` | SanDisk/WD | used = RAW |
+| `SSD_Life_Left` | 231 Kingston, others | used = 100 − VALUE |
+| `Remaining_Lifetime_Perc` | 169 WD/SanDisk | used = 100 − VALUE |
+| `Media_Wearout_Indicator` | 233 Intel, WD | used = 100 − VALUE |
+| `Wear_Leveling_Count` | 177 Samsung | used = 100 − VALUE |
+
+The first attribute in this order that the drive reports is used. Host writes come from `Total_LBAs_Written` (× 512 bytes), `Host_Writes_32MiB`, `Host_Writes_GiB`/`Lifetime_Writes_GiB`/`Total_Writes_GiB` or `Host_Writes_MiB`.
+
+### Lifecycle band and estimate
+
+The wear indicator maps to the same bands as NVMe Percentage Used (< 50% minimal, 50-79% low, 80-100% moderate, > 100% elevated) and feeds the same flash estimator (see [NVMe Predictive Replacement Estimation](#nvme-predictive-replacement-estimation)) after the SMART overrides. An SSD reporting no wear attribute uses its age band, labelled "(age)", and shows "Unknown" for the estimate.
+
+---
+
 ## HDD Predictive Replacement Estimation
 
 Evaluated in order; the first match wins. Every result carries `method` and `confidence`.
@@ -149,9 +174,11 @@ Evaluated in order; the first match wins. Every result carries `method` and `con
 - **Trigger**: any critical attribute warning (197>0, 198>0, 5>10, 187>10, 188>100)
 - **Estimate**: 0 months (Replace Now) · **Confidence**: High
 
-#### Method 2: Non-Critical SMART Warnings (`smart_warnings`)
-- **Trigger**: caution-level warnings (5: 1-10, 187: 1-10, 188: 1-100)
+#### Method 2: Non-Critical SMART Warnings (`smart_warnings` / `smart_warnings_stable`)
+- **Trigger**: warning-level findings (see [Critical SMART Attributes](#critical-smart-attributes))
 - **Estimate**: 3 months (conservative) / 6 months (aggressive) · **Confidence**: Medium
+- **Stable** (`smart_warnings_stable`): when drivecache history shows *every* warning unchanged for 30+ days, the drive is stable with a known defect - estimate 12 months (conservative) / 24 months (aggressive), Low confidence
+- Never longer than the drive's own age countdown; a drive already past its target age stays "Due now"
 
 #### Method 3: Age Countdown (`age_linear`)
 A linear countdown to the target replacement age:
@@ -256,12 +283,28 @@ New drives with no wear indicator, no write data and full spare show "Unknown" u
 
 | ID | Name | Caution | Critical |
 |----|------|-------------------|-------------------|
-| **5** | Reallocated Sector Count | 1-10 | > 10 |
-| **187** | Reported Uncorrectable Errors | 1-10 | > 10 |
+| **5** | Reallocated Sector Count | 1-10, or stable for 30+ days | > 10 with no history, **any increase within 30 days**, or > 100 |
+| **187** | Reported Uncorrectable Errors | 1-10, or stable for 30+ days | > 10 with no history, **any increase within 30 days**, or > 100 |
 | **188** | Command Timeout | 1-100 | > 100 |
 | **197** | Current Pending Sectors | - | > 0 |
 | **198** | Uncorrectable Sector Count | - | > 0 |
 | - | SMART overall-health | - | FAILED |
+
+**Trend rule** (5, 187 and the SAS counters below): the count is compared with the drive's history in `drivecache.json`. A count that rose within the last 30 days is critical whatever its size - a *growing* count is the strongest signal (Google found drives ~14× more likely to fail within 60 days of their first reallocation). A count unchanged for 30+ days is a warning unless it exceeds 10× the threshold. With under 30 days of history the plain count thresholds apply.
+
+### SAS (SCSI) Drives
+
+| Indicator | Source | Caution | Critical |
+|---|---|---|---|
+| **Grown defect list** | "Elements in grown defect list" | > 0 | any increase within 30 days |
+| **Uncorrected errors** | Error counter log, total uncorrected (read + write + verify) | 1-10, or stable | > 10 with no history, or any increase within 30 days |
+| SMART health status | "SMART Health Status" | - | not OK (→ FAILED) |
+
+Many healthy SAS drives carry a few grown-defect entries, so the list is never critical by size alone - only by growth.
+
+### SATA SSDs
+
+Only **5** (retired blocks) and **187** are evaluated, with the same rules as for HDDs. Attributes 188/197/198 carry vendor-specific - sometimes buggy - meanings on SSDs (Crucial's 197, for example, flips between 0 and 1), so they are not used.
 
 **Attribute 188 note**: many drives pack three 16-bit counters into the 48-bit raw value. DriveAge masks to the low 16 bits when the raw value exceeds 65,535, so composite encodings don't produce false criticals.
 
@@ -309,7 +352,7 @@ Spun-down drives are **never woken**. Their last-known power-on hours persist in
 2. **AFR labels are approximations**: year-1 (~1.3%) and peak (~4.25% @ ~10.3y) are published precisely; the mid-life band labels are interpolations of the published curve.
 3. **NVMe endurance rating is estimated** (500 TBW/TB): actual vendor ratings range ~220-750 TBW/TB. Enterprise drives can be 5-10× higher. Write amplification is assumed ≈1.
 4. **Measured rates assume history predicts the future**: a workload change (e.g. new backup target) invalidates the projection until history catches up. Conservative mode's +25% margin partially hedges this.
-5. **SATA SSDs** are currently assessed with the age-based model (they expose wear attributes inconsistently across vendors).
+5. **SATA SSD wear attributes vary by vendor**: DriveAge recognizes them by smartctl's attribute name (see [SATA SSD Wear Assessment](#sata-ssd-wear-assessment)); a drive reporting none falls back to its age band, labelled "(age)". Host-write unit conversions are vendor conventions and can be wrong for unusual firmware.
 6. **SMART reliability varies** by vendor/firmware; ~half of failed drives in Google's study showed no SMART warnings first. **These estimates are probabilistic planning guidance, not guarantees. Keep backups.**
 
 ---

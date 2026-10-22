@@ -311,38 +311,12 @@ function estimateFlashRemainingLife($w, $predictionMode = 'conservative') {
  */
 function estimateHddRemainingLife($driveInfo, $predictionMode = 'conservative') {
     $powerOnHours = $driveInfo['power_on_hours'] ?? null;
-    $healthWarnings = $driveInfo['health_warnings'] ?? [];
-    $smartStatus = strtoupper($driveInfo['smart_status'] ?? 'UNKNOWN');
 
-    // CRITICAL: drive reports its own SMART health as FAILED
-    // (checked before the no-data bail so a FAILED drive always says so)
-    if ($smartStatus === 'FAILED') {
-        return [
-            'months_remaining' => 0,
-            'confidence' => 'high',
-            'method' => 'smart_failed',
-            'reason' => 'Drive reports SMART overall-health FAILED',
-            'action' => 'Replace immediately',
-            'timeline_text' => 'Replace Now',
-            'timeline_class' => 'timeline-critical'
-        ];
-    }
-
-    // CRITICAL: any critical SMART attribute warnings
-    // (checked before the no-data bail - a drive with pending sectors is
-    // "Replace Now" even if its power-on hours could not be parsed)
-    foreach ($healthWarnings as $warning) {
-        if (($warning['level'] ?? '') === 'critical') {
-            return [
-                'months_remaining' => 0,
-                'confidence' => 'high',
-                'method' => 'critical_smart',
-                'reason' => 'Critical SMART warnings detected',
-                'action' => 'Replace immediately',
-                'timeline_text' => 'Replace Now',
-                'timeline_class' => 'timeline-critical'
-            ];
-        }
+    // SMART FAILED / critical attributes come first - even a drive whose
+    // power-on hours could not be parsed is "Replace Now" with pending sectors
+    $critical = driveage_critical_override($driveInfo);
+    if ($critical !== null) {
+        return $critical;
     }
 
     // Cannot estimate without power-on hours
@@ -358,33 +332,20 @@ function estimateHddRemainingLife($driveInfo, $predictionMode = 'conservative') 
         ];
     }
 
-    $ageYears = $powerOnHours / 8760;
-
-    if (!empty($healthWarnings)) {
-        // Non-critical warnings: conservative = 3 months, aggressive = 6 months
-        $months = ($predictionMode === 'conservative') ? 3 : 6;
-        $timeline = getReplacementTimelineText($months);
-
-        return [
-            'months_remaining' => $months,
-            'confidence' => 'medium',
-            'method' => 'smart_warnings',
-            'reason' => 'SMART warnings detected',
-            'action' => 'Plan replacement soon',
-            'timeline_text' => $timeline['text'],
-            'timeline_class' => $timeline['class']
-        ];
-    }
-
     // Linear countdown to target replacement age (Backblaze 2025 calibration)
     // Conservative: 8 years (replace before the end-of-life AFR ramp)
     // Aggressive: 10 years (ride drives to the measured ~4.25% AFR peak)
+    $ageYears = $powerOnHours / 8760;
     $targetAge = ($predictionMode === 'conservative')
         ? DRIVEAGE_TARGET_YEARS_CONSERVATIVE
         : DRIVEAGE_TARGET_YEARS_AGGRESSIVE;
+    $monthsRemaining = max(0, intval(round(($targetAge - $ageYears) * 12)));
 
-    $remainingYears = $targetAge - $ageYears;
-    $monthsRemaining = max(0, intval(round($remainingYears * 12)));
+    // Warning-level SMART findings can only shorten the countdown
+    $warned = driveage_warning_override($driveInfo, $predictionMode, $monthsRemaining);
+    if ($warned !== null) {
+        return $warned;
+    }
 
     if ($monthsRemaining > 60) {
         $confidence = 'medium';
@@ -420,6 +381,93 @@ function estimateHddRemainingLife($driveInfo, $predictionMode = 'conservative') 
         'months_remaining' => $monthsRemaining,
         'confidence' => $confidence,
         'method' => 'age_linear',
+        'reason' => $reason,
+        'action' => $action,
+        'timeline_text' => $timeline['text'],
+        'timeline_class' => $timeline['class']
+    ];
+}
+
+/**
+ * "Replace Now" for drive-reported failure or any critical SMART warning.
+ *
+ * @param array $driveInfo Drive information (smart_status, health_warnings)
+ * @return array|null Prediction, or null when neither applies
+ */
+function driveage_critical_override($driveInfo) {
+    if (strtoupper($driveInfo['smart_status'] ?? 'UNKNOWN') === 'FAILED') {
+        return [
+            'months_remaining' => 0,
+            'confidence' => 'high',
+            'method' => 'smart_failed',
+            'reason' => 'Drive reports SMART overall-health FAILED',
+            'action' => 'Replace immediately',
+            'timeline_text' => 'Replace Now',
+            'timeline_class' => 'timeline-critical'
+        ];
+    }
+    foreach ($driveInfo['health_warnings'] ?? [] as $warning) {
+        if (($warning['level'] ?? '') === 'critical') {
+            return [
+                'months_remaining' => 0,
+                'confidence' => 'high',
+                'method' => 'critical_smart',
+                'reason' => 'Critical SMART warnings detected',
+                'action' => 'Replace immediately',
+                'timeline_text' => 'Replace Now',
+                'timeline_class' => 'timeline-critical'
+            ];
+        }
+    }
+    return null;
+}
+
+/**
+ * Shorten the estimate for warning-level SMART findings.
+ *
+ * Warnings with no history yet (or any that are new) -> 3 months
+ * (conservative) / 6 months (aggressive). If drivecache history shows every
+ * warning unchanged for 30+ days, the drive is "stable with a defect": the
+ * estimate is capped at 12 / 24 months instead. Never longer than the
+ * drive's own countdown.
+ *
+ * @param array $driveInfo Drive information (health_warnings with 'trend')
+ * @param string $predictionMode 'conservative' or 'aggressive'
+ * @param int|null $countdownMonths The drive's estimate without warnings
+ * @return array|null Prediction, or null when there are no warnings
+ */
+function driveage_warning_override($driveInfo, $predictionMode, $countdownMonths) {
+    $warnings = $driveInfo['health_warnings'] ?? [];
+    if (empty($warnings)) {
+        return null;
+    }
+    $conservative = ($predictionMode === 'conservative');
+    $allStable = !in_array(false, array_map(fn($w) => ($w['trend'] ?? null) === 'stable', $warnings), true);
+
+    if ($allStable) {
+        $months = $conservative ? 12 : 24;
+        $method = 'smart_warnings_stable';
+        $confidence = 'low';
+        $reason = 'SMART warnings unchanged for 30+ days';
+        $action = 'Monitor; plan replacement';
+    } else {
+        $months = $conservative ? 3 : 6;
+        $method = 'smart_warnings';
+        $confidence = 'medium';
+        $reason = 'SMART warnings detected';
+        $action = 'Plan replacement soon';
+    }
+    if ($countdownMonths !== null) {
+        $months = min($months, $countdownMonths);
+    }
+
+    $timeline = ($months === 0)
+        ? ['text' => 'Due now', 'class' => 'timeline-warning']
+        : getReplacementTimelineText($months);
+    return [
+        'months_remaining' => $months,
+        'confidence' => $confidence,
+        'method' => $method,
         'reason' => $reason,
         'action' => $action,
         'timeline_text' => $timeline['text'],
@@ -484,8 +532,25 @@ function getPredictiveReplacement($driveInfo, $config) {
 
     if ($physicalType === 'nvme') {
         return estimateNvmeRemainingLife($driveInfo, $predictionMode);
-    } else {
-        // HDD and USB both use age-based estimates
-        return estimateHddRemainingLife($driveInfo, $predictionMode);
     }
+
+    if ($physicalType === 'ssd') {
+        // SATA SSD: SMART attribute overrides, then the flash wear model
+        $critical = driveage_critical_override($driveInfo);
+        if ($critical !== null) {
+            return $critical;
+        }
+        $flash = estimateFlashRemainingLife([
+            'percentage_used'   => $driveInfo['ssd_percentage_used'] ?? null,
+            'tbw_written'       => $driveInfo['ssd_tbw_calculated'] ?? null,
+            'size_bytes'        => $driveInfo['size_bytes'] ?? 0,
+            'power_on_hours'    => $driveInfo['power_on_hours'] ?? null,
+            'smart_status'      => $driveInfo['smart_status'] ?? 'UNKNOWN',
+            'recent_write_rate' => $driveInfo['recent_write_rate_tb_yr'] ?? null
+        ], $predictionMode);
+        return driveage_warning_override($driveInfo, $predictionMode, $flash['months_remaining']) ?? $flash;
+    }
+
+    // HDD and USB both use age-based estimates
+    return estimateHddRemainingLife($driveInfo, $predictionMode);
 }

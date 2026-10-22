@@ -77,7 +77,7 @@ window.DriveAge = window.DriveAge || {};
         ['nvme_tbw_calculated', 'Data written', v => Number(v).toLocaleString() + ' TB'],
         ['nvme_media_errors', 'Media errors'],
         ['nvme_critical_warning', 'Critical warning', v => '0x' + Number(v).toString(16).toUpperCase().padStart(2, '0')],
-        ['ssd_percentage_used', 'Wear (percentage used)', v => v + '%'],
+        ['ssd_percentage_used', 'Wear (percentage used)', (v, d) => v + '%' + (d.ssd_wear_attribute ? ' (from ' + d.ssd_wear_attribute + ')' : '')],
         ['ssd_tbw_calculated', 'Data written', v => Number(v).toLocaleString() + ' TB']
     ];
 
